@@ -1,0 +1,189 @@
+version: '3.8'
+
+services:
+  # =============================================================================
+  # vLLM Batch Server
+  # =============================================================================
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vllm-batch-server:latest
+    container_name: vllm-batch-server
+    
+    # GPU configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    # Port mappings
+    ports:
+      - "8000:8000"  # API server
+      - "9090:9090"  # Prometheus metrics
+    
+    # Environment variables (override with .env file)
+    environment:
+      # Model configuration
+      - MODEL_NAME=${MODEL_NAME:-meta-llama/Llama-3.1-8B-Instruct}
+      - MODEL_REVISION=${MODEL_REVISION:-main}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - TRUST_REMOTE_CODE=${TRUST_REMOTE_CODE:-false}
+      
+      # GPU configuration
+      - TENSOR_PARALLEL_SIZE=${TENSOR_PARALLEL_SIZE:-1}
+      - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.9}
+      - MAX_MODEL_LEN=${MAX_MODEL_LEN:-8192}
+      - DTYPE=${DTYPE:-auto}
+      - QUANTIZATION=${QUANTIZATION:-}
+      
+      # Batch processing
+      - MAX_NUM_SEQS=${MAX_NUM_SEQS:-256}
+      - MAX_CONCURRENT_BATCHES=${MAX_CONCURRENT_BATCHES:-4}
+      - MAX_BATCH_FILE_SIZE_MB=${MAX_BATCH_FILE_SIZE_MB:-500}
+      - MAX_REQUESTS_PER_BATCH=${MAX_REQUESTS_PER_BATCH:-50000}
+      - BATCH_COMPLETION_TIMEOUT_HOURS=${BATCH_COMPLETION_TIMEOUT_HOURS:-24}
+      
+      # Prefix caching
+      - ENABLE_PREFIX_CACHING=${ENABLE_PREFIX_CACHING:-true}
+      - PREFIX_CACHE_RATIO=${PREFIX_CACHE_RATIO:-0.1}
+      
+      # Server configuration
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8000}
+      - API_KEY=${API_KEY:-}
+      - ENABLE_CORS=${ENABLE_CORS:-true}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - JSON_LOGGING=${JSON_LOGGING:-true}
+      
+      # Storage
+      - STORAGE_PATH=${STORAGE_PATH:-/data/batches}
+      - DATABASE_PATH=${DATABASE_PATH:-/data/vllm_batch.db}
+      - CLEANUP_AFTER_DAYS=${CLEANUP_AFTER_DAYS:-7}
+      
+      # Performance tuning
+      - ENABLE_CUDA_GRAPH=${ENABLE_CUDA_GRAPH:-true}
+      - SWAP_SPACE_GB=${SWAP_SPACE_GB:-4}
+      - BLOCK_SIZE=${BLOCK_SIZE:-16}
+      - MAX_PARALLEL_LOADING_WORKERS=${MAX_PARALLEL_LOADING_WORKERS:-4}
+      
+      # Monitoring
+      - ENABLE_METRICS=${ENABLE_METRICS:-true}
+      - METRICS_PORT=${METRICS_PORT:-9090}
+      - ENABLE_HEALTH_CHECKS=${ENABLE_HEALTH_CHECKS:-true}
+      
+      # Advanced vLLM options
+      - DISABLE_LOG_STATS=${DISABLE_LOG_STATS:-false}
+      - DISABLE_LOG_REQUESTS=${DISABLE_LOG_REQUESTS:-false}
+      - ENABLE_CHUNKED_PREFILL=${ENABLE_CHUNKED_PREFILL:-true}
+      - MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-8192}
+      - SCHEDULER_DELAY=${SCHEDULER_DELAY:-0.0}
+      
+      # Development
+      - DEBUG=${DEBUG:-false}
+      - LOG_REQUESTS=${LOG_REQUESTS:-false}
+      - DETAILED_ERRORS=${DETAILED_ERRORS:-true}
+    
+    # Volume mappings
+    volumes:
+      # Persistent storage for batch jobs and results
+      - batch-data:/data
+      
+      # Hugging Face cache (speeds up model downloads)
+      - hf-cache:/home/vllm/.cache/huggingface
+      
+      # Optional: Mount local model directory
+      # - ./models:/models:ro
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Network configuration
+    networks:
+      - vllm-network
+
+  # =============================================================================
+  # Optional: Prometheus for metrics collection
+  # =============================================================================
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: vllm-prometheus
+  #   ports:
+  #     - "9091:9090"
+  #   volumes:
+  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #     - prometheus-data:/prometheus
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #     - '--storage.tsdb.path=/prometheus'
+  #   networks:
+  #     - vllm-network
+  #   restart: unless-stopped
+
+  # =============================================================================
+  # Optional: Grafana for metrics visualization
+  # =============================================================================
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: vllm-grafana
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - grafana-data:/var/lib/grafana
+  #     - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+  #     - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+  #   environment:
+  #     - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+  #     - GF_USERS_ALLOW_SIGN_UP=false
+  #   networks:
+  #     - vllm-network
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - prometheus
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  # Persistent storage for batch jobs, results, and database
+  batch-data:
+    driver: local
+  
+  # Hugging Face model cache
+  hf-cache:
+    driver: local
+  
+  # Optional: Prometheus data
+  # prometheus-data:
+  #   driver: local
+  
+  # Optional: Grafana data
+  # grafana-data:
+  #   driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  vllm-network:
+    driver: bridge
+
