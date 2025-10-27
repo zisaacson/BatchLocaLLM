@@ -57,11 +57,13 @@
 - ✅ **Trim events** - When we had to trim context
 - ✅ **Trim strategy** - What we kept vs discarded
 
-**Safety thresholds**:
-- Max: 128K tokens (Gemma 3 12B limit)
-- Safe: 32K tokens (25% of max - conservative)
-- Trim at: 28K tokens (87.5% of safe limit)
-- Reserve: 4K tokens (always keep space for response)
+**Safety thresholds** (UPDATED from Gemma 3 model card):
+- Max context window: 128K tokens ✅ CONFIRMED from HuggingFace
+- Max output: 8K tokens ✅ CONFIRMED from HuggingFace
+- VRAM limit: 16GB (RTX 4080) ⚠️ THIS is the real bottleneck
+- Safe context: TBD (need to test VRAM limits)
+- Trim threshold: TBD (need to test VRAM growth)
+- Reserve: 8K tokens (for max output)
 
 ---
 
@@ -81,19 +83,21 @@
 - ✅ **VRAM utilization %** - How full is GPU memory
 - ✅ **OOM warnings** - Near-limit alerts
 
-**VRAM breakdown** (Gemma 3 12B):
-- Model weights: ~8GB (Q4_K_M quantization)
-- KV cache: ~0.5MB per token × context_length
-  - 1K context: ~500MB
-  - 10K context: ~5GB
-  - 32K context: ~16GB ⚠️ (DANGER!)
+**VRAM breakdown** (Gemma 3 12B - NEEDS TESTING):
+- Model weights: ~8GB (estimated for Q4_K_M quantization via Ollama)
+- KV cache: ~0.5MB per token × context_length (ESTIMATED - need to measure!)
+  - 1K context: ~500MB (estimated)
+  - 10K context: ~5GB (estimated)
+  - 32K context: ~16GB ⚠️ (DANGER - would exceed VRAM!)
+  - 128K context: ~64GB ⚠️ (IMPOSSIBLE on RTX 4080!)
 - System overhead: ~500MB
 
-**Safety limits**:
-- Total VRAM: 16GB
-- Model: 8GB
-- Max KV cache: 6GB (leaves 2GB buffer)
-- **Max safe context: ~12K tokens**
+**Safety limits** (NEED TO TEST):
+- Total VRAM: 16GB (RTX 4080)
+- Model: ~8GB (need to measure actual)
+- Available for KV cache: ~7GB (leaves 1GB buffer)
+- **Estimated max safe context: ~14K tokens** (if 0.5MB/token is correct)
+- **CRITICAL**: Must test actual VRAM growth to find real limit!
 
 ---
 
