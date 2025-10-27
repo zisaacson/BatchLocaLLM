@@ -1,8 +1,8 @@
 """
-Batch processor for vLLM Batch Server
+Batch processor for Ollama Batch Server
 
 Handles:
-- Processing batch jobs using vLLM engine
+- Processing batch jobs using Ollama backend
 - JSONL parsing and result generation
 - Job queue management
 - Error handling and retries
@@ -14,9 +14,8 @@ import time
 import uuid
 from typing import List, Optional
 
-from vllm import LLM, SamplingParams
-
 from src.config import settings
+from src.ollama_backend import OllamaBackend
 from src.logger import logger
 from src.models import (
     BatchError,
@@ -35,60 +34,33 @@ from src.storage import storage
 
 
 class BatchProcessor:
-    """Processes batch jobs using vLLM engine"""
+    """Processes batch jobs using Ollama backend"""
 
     def __init__(self) -> None:
-        self.llm: Optional[LLM] = None
+        self.backend: Optional[OllamaBackend] = None
         self.processing_jobs: set[str] = set()
         self.max_concurrent = settings.max_concurrent_batches
 
     async def initialize(self) -> None:
-        """Initialize vLLM engine"""
-        logger.info("Initializing vLLM engine", extra={"model": settings.model_name})
+        """Initialize Ollama backend"""
+        logger.info("Initializing Ollama backend", extra={"model": settings.model_name})
 
-        # Build vLLM engine arguments
-        engine_args = {
-            "model": settings.model_name,
-            "revision": settings.model_revision,
-            "tensor_parallel_size": settings.tensor_parallel_size,
-            "gpu_memory_utilization": settings.gpu_memory_utilization,
-            "max_model_len": settings.max_model_len,
-            "dtype": settings.dtype,
-            "trust_remote_code": settings.trust_remote_code,
-            "max_num_seqs": settings.max_num_seqs,
-            "block_size": settings.block_size,
-            "swap_space": settings.swap_space_gb,
-            "disable_log_stats": settings.disable_log_stats,
-            "disable_log_requests": settings.disable_log_requests,
-        }
+        # Initialize Ollama backend
+        self.backend = OllamaBackend(base_url=settings.ollama_base_url)
 
-        # Add optional parameters
-        if settings.quantization:
-            engine_args["quantization"] = settings.quantization
+        # Health check
+        healthy = await self.backend.health_check()
+        if not healthy:
+            raise RuntimeError("Ollama server is not running or not accessible")
 
-        if settings.enable_prefix_caching:
-            engine_args["enable_prefix_caching"] = True
-
-        if settings.enable_chunked_prefill:
-            engine_args["enable_chunked_prefill"] = True
-
-        if settings.hf_token:
-            engine_args["download_dir"] = None  # Use HF cache
-            # Set HF token in environment
-            import os
-
-            os.environ["HF_TOKEN"] = settings.hf_token
-
-        # Initialize LLM in thread pool to avoid blocking
-        loop = asyncio.get_event_loop()
-        self.llm = await loop.run_in_executor(None, lambda: LLM(**engine_args))
+        # Load model
+        await self.backend.load_model(settings.model_name)
 
         logger.info(
-            "vLLM engine initialized",
+            "Ollama backend initialized",
             extra={
                 "model": settings.model_name,
-                "max_model_len": settings.max_model_len,
-                "tensor_parallel_size": settings.tensor_parallel_size,
+                "ollama_url": settings.ollama_base_url,
             },
         )
 
@@ -201,70 +173,17 @@ class BatchProcessor:
         return requests
 
     async def _process_requests(self, requests: List[BatchRequestLine]) -> List[BatchResultLine]:
-        """Process batch requests using vLLM"""
-        if not self.llm:
-            raise RuntimeError("vLLM engine not initialized")
+        """Process batch requests using Ollama backend"""
+        if not self.backend:
+            raise RuntimeError("Ollama backend not initialized")
 
         results: List[BatchResultLine] = []
 
-        # Prepare prompts for vLLM
-        prompts = []
-        sampling_params_list = []
-
+        # Process requests sequentially (Ollama doesn't support batching)
         for req in requests:
-            # Convert chat messages to prompt
-            # Note: This is a simple implementation. In production, you'd use
-            # the model's chat template from tokenizer
-            prompt = self._messages_to_prompt(req.body.messages)
-            prompts.append(prompt)
-
-            # Create sampling parameters
-            max_tokens = req.body.max_completion_tokens or req.body.max_tokens or 1024
-            sampling_params = SamplingParams(
-                temperature=req.body.temperature or 1.0,
-                top_p=req.body.top_p or 1.0,
-                max_tokens=max_tokens,
-                frequency_penalty=req.body.frequency_penalty or 0.0,
-                presence_penalty=req.body.presence_penalty or 0.0,
-                stop=req.body.stop,
-                n=req.body.n or 1,
-            )
-            sampling_params_list.append(sampling_params)
-
-        # Run inference in thread pool
-        loop = asyncio.get_event_loop()
-        outputs = await loop.run_in_executor(
-            None, lambda: self.llm.generate(prompts, sampling_params_list)
-        )
-
-        # Convert outputs to results
-        for req, output in zip(requests, outputs):
             try:
-                # Build response
-                choices = []
-                for i, completion_output in enumerate(output.outputs):
-                    choice = ChatCompletionChoice(
-                        index=i,
-                        message=ChatMessage(role="assistant", content=completion_output.text),
-                        finish_reason=completion_output.finish_reason or "stop",
-                    )
-                    choices.append(choice)
-
-                # Calculate token usage
-                prompt_tokens = len(output.prompt_token_ids)
-                completion_tokens = sum(len(o.token_ids) for o in output.outputs)
-
-                response = ChatCompletionResponse(
-                    id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
-                    created=int(time.time()),
-                    model=settings.model_name,
-                    choices=choices,
-                    usage=Usage(
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        total_tokens=prompt_tokens + completion_tokens,
-                    ),
-                )
+                # Call Ollama backend
+                response = await self.backend.generate_chat_completion(req.body)
 
                 result = BatchResultLine(
                     id=f"batch-{uuid.uuid4().hex[:8]}",

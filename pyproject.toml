@@ -3,22 +3,22 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vllm-batch-server"
+name = "ollama-batch-server"
 version = "0.1.0"
-description = "Production-ready OpenAI-compatible batch processing server powered by vLLM"
+description = "OpenAI-compatible batch processing server powered by Ollama for consumer GPUs"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 authors = [
-    {name = "vLLM Batch Server Contributors"}
+    {name = "Ollama Batch Server Contributors"}
 ]
 keywords = [
     "llm",
     "batch-processing",
-    "vllm",
+    "ollama",
     "openai",
     "inference",
-    "gpu",
+    "consumer-gpu",
     "machine-learning"
 ]
 classifiers = [
@@ -33,7 +33,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "vllm>=0.6.0",
+    "httpx>=0.28.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.9.0",
@@ -116,11 +116,11 @@ warn_no_return = true
 strict_equality = true
 
 [[tool.mypy.overrides]]
-module = "vllm.*"
+module = "prometheus_client.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "prometheus_client.*"
+module = "httpx.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

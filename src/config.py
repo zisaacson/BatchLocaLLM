@@ -1,5 +1,5 @@
 """
-Configuration management for vLLM Batch Server
+Configuration management for Ollama Batch Server
 
 Loads configuration from environment variables with sensible defaults.
 Uses pydantic-settings for validation and type safety.
@@ -22,76 +22,27 @@ class Settings(BaseSettings):
     )
 
     # =========================================================================
-    # Model Configuration
+    # Ollama Configuration
     # =========================================================================
+
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        description="Base URL for Ollama API",
+    )
 
     model_name: str = Field(
-        default="meta-llama/Llama-3.1-8B-Instruct",
-        description="Hugging Face model name or local path",
-    )
-
-    model_revision: str = Field(
-        default="main",
-        description="Model revision (branch/tag/commit)",
-    )
-
-    hf_token: Optional[str] = Field(
-        default=None,
-        description="Hugging Face API token for gated models",
-    )
-
-    trust_remote_code: bool = Field(
-        default=False,
-        description="Trust remote code from model repository",
-    )
-
-    # =========================================================================
-    # GPU Configuration
-    # =========================================================================
-
-    tensor_parallel_size: int = Field(
-        default=1,
-        ge=1,
-        description="Number of GPUs for tensor parallelism",
-    )
-
-    gpu_memory_utilization: float = Field(
-        default=0.9,
-        ge=0.1,
-        le=1.0,
-        description="Fraction of GPU memory to use",
-    )
-
-    max_model_len: int = Field(
-        default=8192,
-        ge=128,
-        description="Maximum context length",
-    )
-
-    dtype: str = Field(
-        default="auto",
-        description="Data type for model weights (auto, float16, bfloat16, float32)",
-    )
-
-    quantization: Optional[str] = Field(
-        default=None,
-        description="Quantization method (awq, gptq, squeezellm, fp8)",
+        default="gemma3:12b",
+        description="Ollama model name (e.g., gemma3:12b, llama3.2:3b)",
     )
 
     # =========================================================================
     # Batch Processing Configuration
     # =========================================================================
 
-    max_num_seqs: int = Field(
-        default=256,
-        ge=1,
-        description="Maximum number of sequences in a batch",
-    )
-
     max_concurrent_batches: int = Field(
-        default=4,
+        default=1,
         ge=1,
-        description="Maximum number of concurrent batch jobs",
+        description="Maximum number of concurrent batch jobs (Ollama processes sequentially)",
     )
 
     max_batch_file_size_mb: int = Field(
