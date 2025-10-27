@@ -139,7 +139,7 @@ class StorageManager:
             "File saved",
             extra={
                 "file_id": file_id,
-                "filename": filename,
+                "saved_filename": filename,
                 "bytes": len(content),
                 "purpose": purpose,
             },

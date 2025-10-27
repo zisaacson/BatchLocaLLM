@@ -182,7 +182,7 @@ async def upload_file(
             "File uploaded",
             extra={
                 "file_id": file_id,
-                "filename": file.filename,
+                "uploaded_filename": file.filename,
                 "bytes": len(content),
                 "purpose": purpose,
             },
