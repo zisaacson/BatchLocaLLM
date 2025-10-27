@@ -22,6 +22,7 @@ from src.config import settings
 from src.ollama_backend import OllamaBackend
 from src.logger import logger
 from src.batch_metrics import BatchMetrics
+from src.context_manager import ContextManager, ContextConfig, TrimStrategy
 from src.models import (
     BatchError,
     BatchJob,
@@ -37,11 +38,11 @@ from src.models import (
 )
 from src.storage import storage
 
-# Context window limits (conservative estimates)
-# Gemma 3 12B supports 128K tokens, but we use conservative limits for VRAM safety
-MAX_CONTEXT_TOKENS = 32000  # Conservative limit to prevent VRAM overflow
-CONTEXT_TRIM_THRESHOLD = 28000  # Start trimming at 87.5% capacity
-MIN_CONTEXT_RESERVE = 4000  # Always keep at least this much space for responses
+# Legacy constants (kept for backward compatibility)
+# Now managed by ContextManager
+MAX_CONTEXT_TOKENS = 32000
+CONTEXT_TRIM_THRESHOLD = 28000
+MIN_CONTEXT_RESERVE = 4000
 
 
 class BatchProcessor:
@@ -51,6 +52,17 @@ class BatchProcessor:
         self.backend: Optional[OllamaBackend] = None
         self.processing_jobs: set[str] = set()
         self.max_concurrent = settings.max_concurrent_batches
+
+        # Initialize context manager with intelligent defaults
+        self.context_manager = ContextManager(
+            ContextConfig(
+                model_name=settings.model_name,
+                max_context_tokens=32000,  # Conservative for RTX 4080
+                trim_strategy=TrimStrategy.HYBRID,
+                enable_vram_monitoring=True,
+                enable_adaptive=True,
+            )
+        )
 
     async def initialize(self) -> None:
         """Initialize Ollama backend"""
@@ -289,8 +301,8 @@ class BatchProcessor:
         if system_msg:
             conversation.append({"role": "system", "content": system_msg.content})
 
-        # Track tokens to prevent overflow
-        estimated_tokens = system_prompt_tokens
+        # Track tokens using ContextManager
+        estimated_tokens = self.context_manager.estimate_message_tokens(conversation)
 
         for idx, req in enumerate(requests, 1):
             request_start_time = time.time()
@@ -303,7 +315,9 @@ class BatchProcessor:
 
                 # Add user message to conversation
                 conversation.append({"role": "user", "content": user_msg.content})
-                estimated_tokens += len(user_msg.content.split())
+
+                # Estimate tokens using ContextManager
+                estimated_tokens = self.context_manager.estimate_message_tokens(conversation)
 
                 # Update context metrics
                 metrics.update_context(estimated_tokens)
@@ -343,7 +357,9 @@ class BatchProcessor:
 
                 # Add assistant response to conversation
                 conversation.append({"role": "assistant", "content": assistant_content})
-                estimated_tokens += len(assistant_content.split())
+
+                # Update token estimate
+                estimated_tokens = self.context_manager.estimate_message_tokens(conversation)
 
                 # Update metrics
                 request_time = time.time() - request_start_time
@@ -354,6 +370,13 @@ class BatchProcessor:
                     success=True
                 )
                 metrics.estimate_cached_tokens(system_prompt_tokens)
+
+                # Update context manager state
+                self.context_manager.update_state(
+                    current_tokens=estimated_tokens,
+                    request_num=idx,
+                    was_trimmed=False
+                )
 
                 # Build result
                 result = BatchResultLine(
@@ -386,22 +409,41 @@ class BatchProcessor:
 
                 results.append(result)
 
-                # Trim conversation every 50 requests to prevent VRAM overflow
-                # Keep: system prompt + last 20 exchanges (40 messages)
-                if idx % 50 == 0 and len(conversation) > 41:
+                # Intelligent context trimming using ContextManager
+                if self.context_manager.should_trim(idx, estimated_tokens):
+                    # Determine if aggressive trimming is needed
+                    aggressive = (
+                        vram_gb and vram_gb >= self.context_manager.config.vram_warning_threshold_gb
+                    )
+
                     logger.info(
                         "Trimming conversation context",
                         extra={
                             "request_num": idx,
                             "conversation_length": len(conversation),
                             "estimated_tokens": estimated_tokens,
-                            "vram_gb": vram_gb if vram_gb else "unknown"
+                            "vram_gb": vram_gb if vram_gb else "unknown",
+                            "strategy": self.context_manager.config.trim_strategy.value,
+                            "aggressive": aggressive
                         }
                     )
-                    # Keep system message + last 40 messages (20 exchanges)
-                    conversation = [conversation[0]] + conversation[-40:]
-                    estimated_tokens = estimated_tokens // 3  # Rough estimate after trim
+
+                    # Trim using ContextManager
+                    conversation = self.context_manager.trim_context(
+                        conversation,
+                        aggressive=aggressive
+                    )
+
+                    # Update token estimate after trim
+                    estimated_tokens = self.context_manager.estimate_message_tokens(conversation)
                     metrics.update_context(estimated_tokens, was_trimmed=True)
+
+                    # Update context manager state
+                    self.context_manager.update_state(
+                        current_tokens=estimated_tokens,
+                        request_num=idx,
+                        was_trimmed=True
+                    )
 
                 # Log progress every 100 requests
                 if idx % 100 == 0:
