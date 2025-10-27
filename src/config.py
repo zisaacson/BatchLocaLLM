@@ -252,15 +252,6 @@ class Settings(BaseSettings):
             raise ValueError(f"Invalid log level: {v}. Must be one of {valid_levels}")
         return v_upper
 
-    @field_validator("dtype")
-    @classmethod
-    def validate_dtype(cls, v: str) -> str:
-        """Validate dtype"""
-        valid_dtypes = ["auto", "float16", "bfloat16", "float32"]
-        if v not in valid_dtypes:
-            raise ValueError(f"Invalid dtype: {v}. Must be one of {valid_dtypes}")
-        return v
-
 
 # Global settings instance
 settings = Settings()

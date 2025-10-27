@@ -1,5 +1,5 @@
 """
-vLLM Batch Server - Main Application
+Ollama Batch Server - Main Application
 
 FastAPI application providing OpenAI-compatible batch processing API.
 """
@@ -38,7 +38,7 @@ from src.storage import storage
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager"""
-    logger.info("Starting vLLM Batch Server")
+    logger.info("Starting Ollama Batch Server")
 
     # Initialize storage
     await storage.initialize()
@@ -46,11 +46,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize batch processor
     await batch_processor.initialize()
 
-    logger.info("vLLM Batch Server started successfully")
+    logger.info("Ollama Batch Server started successfully")
 
     yield
 
-    logger.info("Shutting down vLLM Batch Server")
+    logger.info("Shutting down Ollama Batch Server")
 
 
 # =============================================================================
@@ -58,8 +58,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # =============================================================================
 
 app = FastAPI(
-    title="vLLM Batch Server",
-    description="Production-ready OpenAI-compatible batch processing server powered by vLLM",
+    title="Ollama Batch Server",
+    description="OpenAI-compatible batch processing server powered by Ollama for consumer GPUs",
     version="0.1.0",
     lifespan=lifespan,
 )
