@@ -27,12 +27,10 @@ from src.config import settings
 
 class ContextLimitTester:
     """Empirically measure context limits and VRAM usage"""
-    
+
     def __init__(self):
-        self.backend = OllamaBackend(
-            base_url=settings.ollama_base_url,
-            model_name=settings.model_name
-        )
+        self.backend = OllamaBackend(base_url=settings.ollama_base_url)
+        self.model_name = settings.model_name
         self.measurements: List[Dict] = []
     
     def get_vram_usage(self) -> Tuple[float, float]:
@@ -81,23 +79,27 @@ class ContextLimitTester:
         print(f"\n{'='*60}")
         print(f"Testing context size: {context_tokens:,} tokens")
         print(f"{'='*60}")
-        
+
         # Get baseline VRAM
         vram_before, total_vram = self.get_vram_usage()
         print(f"VRAM before: {vram_before:.2f} GB / {total_vram:.2f} GB")
-        
+
         # Build test conversation
         conversation = self.build_test_conversation(context_tokens)
-        
+
         try:
-            # Send to Ollama
-            start_time = time.time()
-            response = await self.backend.chat(
+            # Send to Ollama via backend
+            from src.models import ChatCompletionBody
+
+            request = ChatCompletionBody(
+                model=self.model_name,
                 messages=conversation,
                 temperature=0.1,
-                max_tokens=100,
-                keep_alive=-1
+                max_tokens=100
             )
+
+            start_time = time.time()
+            response = await self.backend.generate_chat_completion(request)
             elapsed = time.time() - start_time
             
             # Get VRAM after
