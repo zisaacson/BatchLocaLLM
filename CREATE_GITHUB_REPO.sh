@@ -1,0 +1,20 @@
+#!/bin/bash
+# Create GitHub repository for vllm-batch-server
+
+echo "Creating GitHub repository..."
+echo ""
+echo "Run these commands:"
+echo ""
+echo "# 1. Create repo on GitHub (via web or gh CLI)"
+echo "gh repo create vllm-batch-server --public --description 'OpenAI-compatible batch processing server powered by vLLM' --license apache-2.0"
+echo ""
+echo "# 2. Add remote and push"
+echo "cd /home/zack/Documents/augment-projects/Local/vllm-batch-server"
+echo "git remote add origin https://github.com/zisaacson/vllm-batch-server.git"
+echo "git branch -M main"
+echo "git push -u origin main"
+echo ""
+echo "# Or if you prefer SSH:"
+echo "git remote add origin git@github.com:zisaacson/vllm-batch-server.git"
+echo "git branch -M main"
+echo "git push -u origin main"
