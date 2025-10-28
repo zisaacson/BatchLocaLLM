@@ -1,53 +1,100 @@
 # vLLM Batch Server
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![vLLM](https://img.shields.io/badge/vLLM-latest-green.svg)](https://github.com/vllm-project/vllm)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![vLLM](https://img.shields.io/badge/vLLM-0.11.0-green.svg)](https://github.com/vllm-project/vllm)
 
-**Production-ready OpenAI-compatible batch processing server powered by vLLM**
+**Two independent implementations for batch LLM inference**
 
-A lightweight, open-source solution for running batch LLM inference locally with the same API as OpenAI and Parasail. Perfect for local development, testing batch workflows, and cost-effective inference on your own hardware.
+This repository contains **two separate branches** for different use cases:
 
-## 🎯 Why This Exists
+- **`ollama` branch** - Consumer GPU implementation (RTX 4080 16GB) using Ollama
+- **`vllm` branch** - Production GPU implementation (24GB+ VRAM) using vLLM with model hot-swapping
 
-When building applications that use batch LLM processing (like OpenAI's Batch API or Parasail), you need a way to:
+**⚠️ These branches never merge - they are independent implementations.**
 
-- ✅ **Test batch workflows locally** before deploying to production
-- ✅ **Develop without cloud costs** during iteration
-- ✅ **Run inference on your own GPU** for privacy/cost reasons
-- ✅ **Use the same API** as production services (drop-in replacement)
+## 📊 Benchmark Results
 
-This server provides an **OpenAI-compatible batch API** on top of vLLM, enabling seamless local-to-production workflows.
+See **[BENCHMARKS.md](BENCHMARKS.md)** for the single source of truth on all testing, decisions, and performance comparisons.
 
-## ✨ Features
+## 🎯 Which Branch Should I Use?
 
-- 🔄 **OpenAI Batch API Compatible** - Drop-in replacement for OpenAI/Parasail batch endpoints
-- ⚡ **vLLM Powered** - High-throughput inference with continuous batching
-- 💾 **Automatic Prefix Caching** - 80%+ cost savings on repeated prompts
-- 🐳 **Docker Ready** - One command to start serving
-- 🎮 **GPU Optimized** - Tested on RTX 4080, works with any NVIDIA GPU
-- 📊 **Job Management** - Track batch jobs, download results, cancel jobs
-- 🔍 **Health Checks** - Kubernetes-ready liveness/readiness probes
-- 📝 **Full Logging** - Structured JSON logs for observability
+### `ollama` Branch - Consumer GPUs (16GB VRAM)
+**Use this if you have:** RTX 4080, RTX 3090, RTX 4090, or similar consumer GPUs
+
+**Features:**
+- ✅ Optimized for 16GB VRAM
+- ✅ Uses Ollama for easy model management
+- ✅ Parallel batch processing (8 workers)
+- ✅ Comprehensive benchmarking system
+- ✅ **Tested:** gemma3:1b @ 0.92 req/s (73% GPU efficiency)
+
+**Best for:** Local development, testing, cost-effective inference
+
+### `vllm` Branch - Production GPUs (24GB+ VRAM)
+**Use this if you have:** A100, H100, RTX 6000 Ada, or cloud GPUs
+
+**Features:**
+- ✅ vLLM's native continuous batching
+- ✅ Model hot-swapping for A/B testing
+- ✅ 4-bit quantization support (fits 12B models in 16GB)
+- ✅ OpenAI-compatible API
+- ✅ **Testing:** Offline vs Server mode comparison
+
+**Best for:** Production deployments, A/B testing, maximum throughput
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- NVIDIA GPU with CUDA support
-- Docker & Docker Compose
-- 16GB+ VRAM recommended
-
-### Start the Server
+### 1. Choose Your Branch
 
 ```bash
-# Clone the repository
-git clone https://github.com/YOUR_ORG/vllm-batch-server.git
+# For consumer GPUs (16GB VRAM)
+git clone https://github.com/zisaacson/vllm-batch-server.git
 cd vllm-batch-server
+git checkout ollama
 
-# Configure your model
-cp .env.example .env
-# Edit .env to set MODEL_NAME, GPU settings, etc.
+# For production GPUs (24GB+ VRAM) or 4-bit quantization
+git checkout vllm
+```
+
+### 2. Follow Branch-Specific Instructions
+
+Each branch has its own README with setup instructions:
+- **`ollama` branch:** See README for Ollama setup
+- **`vllm` branch:** See README for vLLM setup
+
+### 3. Check Benchmark Results
+
+See **[BENCHMARKS.md](BENCHMARKS.md)** for:
+- Performance comparisons
+- Test results
+- Decision log
+- Hardware requirements
+
+## 📋 Repository Structure
+
+```
+master (this branch)
+├── BENCHMARKS.md          ← Single source of truth for all testing
+├── README.md              ← This file
+└── batch_5k.jsonl         ← 5K sample dataset for testing
+
+ollama branch
+├── Full Ollama implementation
+├── Parallel batch processing
+├── Benchmarking system
+└── Tested on RTX 4080 16GB
+
+vllm branch
+├── Full vLLM implementation
+├── Model hot-swapping
+├── A/B testing scripts
+└── 4-bit quantization support
+```
+
+## 🧪 Testing & Benchmarking
+
+All benchmark results are tracked in **[BENCHMARKS.md](BENCHMARKS.md)**.
 
 # Start the server
 docker-compose up -d
