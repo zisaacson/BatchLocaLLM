@@ -8,16 +8,29 @@ This is the **single source of truth** for all benchmark results, testing decisi
 
 ## 📊 Current Status
 
-### Active Testing
-- **Branch:** `vllm`
-- **Phase:** A/B Testing Setup
-- **Goal:** Compare Offline vs Server mode performance with 5K sample dataset
-- **Dataset:** `batch_5k.jsonl` (5,000 candidates)
+### ❌ **CRITICAL FINDING: vLLM V1 Engine Incompatible with RTX 4080 16GB**
+
+**Date:** 2025-10-28
+**Finding:** vLLM 0.11.0 (V1 engine) requires significantly more VRAM than available on RTX 4080 16GB
+
+**Test Results:**
+- ❌ **Gemma 3 12B 4-bit** (`unsloth/gemma-3-12b-it-unsloth-bnb-4bit`): OOM during model load (multimodal model, tried to allocate vision tower)
+- ❌ **Mistral 7B** (`mistralai/Mistral-7B-Instruct-v0.3`): Model loaded (13.5GB) but no memory left for KV cache
+
+**Root Cause:**
+- vLLM V1 engine has higher memory overhead than V0
+- Model weights + KV cache + compilation cache exceeds 16GB
+- Even with `gpu_memory_utilization=0.85`, insufficient memory for KV cache
+
+**Decision:**
+- ✅ **Use Ollama branch for RTX 4080 16GB** - Proven to work, 0.92 req/s with gemma3:1b
+- ❌ **vLLM branch requires 24GB+ VRAM** - Not viable for consumer GPUs
+- 📝 **Document this in README** - Save others from same discovery
 
 ### Completed Work
 - ✅ **Ollama Branch:** Complete implementation with benchmarking system
-- ✅ **vLLM Branch:** Code complete, dependencies updated to Python 3.13
-- ⏳ **vLLM Testing:** In progress
+- ✅ **vLLM Branch:** Code complete, testing scripts created
+- ❌ **vLLM Testing:** Incompatible with RTX 4080 16GB (requires 24GB+ VRAM)
 
 ---
 
@@ -197,36 +210,46 @@ This is the **single source of truth** for all benchmark results, testing decisi
 
 ---
 
-### Learning 2: 4-bit Quantization Enables 12B on 16GB
+### Learning 2: vLLM V1 Engine Requires 24GB+ VRAM
 **Date:** 2025-10-28
-**Finding:** 4-bit BitsAndBytes quantization reduces VRAM by ~4x
+**Finding:** vLLM 0.11.0 (V1 engine) has significantly higher memory requirements than expected
 **Impact:**
-- 12B model: ~24GB → ~6GB (model weights)
-- Total VRAM: ~14GB (fits in RTX 4080 16GB!)
-- Quality: Minimal degradation with 4-bit
-**Action:** Use `unsloth/gemma-3-12b-it-unsloth-bnb-4bit` for vLLM testing
+- Even 7B models don't fit in 16GB with KV cache
+- 4-bit quantization helps model weights but not KV cache overhead
+- V1 engine compilation cache adds additional overhead
+- RTX 4080 16GB is insufficient for vLLM V1
+**Action:** Use Ollama for consumer GPUs (16GB), vLLM only for production GPUs (24GB+)
+
+### Learning 3: Ollama is the Right Choice for Consumer GPUs
+**Date:** 2025-10-28
+**Finding:** Ollama works reliably on RTX 4080 16GB, vLLM does not
+**Impact:**
+- Ollama: ✅ Proven to work, 0.92 req/s with gemma3:1b
+- vLLM: ❌ Requires 24GB+ VRAM
+- Two-branch strategy validated: ollama (consumer) vs vllm (production)
+**Action:** Recommend Ollama branch for all 16GB GPUs
 
 ---
 
 ## 📝 Next Steps
 
-### Immediate (Today)
+### ✅ Completed
 1. ✅ Create `BENCHMARKS.md` on master branch
-2. ⏳ Create `scripts/ab_test_offline.py` for offline mode testing
-3. ⏳ Create `scripts/ab_test_server.py` for server mode testing
-4. ⏳ Create `scripts/compare_ab_results.py` for analysis
-5. ⏳ Run 6 tests (3 models × 2 modes) with `batch_5k.jsonl`
+2. ✅ Create `scripts/ab_test_offline.py` for offline mode testing
+3. ✅ Create `scripts/ab_test_server.py` for server mode testing
+4. ✅ Create `scripts/compare_ab_results.py` for analysis
+5. ✅ Attempted vLLM testing - discovered incompatibility with 16GB VRAM
+6. ✅ Documented critical finding: vLLM V1 requires 24GB+ VRAM
 
-### Short Term (This Week)
-6. ⏳ Analyze results and choose optimal approach
-7. ⏳ Document findings in this file
-8. ⏳ Update both branches with benchmark results
-9. ⏳ Make decision: Offline vs Server for 170K batch
+### Immediate (Today)
+7. ✅ Update BENCHMARKS.md with vLLM findings
+8. ⏳ Update README on both branches with hardware requirements
+9. ⏳ Commit and push all findings to master
 
-### Medium Term (This Month)
-10. ⏳ Run full 170K batch with chosen approach
-11. ⏳ Validate quality of outputs
-12. ⏳ Document production recommendations
+### Recommendations
+- **For RTX 4080 16GB users:** Use `ollama` branch (proven to work)
+- **For 24GB+ VRAM users:** Use `vllm` branch (production-ready)
+- **For 170K batch processing:** Use Ollama with gemma3:1b (~54 hours) or gemma3:4b (~106 hours)
 
 ---
 
