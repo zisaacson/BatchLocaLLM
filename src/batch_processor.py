@@ -10,33 +10,22 @@ Handles:
 - VRAM-aware context management
 """
 
-import asyncio
 import json
 import time
 import uuid
-import hashlib
-from typing import List, Optional, Dict, Tuple
-from collections import defaultdict
 
 from src.config import settings
-from src.ollama_backend import OllamaBackend
+from src.context_manager import ContextConfig, ContextManager, TrimStrategy
 from src.logger import logger
-from src.batch_metrics import BatchMetrics
-from src.context_manager import ContextManager, ContextConfig, TrimStrategy
-from src.parallel_processor import ParallelBatchProcessor, WorkerConfig
 from src.models import (
     BatchError,
-    BatchJob,
     BatchRequestLine,
-    BatchResultLine,
     BatchResponseBody,
+    BatchResultLine,
     BatchStatus,
-    ChatCompletionChoice,
-    ChatCompletionResponse,
-    ChatMessage,
-    RequestCounts,
-    Usage,
 )
+from src.ollama_backend import OllamaBackend
+from src.parallel_processor import ParallelBatchProcessor, WorkerConfig
 from src.storage import storage
 
 # MEASURED LIMITS (from tools/measure_context_limits.py - 2025-10-27)
@@ -53,7 +42,7 @@ class BatchProcessor:
     """Processes batch jobs using Ollama backend"""
 
     def __init__(self) -> None:
-        self.backend: Optional[OllamaBackend] = None
+        self.backend: OllamaBackend | None = None
         self.processing_jobs: set[str] = set()
         self.max_concurrent = settings.max_concurrent_batches
 
@@ -69,9 +58,8 @@ class BatchProcessor:
         )
 
         # Initialize processors (lazy init when backend is ready)
-        from src.chunked_processor import ChunkedBatchProcessor, ChunkConfig
-        self.chunked_processor = None  # For token-optimized processing
-        self.parallel_processor = None  # For speed-optimized processing
+        self.chunked_processor: object | None = None  # For token-optimized processing
+        self.parallel_processor: object | None = None  # For speed-optimized processing
 
     async def initialize(self) -> None:
         """Initialize Ollama backend"""
@@ -89,7 +77,7 @@ class BatchProcessor:
         await self.backend.load_model(settings.model_name)
 
         # Initialize processors now that backend is ready
-        from src.chunked_processor import ChunkedBatchProcessor, ChunkConfig
+        from src.chunked_processor import ChunkConfig, ChunkedBatchProcessor
 
         # Chunked processor (for token optimization - NOT USED for speed)
         self.chunked_processor = ChunkedBatchProcessor(
@@ -208,7 +196,7 @@ class BatchProcessor:
         finally:
             self.processing_jobs.discard(batch_id)
 
-    def _parse_jsonl(self, content: str) -> List[BatchRequestLine]:
+    def _parse_jsonl(self, content: str) -> list[BatchRequestLine]:
         """Parse JSONL content into batch requests"""
         requests = []
         for line_num, line in enumerate(content.strip().split("\n"), 1):
@@ -223,10 +211,10 @@ class BatchProcessor:
                     "Failed to parse request line",
                     extra={"line_num": line_num, "error": str(e)},
                 )
-                raise ValueError(f"Invalid request at line {line_num}: {e}")
+                raise ValueError(f"Invalid request at line {line_num}: {e}") from e
         return requests
 
-    async def _process_requests(self, requests: List[BatchRequestLine]) -> List[BatchResultLine]:
+    async def _process_requests(self, requests: list[BatchRequestLine]) -> list[BatchResultLine]:
         """
         Process batch requests with token optimization.
 
@@ -269,12 +257,14 @@ class BatchProcessor:
             )
             return await self._process_standard_batch(requests)
 
-    async def _process_standard_batch(self, requests: List[BatchRequestLine]) -> List[BatchResultLine]:
+    async def _process_standard_batch(self, requests: list[BatchRequestLine]) -> list[BatchResultLine]:
         """Process requests individually (no optimization)"""
-        results: List[BatchResultLine] = []
+        results: list[BatchResultLine] = []
 
         for req in requests:
             try:
+                if self.backend is None:
+                    raise RuntimeError("Backend not initialized")
                 response = await self.backend.generate_chat_completion(req.body)
 
                 result = BatchResultLine(
@@ -305,7 +295,7 @@ class BatchProcessor:
 
         return results
 
-    async def _process_conversation_batch(self, requests: List[BatchRequestLine]) -> List[BatchResultLine]:
+    async def _process_conversation_batch(self, requests: list[BatchRequestLine]) -> list[BatchResultLine]:
         """
         Process requests using PARALLEL processing for maximum speed.
 
@@ -338,6 +328,13 @@ class BatchProcessor:
         """
 
         # Use parallel processor for SPEED!
+        if self.parallel_processor is None:
+            raise RuntimeError("Parallel processor not initialized")
+
+        # Type narrowing for mypy
+        from src.parallel_processor import ParallelBatchProcessor
+        assert isinstance(self.parallel_processor, ParallelBatchProcessor)
+
         logger.info(
             f"Processing {len(requests)} requests using parallel processor "
             f"({self.parallel_processor.config.num_workers} workers)"

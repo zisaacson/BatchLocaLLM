@@ -1,0 +1,242 @@
+================================================================================
+GEMMA 3 MODEL SPEED COMPARISON
+================================================================================
+
+Goal: Find fastest Gemma 3 model with acceptable quality
+Testing: gemma3:1b vs gemma3:4b vs gemma3:12b
+
+Why Gemma 3 family? Same architecture, same training, only size differs!
+
+🔬 Testing gemma3:1b (1B params, 815MB)...
+
+================================================================================
+BENCHMARKING: gemma3:1b
+================================================================================
+Loading model: gemma3:1b...
+✅ Model loaded
+Creating 100 test requests...
+
+Processing 100 requests with 4 workers...
+{"timestamp": "2025-10-27T12:47:30", "level": "INFO", "logger": "vllm_batch_server", "message": "\n============================================================\nPARALLEL BATCH PROCESSING\n============================================================\nTotal requests: 100\nWorkers: 4\nRequests per worker: ~25\n============================================================", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:47:30", "level": "INFO", "logger": "vllm_batch_server", "message": "Starting 4 workers...", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:47:30", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 0 starting: 25 requests", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:47:30", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 1 starting: 25 requests", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:47:30", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 2 starting: 25 requests", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:47:30", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 3 starting: 25 requests", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:48:17", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 0 progress: 10/25 (40.0%) | Rate: 0.21 req/s | Success: 40.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:48:18", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 2 progress: 10/25 (40.0%) | Rate: 0.21 req/s | Success: 40.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:48:19", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 1 progress: 10/25 (40.0%) | Rate: 0.20 req/s | Success: 40.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:48:20", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 3 progress: 10/25 (40.0%) | Rate: 0.20 req/s | Success: 40.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:48:56", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 0 progress: 20/25 (80.0%) | Rate: 0.23 req/s | Success: 80.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:48:57", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 2 progress: 20/25 (80.0%) | Rate: 0.23 req/s | Success: 80.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:48:58", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 1 progress: 20/25 (80.0%) | Rate: 0.23 req/s | Success: 80.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:48:59", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 3 progress: 20/25 (80.0%) | Rate: 0.22 req/s | Success: 80.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:16", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 0 completed: 25/25 successful | Time: 105.8s | Rate: 0.24 req/s", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:17", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 2 completed: 25/25 successful | Time: 106.7s | Rate: 0.23 req/s", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:18", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 1 completed: 25/25 successful | Time: 107.7s | Rate: 0.23 req/s", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:19", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 3 completed: 25/25 successful | Time: 108.6s | Rate: 0.23 req/s", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:19", "level": "INFO", "logger": "vllm_batch_server", "message": "\n============================================================\nBATCH COMPLETE\n============================================================\nTotal requests: 100\nSuccessful: 100 (100.0%)\nFailed: 0 (0.0%)\nTotal time: 1.8 minutes\nOverall rate: 0.92 req/s\nSpeedup: 4.6x vs sequential\n============================================================", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:19", "level": "INFO", "logger": "vllm_batch_server", "message": "\nPer-Worker Statistics:", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:19", "level": "INFO", "logger": "vllm_batch_server", "message": "  Worker 0: 25/25 | 0.24 req/s | 0 retries", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:19", "level": "INFO", "logger": "vllm_batch_server", "message": "  Worker 1: 25/25 | 0.23 req/s | 0 retries", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:19", "level": "INFO", "logger": "vllm_batch_server", "message": "  Worker 2: 25/25 | 0.23 req/s | 0 retries", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:19", "level": "INFO", "logger": "vllm_batch_server", "message": "  Worker 3: 25/25 | 0.23 req/s | 0 retries", "service": "vllm-batch-server"}
+
+================================================================================
+RESULTS FOR gemma3:1b:
+================================================================================
+Requests:     100
+Success:      100/100 (100.0%)
+Time:         108.6s (1.81 min)
+Rate:         0.92 req/s
+Time/request: 1.09s
+
+SAMPLE RESPONSES:
+
+--- Response 0 ---
+Okay, let's analyze Candidate 0 and assess their potential fit for the role. Here’s a breakdown of my assessment, broken down into strengths, areas for potential concern, and overall fit assessment:
+
+**Overall Assessment - Preliminary:**
+
+This candidate presents a solid foundation for a Software Eng
+
+--- Response 1 ---
+ collaboratingOkay, let’s break down this candidate’s background and assess their potential fit for the role. Here’s a brief assessment, focusing on strengths and potential areas for further exploration:
+
+**Overall Assessment:** This candidate appears to be a strong candidate with a solid foundation
+
+--- Response 2 ---
+ workedOkay, let's analyze this candidate’s background and assess their potential fit for the role. Here’s a breakdown of my assessment, focusing on key areas and potential strengths and areas for further exploration:
+
+**Overall Assessment: Strong Foundation, but Requires Context & Specificity**
+
+Th
+
+🔬 Testing gemma3:4b (4B params, 3.3GB)...
+
+================================================================================
+BENCHMARKING: gemma3:4b
+================================================================================
+Loading model: gemma3:4b...
+✅ Model loaded
+Creating 100 test requests...
+
+Processing 100 requests with 4 workers...
+{"timestamp": "2025-10-27T12:49:24", "level": "INFO", "logger": "vllm_batch_server", "message": "\n============================================================\nPARALLEL BATCH PROCESSING\n============================================================\nTotal requests: 100\nWorkers: 4\nRequests per worker: ~25\n============================================================", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:24", "level": "INFO", "logger": "vllm_batch_server", "message": "Starting 4 workers...", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:24", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 0 starting: 25 requests", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:24", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 1 starting: 25 requests", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:24", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 2 starting: 25 requests", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:49:24", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 3 starting: 25 requests", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:50:36", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 1 progress: 10/25 (40.0%) | Rate: 0.14 req/s | Success: 40.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:50:38", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 0 progress: 10/25 (40.0%) | Rate: 0.13 req/s | Success: 40.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:50:40", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 2 progress: 10/25 (40.0%) | Rate: 0.13 req/s | Success: 40.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:50:42", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 3 progress: 10/25 (40.0%) | Rate: 0.13 req/s | Success: 40.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:51:52", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 1 progress: 20/25 (80.0%) | Rate: 0.14 req/s | Success: 80.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:51:53", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 0 progress: 20/25 (80.0%) | Rate: 0.13 req/s | Success: 80.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:51:55", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 2 progress: 20/25 (80.0%) | Rate: 0.13 req/s | Success: 80.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:51:57", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 3 progress: 20/25 (80.0%) | Rate: 0.13 req/s | Success: 80.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:29", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 1 completed: 25/25 successful | Time: 185.7s | Rate: 0.13 req/s", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:31", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 0 completed: 25/25 successful | Time: 187.5s | Rate: 0.13 req/s", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:33", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 2 completed: 25/25 successful | Time: 189.4s | Rate: 0.13 req/s", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:35", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 3 completed: 25/25 successful | Time: 191.3s | Rate: 0.13 req/s", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:35", "level": "INFO", "logger": "vllm_batch_server", "message": "\n============================================================\nBATCH COMPLETE\n============================================================\nTotal requests: 100\nSuccessful: 100 (100.0%)\nFailed: 0 (0.0%)\nTotal time: 3.2 minutes\nOverall rate: 0.52 req/s\nSpeedup: 2.6x vs sequential\n============================================================", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:35", "level": "INFO", "logger": "vllm_batch_server", "message": "\nPer-Worker Statistics:", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:35", "level": "INFO", "logger": "vllm_batch_server", "message": "  Worker 0: 25/25 | 0.13 req/s | 0 retries", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:35", "level": "INFO", "logger": "vllm_batch_server", "message": "  Worker 1: 25/25 | 0.13 req/s | 0 retries", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:35", "level": "INFO", "logger": "vllm_batch_server", "message": "  Worker 2: 25/25 | 0.13 req/s | 0 retries", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:35", "level": "INFO", "logger": "vllm_batch_server", "message": "  Worker 3: 25/25 | 0.13 req/s | 0 retries", "service": "vllm-batch-server"}
+
+================================================================================
+RESULTS FOR gemma3:4b:
+================================================================================
+Requests:     100
+Success:      100/100 (100.0%)
+Time:         191.3s (3.19 min)
+Rate:         0.52 req/s
+Time/request: 1.91s
+
+SAMPLE RESPONSES:
+
+--- Response 0 ---
+ startupOkay, let’s analyze Candidate 0.
+
+**Overall Assessment: Strong Potential – Likely a Good Fit**
+
+**Strengths:**
+
+* **Solid Experience:** 5 years in software engineering is a good foundation and demonstrates they've spent a reasonable amount of time in the field.
+* **Relevant Technical Skills:
+
+--- Response 1 ---
+ usOkay, let’s analyze this candidate. Based on the information provided, here’s my assessment:
+
+**Overall Assessment: Strong Potential – Likely a Good Fit**
+
+**Strengths:**
+
+* **Solid Experience:** 6 years in software engineering is a respectable amount of experience and demonstrates a sustained ca
+
+--- Response 2 ---
+stackOkay, let's break down Candidate 2’s qualifications and assess their potential fit.
+
+**Overall Assessment: Strong Potential - A Solid Contender**
+
+**Strengths & Positive Indicators:**
+
+* **Significant Experience:** 7 years in software engineering is a very respectable amount of experience. This
+
+🔬 Testing gemma3:12b (12B params, 8.1GB)...
+
+================================================================================
+BENCHMARKING: gemma3:12b
+================================================================================
+Loading model: gemma3:12b...
+✅ Model loaded
+Creating 100 test requests...
+
+Processing 100 requests with 4 workers...
+{"timestamp": "2025-10-27T12:52:40", "level": "INFO", "logger": "vllm_batch_server", "message": "\n============================================================\nPARALLEL BATCH PROCESSING\n============================================================\nTotal requests: 100\nWorkers: 4\nRequests per worker: ~25\n============================================================", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:40", "level": "INFO", "logger": "vllm_batch_server", "message": "Starting 4 workers...", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:40", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 0 starting: 25 requests", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:40", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 1 starting: 25 requests", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:40", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 2 starting: 25 requests", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:52:40", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 3 starting: 25 requests", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:55:26", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 2 progress: 10/25 (40.0%) | Rate: 0.06 req/s | Success: 40.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:55:30", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 1 progress: 10/25 (40.0%) | Rate: 0.06 req/s | Success: 40.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:55:35", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 0 progress: 10/25 (40.0%) | Rate: 0.06 req/s | Success: 40.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:55:39", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 3 progress: 10/25 (40.0%) | Rate: 0.06 req/s | Success: 40.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:58:21", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 2 progress: 20/25 (80.0%) | Rate: 0.06 req/s | Success: 80.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:58:26", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 1 progress: 20/25 (80.0%) | Rate: 0.06 req/s | Success: 80.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:58:30", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 0 progress: 20/25 (80.0%) | Rate: 0.06 req/s | Success: 80.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:58:34", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 3 progress: 20/25 (80.0%) | Rate: 0.06 req/s | Success: 80.0%", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:59:49", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 2 completed: 25/25 successful | Time: 428.9s | Rate: 0.06 req/s", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:59:53", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 1 completed: 25/25 successful | Time: 433.3s | Rate: 0.06 req/s", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T12:59:58", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 0 completed: 25/25 successful | Time: 437.7s | Rate: 0.06 req/s", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T13:00:02", "level": "INFO", "logger": "vllm_batch_server", "message": "Worker 3 completed: 25/25 successful | Time: 442.1s | Rate: 0.06 req/s", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T13:00:02", "level": "INFO", "logger": "vllm_batch_server", "message": "\n============================================================\nBATCH COMPLETE\n============================================================\nTotal requests: 100\nSuccessful: 100 (100.0%)\nFailed: 0 (0.0%)\nTotal time: 7.4 minutes\nOverall rate: 0.23 req/s\nSpeedup: 1.1x vs sequential\n============================================================", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T13:00:02", "level": "INFO", "logger": "vllm_batch_server", "message": "\nPer-Worker Statistics:", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T13:00:02", "level": "INFO", "logger": "vllm_batch_server", "message": "  Worker 0: 25/25 | 0.06 req/s | 0 retries", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T13:00:02", "level": "INFO", "logger": "vllm_batch_server", "message": "  Worker 1: 25/25 | 0.06 req/s | 0 retries", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T13:00:02", "level": "INFO", "logger": "vllm_batch_server", "message": "  Worker 2: 25/25 | 0.06 req/s | 0 retries", "service": "vllm-batch-server"}
+{"timestamp": "2025-10-27T13:00:02", "level": "INFO", "logger": "vllm_batch_server", "message": "  Worker 3: 25/25 | 0.06 req/s | 0 retries", "service": "vllm-batch-server"}
+
+================================================================================
+RESULTS FOR gemma3:12b:
+================================================================================
+Requests:     100
+Success:      100/100 (100.0%)
+Time:         442.1s (7.37 min)
+Rate:         0.23 req/s
+Time/request: 4.42s
+
+SAMPLE RESPONSES:
+
+--- Response 0 ---
+ EngineerOkay, let's analyze Candidate 0. Here's a brief assessment based on the provided information:
+
+**Overall Assessment: Strong Potential - Likely a Good Fit with Further Exploration**
+
+This candidate presents a very promising profile. Let's break down the strengths and areas for further invest
+
+--- Response 1 ---
+ CorpOkay, let's assess Candidate 1. Here's a breakdown of their qualifications and a potential fit assessment, considering common software engineering roles.  I'll structure this into Strengths, Potential Concerns, and Overall Fit/Recommendations.
+
+**Strengths:**
+
+* **Solid Experience:** 6 years in
+
+--- Response 2 ---
+ SpecificOkay, let's break down Candidate 2's profile and assess their fit. Here's my analysis, structured for clarity:
+
+**Overall Assessment: Strong Potential - Likely a Solid Hire with Potential for Leadership**
+
+This candidate presents a very promising profile. The combination of experience, skil
+
+================================================================================
+COMPARISON
+================================================================================
+Model                Rate (req/s)    Time/req (s)    100 req time   
+--------------------------------------------------------------------------------
+gemma3:1b            0.92            1.09            1.8             min
+gemma3:4b            0.52            1.91            3.2             min
+gemma3:12b           0.23            4.42            7.4             min
+
+🚀 SPEEDUPS (vs gemma3:12b baseline):
+gemma3:1b:  4.07x faster
+gemma3:4b:  2.31x faster
+
+📊 EXTRAPOLATION TO 200K CANDIDATES:
+gemma3:1b       60.4 hours (2.51 days)
+gemma3:4b       106.3 hours (4.43 days)
+gemma3:12b      245.6 hours (10.23 days)
+
+⏱️  TIME SAVED (vs gemma3:12b):
+gemma3:1b:  185.2 hours saved
+gemma3:4b:  139.3 hours saved
+
+================================================================================
+✅ BENCHMARK COMPLETE
+================================================================================
+
+Next step: Review sample responses above to assess quality trade-off

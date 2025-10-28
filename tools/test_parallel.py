@@ -108,14 +108,16 @@ async def main():
         # Show sample responses
         print(f"\nSAMPLE RESPONSES:")
         for i, result in enumerate(results[:3]):
-            if result.error is None:
-                response_body = result.response.get('body', {})
+            if result.error is None and result.response:
+                response_dict = result.response if isinstance(result.response, dict) else result.response.model_dump()
+                response_body = response_dict.get('body', {})
                 choices = response_body.get('choices', [])
                 if choices:
                     content = choices[0].get('message', {}).get('content', 'N/A')
                     print(f"  Request {i}: {content[:100]}")
             else:
-                print(f"  Request {i}: ERROR - {result.error.message}")
+                error_msg = result.error.message if result.error else "No response"
+                print(f"  Request {i}: ERROR - {error_msg}")
     
     print(f"\n{'='*80}")
     print("✅ PARALLEL PROCESSING TEST COMPLETE")

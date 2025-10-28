@@ -123,6 +123,16 @@ ignore_missing_imports = true
 module = "httpx.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "aiofiles.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "sqlalchemy.*"
+# SQLAlchemy ORM types cause many false positives
+# We'll use type: ignore comments for specific ORM issues
+warn_return_any = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
