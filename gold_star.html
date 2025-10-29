@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⭐ Gold Star Curation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f3f2ef;
+            color: #000000e6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.08);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .progress {
+            display: flex;
+            gap: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 20px;
+        }
+
+        .profile-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.08);
+            overflow: hidden;
+            height: fit-content;
+        }
+
+        .profile-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 80px;
+        }
+
+        .profile-info {
+            padding: 0 20px 20px 20px;
+            margin-top: -40px;
+        }
+
+        .profile-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: white;
+            border: 4px solid white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        .profile-name {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .profile-headline {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .profile-location {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .section {
+            padding: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .timeline-item {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .timeline-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .timeline-icon {
+            flex-shrink: 0;
+            width: 48px;
+            height: 48px;
+            background: #f3f2ef;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .timeline-content {
+            flex: 1;
+        }
+
+        .timeline-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .timeline-subtitle {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .timeline-meta {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .evaluation-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.08);
+            padding: 24px;
+        }
+
+        .eval-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .eval-section {
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .eval-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .eval-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #0073b1;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .eval-value {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .eval-rating {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #0073b1;
+            color: white;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .actions {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 16px;
+            box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-skip {
+            background: #f3f2ef;
+            color: #666;
+        }
+
+        .btn-skip:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-rate {
+            background: #0073b1;
+            color: white;
+            min-width: 60px;
+        }
+
+        .btn-rate:hover {
+            background: #005885;
+        }
+
+        .btn-star {
+            background: #ffd700;
+            color: #000;
+        }
+
+        .btn-star:hover {
+            background: #ffed4e;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⭐ Gold Star Curation</h1>
+            <div class="progress">
+                <span id="progress-text">0 / 5000 reviewed</span>
+                <span id="starred-count">0 starred</span>
+                <span id="skipped-count">0 skipped</span>
+            </div>
+        </div>
+
+        <div class="main-layout">
+            <!-- Left: LinkedIn-style Profile -->
+            <div class="profile-card" id="profile-card">
+                <div class="loading">Loading candidate...</div>
+            </div>
+
+            <!-- Right: Evaluation -->
+            <div class="evaluation-card" id="evaluation-card">
+                <div class="loading">Loading evaluation...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button class="btn btn-skip" onclick="skipCandidate()">Skip (S)</button>
+        <button class="btn btn-rate" onclick="rateCandidate(1)">1</button>
+        <button class="btn btn-rate" onclick="rateCandidate(2)">2</button>
+        <button class="btn btn-rate" onclick="rateCandidate(3)">3</button>
+        <button class="btn btn-rate" onclick="rateCandidate(4)">4</button>
+        <button class="btn btn-rate" onclick="rateCandidate(5)">5</button>
+        <button class="btn btn-rate" onclick="rateCandidate(6)">6</button>
+        <button class="btn btn-rate" onclick="rateCandidate(7)">7</button>
+        <button class="btn btn-rate" onclick="rateCandidate(8)">8</button>
+        <button class="btn btn-rate" onclick="rateCandidate(9)">9</button>
+        <button class="btn btn-star" onclick="rateCandidate(10)">⭐ 10</button>
+    </div>
+
+    <script>
+        const state = {
+            candidates: [],
+            results: {},
+            currentIndex: 0,
+            reviewed: new Set(),
+            starred: new Set(),
+            skipped: new Set()
+        };
+
+        // Load data
+        async function loadData() {
+            try {
+                const [candidatesRes, resultsRes] = await Promise.all([
+                    fetch('/data/batch_5k.jsonl'),
+                    fetch('/data/results_gemma2-9b-it.jsonl')
+                ]);
+
+                const candidatesText = await candidatesRes.text();
+                const resultsText = await resultsRes.text();
+
+                state.candidates = candidatesText.trim().split('\n').map(line => JSON.parse(line));
+                
+                resultsText.trim().split('\n').forEach(line => {
+                    const result = JSON.parse(line);
+                    state.results[result.custom_id] = result;
+                });
+
+                renderCandidate();
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        // Render current candidate
+        function renderCandidate() {
+            const candidate = state.candidates[state.currentIndex];
+            if (!candidate) return;
+
+            renderProfile(candidate);
+            renderEvaluation(candidate);
+            updateProgress();
+        }
+
+        // Render LinkedIn-style profile
+        function renderProfile(candidate) {
+            const userMsg = candidate.body?.messages?.find(m => m.role === 'user');
+            if (!userMsg) return;
+
+            const content = userMsg.content;
+
+            // Extract data
+            const name = content.match(/\*\*Candidate:\*\*\s*([^\n]+)/)?.[1]?.trim() || 'Unknown';
+            const role = content.match(/\*\*Current Role:\*\*\s*([^\n]+)/)?.[1]?.trim() || 'Not specified';
+            const location = content.match(/\*\*Location:\*\*\s*([^\n]+)/)?.[1]?.trim() || 'Not specified';
+
+            // Parse work history
+            const workMatch = content.match(/\*\*Work History:\*\*\s*([\s\S]*?)(?=\n\*\*|$)/);
+            let workHistory = [];
+            if (workMatch) {
+                workHistory = workMatch[1].trim().split('\n')
+                    .filter(line => line.trim().startsWith('•'))
+                    .map(line => {
+                        const text = line.trim().substring(1).trim();
+                        const match = text.match(/^(.+?)\s+at\s+(.+?)\s+\((.+?)\s+-\s+(.+?)\)$/);
+                        if (match) {
+                            return {
+                                title: match[1].trim(),
+                                company: match[2].trim(),
+                                start: match[3].trim(),
+                                end: match[4].trim() === '1970-01-01' ? 'Present' : match[4].trim()
+                            };
+                        }
+                        return null;
+                    })
+                    .filter(x => x);
+            }
+
+            // Parse education
+            const eduMatch = content.match(/\*\*Education:\*\*\s*([\s\S]*?)(?=\n\*\*|$)/);
+            let education = [];
+            if (eduMatch) {
+                education = eduMatch[1].trim().split('\n')
+                    .filter(line => line.trim().startsWith('•'))
+                    .map(line => {
+                        const text = line.trim().substring(1).trim();
+                        const match = text.match(/\s+from\s+(.+)$/);
+                        const school = match ? match[1].trim() : '';
+                        const degree = match ? text.substring(0, text.lastIndexOf(' from ')).trim() : text;
+                        return { degree, school };
+                    });
+            }
+
+            const html = `
+                <div class="profile-header"></div>
+                <div class="profile-info">
+                    <div class="profile-avatar">👤</div>
+                    <div class="profile-name">${escapeHtml(name)}</div>
+                    <div class="profile-headline">${escapeHtml(role)}</div>
+                    <div class="profile-location">📍 ${escapeHtml(location)}</div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Education</div>
+                    ${education.map(edu => `
+                        <div class="timeline-item">
+                            <div class="timeline-icon">🎓</div>
+                            <div class="timeline-content">
+                                <div class="timeline-title">${escapeHtml(edu.school)}</div>
+                                <div class="timeline-subtitle">${escapeHtml(edu.degree)}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Experience</div>
+                    ${workHistory.slice(0, 5).map(job => `
+                        <div class="timeline-item">
+                            <div class="timeline-icon">💼</div>
+                            <div class="timeline-content">
+                                <div class="timeline-title">${escapeHtml(job.title)}</div>
+                                <div class="timeline-subtitle">${escapeHtml(job.company)}</div>
+                                <div class="timeline-meta">${escapeHtml(job.start)} - ${escapeHtml(job.end)}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            document.getElementById('profile-card').innerHTML = html;
+        }
+
+        // Render evaluation
+        function renderEvaluation(candidate) {
+            const result = state.results[candidate.custom_id];
+            if (!result) {
+                document.getElementById('evaluation-card').innerHTML = '<div class="loading">No evaluation available</div>';
+                return;
+            }
+
+            let evaluation;
+            try {
+                const content = result.response?.body?.choices?.[0]?.message?.content;
+                evaluation = JSON.parse(content);
+            } catch (e) {
+                document.getElementById('evaluation-card').innerHTML = '<div class="loading">Error parsing evaluation</div>';
+                return;
+            }
+
+            const html = `
+                <div class="eval-title">🤖 LLM Evaluation</div>
+
+                <div class="eval-section">
+                    <div class="eval-label">Recommendation</div>
+                    <div class="eval-rating">${escapeHtml(evaluation.recommendation)}</div>
+                    <div class="eval-value">${escapeHtml(evaluation.reasoning)}</div>
+                </div>
+
+                <div class="eval-section">
+                    <div class="eval-label">Educational Pedigree</div>
+                    <div class="eval-rating">${escapeHtml(evaluation.analysis.educational_pedigree.rating)}</div>
+                    <div class="eval-value">${escapeHtml(evaluation.analysis.educational_pedigree.reasoning)}</div>
+                </div>
+
+                <div class="eval-section">
+                    <div class="eval-label">Company Pedigree</div>
+                    <div class="eval-rating">${escapeHtml(evaluation.analysis.company_pedigree.rating)}</div>
+                    <div class="eval-value">${escapeHtml(evaluation.analysis.company_pedigree.reasoning)}</div>
+                </div>
+
+                <div class="eval-section">
+                    <div class="eval-label">Trajectory</div>
+                    <div class="eval-rating">${escapeHtml(evaluation.analysis.trajectory.rating)}</div>
+                    <div class="eval-value">${escapeHtml(evaluation.analysis.trajectory.reasoning)}</div>
+                </div>
+
+                <div class="eval-section">
+                    <div class="eval-label">Is Software Engineer</div>
+                    <div class="eval-rating">${evaluation.analysis.is_software_engineer.value ? 'Yes' : 'No'}</div>
+                    <div class="eval-value">${escapeHtml(evaluation.analysis.is_software_engineer.reasoning)}</div>
+                </div>
+            `;
+
+            document.getElementById('evaluation-card').innerHTML = html;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function updateProgress() {
+            document.getElementById('progress-text').textContent = `${state.reviewed.size} / ${state.candidates.length} reviewed`;
+            document.getElementById('starred-count').textContent = `${state.starred.size} starred`;
+            document.getElementById('skipped-count').textContent = `${state.skipped.size} skipped`;
+        }
+
+        function nextCandidate() {
+            if (state.currentIndex < state.candidates.length - 1) {
+                state.currentIndex++;
+                renderCandidate();
+            }
+        }
+
+        function skipCandidate() {
+            const candidate = state.candidates[state.currentIndex];
+            state.skipped.add(candidate.custom_id);
+            state.reviewed.add(candidate.custom_id);
+            nextCandidate();
+        }
+
+        function rateCandidate(score) {
+            const candidate = state.candidates[state.currentIndex];
+            state.starred.add(candidate.custom_id);
+            state.reviewed.add(candidate.custom_id);
+
+            // TODO: Save to backend
+            console.log('Rated', candidate.custom_id, 'with score', score);
+
+            nextCandidate();
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key >= '1' && e.key <= '9') {
+                e.preventDefault();
+                rateCandidate(parseInt(e.key));
+            } else if (e.key === 's') {
+                e.preventDefault();
+                skipCandidate();
+            } else if (e.key === 'n' || e.key === 'ArrowRight') {
+                e.preventDefault();
+                nextCandidate();
+            }
+        });
+
+        // Load on start
+        loadData();
+    </script>
+</body>
+</html>
+

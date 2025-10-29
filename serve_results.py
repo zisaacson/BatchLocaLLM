@@ -13,10 +13,21 @@ class ResultsHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         # Add CORS headers
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         super().end_headers()
-    
+
+    def do_POST(self):
+        """Handle POST requests"""
+        parsed_path = urlparse(self.path)
+
+        # Delegate to do_GET which handles both GET and POST for /api/gold-star
+        if parsed_path.path == '/api/gold-star':
+            self.do_GET()
+        else:
+            self.send_response(404)
+            self.end_headers()
+
     def do_GET(self):
         parsed_path = urlparse(self.path)
 
@@ -102,6 +113,7 @@ class ResultsHandler(SimpleHTTPRequestHandler):
         elif parsed_path.path == '/api/discover':
             try:
                 import glob
+                import re
 
                 # Find all batch input files (exclude result files)
                 all_batch_files = glob.glob('batch*.jsonl')
@@ -111,15 +123,27 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                 result_files = glob.glob('*_results.jsonl') + glob.glob('benchmarks/raw/*.jsonl')
                 result_files = [f for f in result_files if 'batch_5k_optimized_results.jsonl' not in f]
 
-                # Count lines in each file
-                datasets = {}
+                # Group batch files by base name (e.g., batch_5k, batch_100, batch_50k)
+                # batch_5k.jsonl, batch_5k_gemma3_4b.jsonl, batch_5k_llama32_1b.jsonl -> all map to "batch_5k"
+                base_datasets = {}
+
                 for batch_file in sorted(batch_files):
-                    try:
-                        with open(batch_file, 'r') as f:
-                            count = sum(1 for line in f if line.strip())
-                        datasets[batch_file] = {'count': count, 'results': []}
-                    except:
-                        pass
+                    # Extract base name: batch_5k_gemma3_4b.jsonl -> batch_5k
+                    # Pattern: batch_XXX or batch_XXXk
+                    match = re.match(r'(batch_\d+k?)(?:_.*)?\.jsonl', batch_file)
+                    if match:
+                        base_name = match.group(1) + '.jsonl'
+
+                        # Count lines in this file
+                        try:
+                            with open(batch_file, 'r') as f:
+                                count = sum(1 for line in f if line.strip())
+
+                            # Use the base name as the dataset key
+                            if base_name not in base_datasets:
+                                base_datasets[base_name] = {'count': count, 'results': []}
+                        except:
+                            pass
 
                 # Match results to datasets by count
                 for result_file in sorted(result_files):
@@ -127,20 +151,31 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                         with open(result_file, 'r') as f:
                             count = sum(1 for line in f if line.strip())
 
-                        # Find matching dataset
-                        for dataset_name, dataset_info in datasets.items():
+                        # Extract model name from result file
+                        # vllm-native-gemma3-4b-5000-2025-10-28.jsonl -> gemma3-4b
+                        model_name = result_file
+                        if 'benchmarks/raw/' in result_file:
+                            # Extract from benchmark filename
+                            parts = result_file.split('/')[-1].replace('.jsonl', '').split('-')
+                            if len(parts) >= 3:
+                                model_name = '-'.join(parts[2:-2])  # Skip vllm-native and date
+
+                        # Find matching dataset by count
+                        for dataset_name, dataset_info in base_datasets.items():
                             if dataset_info['count'] == count:
-                                datasets[dataset_name]['results'].append({
+                                base_datasets[dataset_name]['results'].append({
                                     'file': result_file,
+                                    'model': model_name,
                                     'count': count
                                 })
+                                break
                     except:
                         pass
 
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps(datasets).encode())
+                self.wfile.write(json.dumps(base_datasets).encode())
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
@@ -164,6 +199,183 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                     self.send_header('Content-Type', 'application/json')
                     self.end_headers()
                     self.wfile.write(json.dumps({'error': 'Metadata not found. Run migrate_results.py first.'}).encode())
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+
+        # API endpoint to gold-star an example
+        elif parsed_path.path == '/api/gold-star':
+            if self.command == 'POST':
+                try:
+                    content_length = int(self.headers['Content-Length'])
+                    post_data = self.rfile.read(content_length)
+                    data = json.loads(post_data.decode('utf-8'))
+
+                    # Validate required fields
+                    if 'custom_id' not in data:
+                        self.send_response(400)
+                        self.send_header('Content-Type', 'application/json')
+                        self.end_headers()
+                        self.wfile.write(json.dumps({'error': 'custom_id required'}).encode())
+                        return
+
+                    # Validate quality_score
+                    quality_score = data.get('quality_score')
+                    if quality_score is not None:
+                        if not isinstance(quality_score, int) or quality_score < 1 or quality_score > 10:
+                            self.send_response(400)
+                            self.send_header('Content-Type', 'application/json')
+                            self.end_headers()
+                            self.wfile.write(json.dumps({'error': 'quality_score must be an integer between 1 and 10'}).encode())
+                            return
+
+                    # Check for duplicates (optional - warn but allow)
+                    starred_file = 'data/gold_star/starred.jsonl'
+                    duplicate_found = False
+                    if os.path.exists(starred_file):
+                        with open(starred_file, 'r') as f:
+                            for line in f:
+                                if line.strip():
+                                    existing = json.loads(line)
+                                    if existing.get('custom_id') == data.get('custom_id'):
+                                        duplicate_found = True
+                                        break
+
+                    # Add timestamp
+                    from datetime import datetime
+                    data['starred_at'] = datetime.now().isoformat()
+
+                    # Add duplicate flag if found
+                    if duplicate_found:
+                        data['is_duplicate'] = True
+
+                    # Create directory if needed
+                    os.makedirs('data/gold_star', exist_ok=True)
+
+                    # Append to file
+                    with open(starred_file, 'a') as f:
+                        f.write(json.dumps(data) + '\n')
+
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'status': 'success', 'message': 'Example starred successfully'}).encode())
+                except Exception as e:
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': str(e)}).encode())
+            else:
+                # GET - return all starred examples
+                try:
+                    starred = []
+                    starred_file = 'data/gold_star/starred.jsonl'
+
+                    if os.path.exists(starred_file):
+                        with open(starred_file, 'r') as f:
+                            for line in f:
+                                if line.strip():
+                                    starred.append(json.loads(line))
+
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(starred).encode())
+                except Exception as e:
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': str(e)}).encode())
+
+        # API endpoint to export gold-star dataset
+        elif parsed_path.path == '/api/export-gold-star':
+            try:
+                query = parse_qs(parsed_path.query)
+                format_type = query.get('format', ['icl'])[0]
+                min_quality = int(query.get('min_quality', [9])[0])
+
+                # Load starred examples
+                starred = []
+                starred_file = 'data/gold_star/starred.jsonl'
+
+                if os.path.exists(starred_file):
+                    with open(starred_file, 'r') as f:
+                        for line in f:
+                            if line.strip():
+                                example = json.loads(line)
+                                if example.get('quality_score', 0) >= min_quality:
+                                    starred.append(example)
+
+                # Sort by quality score (highest first)
+                starred.sort(key=lambda x: x.get('quality_score', 0), reverse=True)
+
+                # Format for export
+                output = []
+
+                if format_type == 'icl':
+                    # Top 100 examples for in-context learning
+                    # Format as messages array for ICL
+                    for example in starred[:100]:
+                        input_prompt = example.get('input_prompt', {})
+                        formatted = {
+                            'messages': [
+                                {'role': 'system', 'content': input_prompt.get('system', '')},
+                                {'role': 'user', 'content': input_prompt.get('user', '')},
+                                {'role': 'assistant', 'content': example.get('llm_output', '')}
+                            ],
+                            'metadata': {
+                                'custom_id': example.get('custom_id'),
+                                'candidate_name': example.get('candidate_name'),
+                                'quality_score': example.get('quality_score'),
+                                'tags': example.get('tags', []),
+                                'model': example.get('model', 'unknown')
+                            }
+                        }
+                        output.append(formatted)
+
+                elif format_type == 'finetuning':
+                    # All examples for fine-tuning
+                    # Format as messages array for fine-tuning
+                    for example in starred:
+                        input_prompt = example.get('input_prompt', {})
+                        formatted = {
+                            'messages': [
+                                {'role': 'system', 'content': input_prompt.get('system', '')},
+                                {'role': 'user', 'content': input_prompt.get('user', '')},
+                                {'role': 'assistant', 'content': example.get('llm_output', '')}
+                            ]
+                        }
+                        output.append(formatted)
+
+                else:
+                    # Raw format - return everything as-is
+                    output = starred
+
+                # Create export directory
+                os.makedirs('data/gold_star/exports', exist_ok=True)
+
+                # Generate filename
+                from datetime import datetime
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f'gold_star_{format_type}_{timestamp}.jsonl'
+                filepath = f'data/gold_star/exports/{filename}'
+
+                # Save export
+                with open(filepath, 'w') as f:
+                    for item in output:
+                        f.write(json.dumps(item) + '\n')
+
+                # Return file
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/jsonl')
+                self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
+                self.end_headers()
+
+                with open(filepath, 'rb') as f:
+                    self.wfile.write(f.read())
+
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
@@ -245,6 +457,19 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': str(e)}).encode())
+        # Serve curation app
+        elif parsed_path.path == '/curate' or parsed_path.path == '/curate/':
+            try:
+                with open('curation_app.html', 'r') as f:
+                    content = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html')
+                self.end_headers()
+                self.wfile.write(content.encode())
+            except FileNotFoundError:
+                self.send_response(404)
+                self.end_headers()
+                self.wfile.write(b'Curation app not found')
         else:
             # Serve static files
             super().do_GET()

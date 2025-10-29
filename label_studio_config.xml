@@ -1,0 +1,156 @@
+<View>
+  <Style>
+    .profile-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+      border-radius: 8px 8px 0 0;
+      color: white;
+      margin-bottom: 20px;
+    }
+    .profile-name {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+    .profile-role {
+      font-size: 16px;
+      opacity: 0.9;
+    }
+    .section {
+      background: #f8f9fa;
+      padding: 15px;
+      margin-bottom: 15px;
+      border-radius: 8px;
+    }
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #0073b1;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+    .item {
+      padding: 8px 0;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .item:last-child {
+      border-bottom: none;
+    }
+    .llm-section {
+      background: #fff3cd;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 8px;
+      border-left: 4px solid #ffc107;
+    }
+    .llm-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #856404;
+    }
+    .llm-recommendation {
+      display: inline-block;
+      padding: 6px 12px;
+      background: #0073b1;
+      color: white;
+      border-radius: 16px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+  </Style>
+
+  <!-- Candidate Profile Display -->
+  <View className="profile-header">
+    <Text name="name" value="$name" className="profile-name"/>
+    <Text name="role" value="$role" className="profile-role"/>
+    <Text name="location" value="📍 $location"/>
+  </View>
+
+  <!-- Education Section -->
+  <View className="section">
+    <Header value="🎓 Education" className="section-title"/>
+    <List name="education" value="$education" className="item"/>
+  </View>
+
+  <!-- Experience Section -->
+  <View className="section">
+    <Header value="💼 Experience (Top 5)" className="section-title"/>
+    <List name="work_history" value="$work_history" className="item"/>
+  </View>
+
+  <!-- LLM Evaluation -->
+  <View className="llm-section">
+    <Header value="🤖 LLM Evaluation" className="llm-title"/>
+    <View>
+      <Text name="llm_rec" value="$llm_recommendation" className="llm-recommendation"/>
+    </View>
+    <Text name="llm_reasoning" value="$llm_reasoning"/>
+    <br/>
+    <Text name="llm_edu" value="Educational Pedigree: $llm_educational_pedigree"/>
+    <br/>
+    <Text name="llm_company" value="Company Pedigree: $llm_company_pedigree"/>
+    <br/>
+    <Text name="llm_traj" value="Trajectory: $llm_trajectory"/>
+    <br/>
+    <Text name="llm_swe" value="Is Software Engineer: $llm_is_swe"/>
+  </View>
+
+  <Header value="⭐ Your Evaluation"/>
+
+  <!-- Overall Rating -->
+  <Rating name="overall_rating" toName="name" maxRating="10" icon="star" size="large" required="true"/>
+
+  <!-- Recommendation -->
+  <Choices name="recommendation" toName="name" choice="single" required="true">
+    <Choice value="Strong Yes" style="background-color: #28a745"/>
+    <Choice value="Yes" style="background-color: #90ee90"/>
+    <Choice value="Maybe" style="background-color: #ffc107"/>
+    <Choice value="No" style="background-color: #ff6b6b"/>
+    <Choice value="Strong No" style="background-color: #dc3545"/>
+  </Choices>
+
+  <!-- Educational Pedigree -->
+  <Header value="Educational Pedigree"/>
+  <Choices name="educational_pedigree" toName="name" choice="single" required="true">
+    <Choice value="Exceptional"/>
+    <Choice value="Strong"/>
+    <Choice value="Good"/>
+    <Choice value="Average"/>
+    <Choice value="Weak"/>
+  </Choices>
+
+  <!-- Company Pedigree -->
+  <Header value="Company Pedigree"/>
+  <Choices name="company_pedigree" toName="name" choice="single" required="true">
+    <Choice value="Exceptional"/>
+    <Choice value="Strong"/>
+    <Choice value="Good"/>
+    <Choice value="Average"/>
+    <Choice value="Weak"/>
+  </Choices>
+
+  <!-- Trajectory -->
+  <Header value="Career Trajectory"/>
+  <Choices name="trajectory" toName="name" choice="single" required="true">
+    <Choice value="Exceptional"/>
+    <Choice value="Strong"/>
+    <Choice value="Good"/>
+    <Choice value="Average"/>
+    <Choice value="Weak"/>
+  </Choices>
+
+  <!-- Is Software Engineer -->
+  <Header value="Is Software Engineer?"/>
+  <Choices name="is_software_engineer" toName="name" choice="single" required="true">
+    <Choice value="Yes"/>
+    <Choice value="No"/>
+  </Choices>
+
+  <!-- Notes -->
+  <Header value="Notes (Optional)"/>
+  <TextArea name="notes" toName="name" placeholder="Any additional observations..." rows="3"/>
+
+</View>
+
