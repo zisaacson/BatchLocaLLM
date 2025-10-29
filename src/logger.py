@@ -6,7 +6,7 @@ Provides structured JSON logging for production observability.
 
 import logging
 import sys
-from typing import Any, Dict
+from typing import Any
 
 from pythonjsonlogger import jsonlogger
 
@@ -18,9 +18,9 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
 
     def add_fields(
         self,
-        log_record: Dict[str, Any],
+        log_record: dict[str, Any],
         record: logging.LogRecord,
-        message_dict: Dict[str, Any],
+        message_dict: dict[str, Any],
     ) -> None:
         super().add_fields(log_record, record, message_dict)
 
@@ -47,6 +47,7 @@ def setup_logging() -> logging.Logger:
     handler = logging.StreamHandler(sys.stdout)
 
     # Set formatter based on configuration
+    formatter: logging.Formatter
     if settings.json_logging:
         formatter = CustomJsonFormatter(
             "%(timestamp)s %(level)s %(logger)s %(message)s",

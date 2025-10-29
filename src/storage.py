@@ -7,16 +7,12 @@ Handles:
 - Cleanup of old jobs
 """
 
-import asyncio
 import json
-import os
 import time
-from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
 
 import aiofiles
-from sqlalchemy import Column, Integer, String, Text, create_engine, select
+from sqlalchemy import Column, Integer, String, Text, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -31,7 +27,7 @@ from src.models import BatchJob, BatchStatus, FileObject, RequestCounts
 Base = declarative_base()
 
 
-class BatchJobDB(Base):
+class BatchJobDB(Base):  # type: ignore[valid-type,misc]
     """Database model for batch jobs"""
 
     __tablename__ = "batch_jobs"
@@ -52,7 +48,7 @@ class BatchJobDB(Base):
     completion_window = Column(String, nullable=False, default="24h")
 
 
-class FileDB(Base):
+class FileDB(Base):  # type: ignore[valid-type,misc]
     """Database model for files"""
 
     __tablename__ = "files"
@@ -85,7 +81,7 @@ class StorageManager:
         # Database setup
         db_url = f"sqlite+aiosqlite:///{settings.database_path}"
         self.engine = create_async_engine(db_url, echo=settings.debug)
-        self.async_session = sessionmaker(
+        self.async_session = sessionmaker(  # type: ignore[call-overload]
             self.engine, class_=AsyncSession, expire_on_commit=False
         )
 
@@ -139,7 +135,7 @@ class StorageManager:
             "File saved",
             extra={
                 "file_id": file_id,
-                "filename": filename,
+                "saved_filename": filename,
                 "bytes": len(content),
                 "purpose": purpose,
             },
@@ -147,7 +143,7 @@ class StorageManager:
 
         return file_obj
 
-    async def get_file(self, file_id: str) -> Optional[FileObject]:
+    async def get_file(self, file_id: str) -> FileObject | None:
         """Get file metadata"""
         async with self.async_session() as session:
             result = await session.execute(select(FileDB).where(FileDB.id == file_id))
@@ -161,10 +157,10 @@ class StorageManager:
                 filename=file_db.filename,
                 bytes=file_db.bytes,
                 created_at=file_db.created_at,
-                purpose=file_db.purpose,  # type: ignore
+                purpose=file_db.purpose,
             )
 
-    async def read_file(self, file_id: str) -> Optional[bytes]:
+    async def read_file(self, file_id: str) -> bytes | None:
         """Read file content"""
         file_path = self.files_path / file_id
         if not file_path.exists():
@@ -174,7 +170,7 @@ class StorageManager:
                 return None
 
         async with aiofiles.open(file_path, "rb") as f:
-            return await f.read()
+            return await f.read()  # type: ignore[no-any-return]
 
     async def delete_file(self, file_id: str) -> bool:
         """Delete a file"""
@@ -225,7 +221,7 @@ class StorageManager:
         logger.info("Batch job created", extra={"batch_id": batch_job.id})
         return batch_job
 
-    async def get_batch_job(self, batch_id: str) -> Optional[BatchJob]:
+    async def get_batch_job(self, batch_id: str) -> BatchJob | None:
         """Get batch job by ID"""
         async with self.async_session() as session:
             result = await session.execute(select(BatchJobDB).where(BatchJobDB.id == batch_id))
@@ -259,7 +255,7 @@ class StorageManager:
         logger.info("Batch job updated", extra={"batch_id": batch_job.id, "status": batch_job.status})
         return batch_job
 
-    async def list_batch_jobs(self, limit: int = 100) -> List[BatchJob]:
+    async def list_batch_jobs(self, limit: int = 100) -> list[BatchJob]:
         """List all batch jobs"""
         async with self.async_session() as session:
             result = await session.execute(select(BatchJobDB).limit(limit))
@@ -268,24 +264,24 @@ class StorageManager:
 
     def _db_to_batch_job(self, job_db: BatchJobDB) -> BatchJob:
         """Convert database model to BatchJob"""
-        request_counts = RequestCounts.model_validate_json(job_db.request_counts_json)
-        metadata = json.loads(job_db.metadata_json) if job_db.metadata_json else None
+        request_counts = RequestCounts.model_validate_json(job_db.request_counts_json)  # type: ignore[arg-type]
+        metadata = json.loads(job_db.metadata_json) if job_db.metadata_json else None  # type: ignore[arg-type]
 
         return BatchJob(
-            id=job_db.id,
+            id=job_db.id,  # type: ignore[arg-type]
             status=BatchStatus(job_db.status),
-            input_file_id=job_db.input_file_id,
-            output_file_id=job_db.output_file_id,
-            error_file_id=job_db.error_file_id,
-            created_at=job_db.created_at,
-            in_progress_at=job_db.in_progress_at,
-            completed_at=job_db.completed_at,
-            failed_at=job_db.failed_at,
-            cancelled_at=job_db.cancelled_at,
+            input_file_id=job_db.input_file_id,  # type: ignore[arg-type]
+            output_file_id=job_db.output_file_id,  # type: ignore[arg-type]
+            error_file_id=job_db.error_file_id,  # type: ignore[arg-type]
+            created_at=job_db.created_at,  # type: ignore[arg-type]
+            in_progress_at=job_db.in_progress_at,  # type: ignore[arg-type]
+            completed_at=job_db.completed_at,  # type: ignore[arg-type]
+            failed_at=job_db.failed_at,  # type: ignore[arg-type]
+            cancelled_at=job_db.cancelled_at,  # type: ignore[arg-type]
             request_counts=request_counts,
             metadata=metadata,
-            endpoint=job_db.endpoint,
-            completion_window=job_db.completion_window,
+            endpoint=job_db.endpoint,  # type: ignore[arg-type]
+            completion_window=job_db.completion_window,  # type: ignore[arg-type]
         )
 
 

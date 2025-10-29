@@ -4,7 +4,6 @@ Tests for API endpoints
 Run with: pytest tests/test_api.py
 """
 
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -33,6 +32,8 @@ def mock_batch_processor():
     with patch("src.main.batch_processor") as mock:
         mock.llm = MagicMock()  # Simulate loaded model
         mock.processing_jobs = set()
+        # Fix: Make process_batch return a coroutine
+        mock.process_batch = AsyncMock()
         yield mock
 
 

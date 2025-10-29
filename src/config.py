@@ -5,7 +5,6 @@ Loads configuration from environment variables with sensible defaults.
 Uses pydantic-settings for validation and type safety.
 """
 
-from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -95,7 +94,7 @@ class Settings(BaseSettings):
         description="Server port",
     )
 
-    api_key: Optional[str] = Field(
+    api_key: str | None = Field(
         default=None,
         description="API key for authentication (optional)",
     )

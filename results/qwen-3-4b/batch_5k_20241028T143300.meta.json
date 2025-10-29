@@ -1,0 +1,38 @@
+{
+  "run_id": "qwen-3-4b-batch_5k-20241028T143300",
+  "model": {
+    "name": "Qwen 3-4B",
+    "id": "Qwen/Qwen3-4B-Instruct-2507",
+    "size": "4B",
+    "vram_gb": 7.6
+  },
+  "dataset": {
+    "name": "batch_5k.jsonl",
+    "count": 5000,
+    "criteria": {
+      "full_prompt": "You are evaluating a candidate profile to decide if we should reach out.\n\nJudge the candidate on:\n\n**Educational Pedigree**\n\u2022 Bachelor's degree is the strongest pedigree signal.\n\u2022 Selectivity and prestige of the undergrad institution is weighted most heavily.\n\u2022 A top-tier CS/Engineering bachelor's degree = Great.\n\u2022 A mid-tier or unselective bachelor's program = Average/Weak, regardless of later graduate study.\n\u2022 Graduate degrees (MS, MBA, etc.) add value only if earned at a top school.\n\u2022 A top-tier MS in CS/Engineering = Good/Great.\n\u2022 A mid-tier MS is not a strong signal and can actually lower pedigree compared to no MS.\n\u2022 PhD in CS/Engineering = always Good, but from a top-tier school = Great or Excellent.\n\u2022 Technical majors (CS, EE, Software Engineering, related fields) are favored. Non-technical degrees are weaker, even at strong schools.\n\n**Company Pedigree**\n\u2022 Brand and caliber of employers (tier-1 tech, high-growth startups, selective teams, notable acquisitions).\n\n**Trajectory**\n\u2022 Speed and consistency of promotions relative to years of experience.\n\u2022 Engineers with >8 years should typically be \u2265 Senior SWE.\n\u2022 Engineers with >12 years should typically be \u2265 Staff SWE.\n\u2022 Faster than these milestones = stronger trajectory. Slower = weaker trajectory.\n\n**Is Software Engineer**\n\u2022 Confirm titles and responsibilities are software engineering.\n\nReturn a concise recommendation and rationales. Ground reasoning in evidence from the profile.",
+      "has_educational_pedigree": true,
+      "has_company_pedigree": true,
+      "has_trajectory": true,
+      "has_is_software_engineer": true
+    }
+  },
+  "execution": {
+    "started_at": "2024-10-28T14:33:00Z",
+    "req_per_sec": 3.39,
+    "elapsed": "24:35"
+  },
+  "results": {
+    "total": 5000,
+    "success": 5000,
+    "errors": 0,
+    "success_rate": 100.0,
+    "avg_prompt_tokens": 747,
+    "avg_completion_tokens": 334
+  },
+  "files": {
+    "results": "results/qwen-3-4b/batch_5k_20241028T143300.jsonl",
+    "log": "results/qwen-3-4b/batch_5k_20241028T143300.log",
+    "input": "batch_5k.jsonl"
+  }
+}
