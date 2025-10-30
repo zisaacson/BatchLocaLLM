@@ -581,11 +581,18 @@
 
                 const date = new Date(benchmark.timestamp * 1000);
                 const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-                const numTests = benchmark.data.length;
+
+                // Handle both array and single object data
+                const data = Array.isArray(benchmark.data) ? benchmark.data : [benchmark.data];
+                const numTests = data.length;
+
+                // Get test name from first item if available
+                const firstTest = data[0];
+                const testName = firstTest?.test_name || firstTest?.mode || 'Unknown';
 
                 runItem.innerHTML = `
                     <div class="run-date">${dateStr}</div>
-                    <div class="run-info">${numTests} tests</div>
+                    <div class="run-info">${testName} (${numTests} test${numTests !== 1 ? 's' : ''})</div>
                 `;
 
                 runItem.onclick = () => selectRun(index);
