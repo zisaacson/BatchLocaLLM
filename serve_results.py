@@ -463,28 +463,28 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                     if 'python' in line.lower() and ('test_' in line or 'vllm' in line or 'EngineCore' in line):
                         processes.append(line)
 
-                # Try to get latest log progress from all offline batch logs
-                log_files = [
-                    'qwen3_4b_5k_offline.log',
-                    'gemma3_4b_5k_offline.log',
-                    'llama32_3b_5k_offline.log',
-                    'llama32_1b_5k_offline.log',
-                    # Legacy logs (may be stale)
-                    'qwen3_4b_5k_test.log',
-                    'olmo2_7b_100_test.log'
-                ]
-                progress = {}
-                for log_file in log_files:
-                    try:
-                        tail_result = subprocess.run(
-                            ['tail', '-3', log_file],
-                            capture_output=True, text=True, timeout=2
-                        )
-                        # Support both old format (Processed prompts) and new format (Running batch)
-                        if 'Processed prompts' in tail_result.stdout or 'Running batch' in tail_result.stdout:
-                            progress[log_file] = tail_result.stdout.strip().split('\n')[-1]
-                    except:
-                        pass
+                # Get real-time job progress from database
+                from batch_app.database import SessionLocal, BatchJob
+
+                db = SessionLocal()
+                try:
+                    running_jobs = db.query(BatchJob).filter(
+                        BatchJob.status.in_(['running', 'pending'])
+                    ).all()
+
+                    progress = {}
+                    for job in running_jobs:
+                        if job.total_requests and job.total_requests > 0:
+                            percent = (job.completed_requests / job.total_requests) * 100
+                            progress[job.batch_id] = {
+                                'model': job.model,
+                                'status': job.status,
+                                'completed': job.completed_requests,
+                                'total': job.total_requests,
+                                'percent': round(percent, 1)
+                            }
+                finally:
+                    db.close()
 
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
@@ -495,6 +495,51 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                     'progress': progress
                 }).encode())
             except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+
+        # API endpoint to get running jobs from database
+        elif parsed_path.path == '/api/running-jobs':
+            try:
+                from batch_app.database import SessionLocal, BatchJob
+
+                db = SessionLocal()
+                try:
+                    running_jobs = db.query(BatchJob).filter(
+                        BatchJob.status.in_(['pending', 'running'])
+                    ).order_by(BatchJob.created_at.desc()).all()
+
+                    jobs = []
+                    for job in running_jobs:
+                        progress_percent = 0
+                        if job.total_requests and job.total_requests > 0:
+                            progress_percent = round((job.completed_requests / job.total_requests) * 100, 1)
+
+                        jobs.append({
+                            'batch_id': job.batch_id,
+                            'model': job.model,
+                            'status': job.status,
+                            'created_at': job.created_at.isoformat() if job.created_at else None,
+                            'total_requests': job.total_requests,
+                            'completed_requests': job.completed_requests,
+                            'progress_percent': progress_percent,
+                            'webhook_url': job.webhook_url
+                        })
+
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        'count': len(jobs),
+                        'jobs': jobs
+                    }).encode())
+                finally:
+                    db.close()
+
+            except Exception as e:
+                print(f"Running jobs error: {e}")
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
