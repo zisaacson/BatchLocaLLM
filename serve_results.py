@@ -232,7 +232,6 @@ class ResultsHandler(SimpleHTTPRequestHandler):
             try:
                 # Find all benchmark JSON files
                 benchmark_files = glob.glob('benchmark_results/*.json')
-                benchmark_logs = glob.glob('*benchmark*.log')
 
                 benchmarks = []
                 for bf in benchmark_files:
@@ -246,7 +245,7 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                                 'timestamp_human': datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S'),
                                 'data': data
                             })
-                    except:
+                    except Exception as e:
                         pass
 
                 # Sort by timestamp (newest first)
@@ -365,7 +364,6 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                                         break
 
                     # Add timestamp
-                    from datetime import datetime
                     data['starred_at'] = datetime.now().isoformat()
 
                     # Add duplicate flag if found
@@ -478,7 +476,6 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                 os.makedirs('data/gold_star/exports', exist_ok=True)
 
                 # Generate filename
-                from datetime import datetime
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 filename = f'gold_star_{format_type}_{timestamp}.jsonl'
                 filepath = f'data/gold_star/exports/{filename}'
