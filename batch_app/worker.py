@@ -18,9 +18,10 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from vllm import LLM, SamplingParams
 
-from .database import SessionLocal, BatchJob, WorkerHeartbeat
+from .database import SessionLocal, BatchJob, WorkerHeartbeat, File
 from .benchmarks import get_benchmark_manager
 from .webhooks import send_webhook_async
+import uuid
 
 # Configuration
 CHUNK_SIZE = 5000  # Process 5K requests at a time (proven safe from benchmarks)
@@ -100,9 +101,9 @@ class BatchWorker:
             print(f"⚠️  Heartbeat update failed: {e}")
 
     def get_next_pending_job(self, db: Session) -> Optional[BatchJob]:
-        """Get the next pending job from the queue."""
+        """Get the next pending job from the queue (OpenAI status: validating)."""
         return db.query(BatchJob).filter(
-            BatchJob.status == 'pending'
+            BatchJob.status == 'validating'
         ).order_by(BatchJob.created_at).first()
 
     def count_completed_results(self, output_file: str) -> int:
@@ -214,21 +215,33 @@ class BatchWorker:
             raise
     
     def process_job(self, job: BatchJob, db: Session):
-        """Process a single batch job with chunking and resume capability."""
+        """Process a single batch job with chunking and resume capability (OpenAI compatible)."""
         log_file = job.log_file
 
         try:
-            # Update status to running
-            job.status = 'running'
-            job.started_at = datetime.utcnow()
+            # Update status to in_progress (OpenAI format)
+            job.status = 'in_progress'
+            job.in_progress_at = int(time.time())
             db.commit()
+
+            # Get input file
+            input_file = db.query(File).filter(File.file_id == job.input_file_id).first()
+            if not input_file:
+                raise Exception(f"Input file not found: {job.input_file_id}")
+
+            input_file_path = input_file.file_path
+
+            # Create output file path
+            output_file_path = Path("data/batches/output") / f"{job.batch_id}_results.jsonl"
+            output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
             self.log(log_file, "=" * 80)
             self.log(log_file, f"BATCH JOB: {job.batch_id}")
             self.log(log_file, "=" * 80)
             self.log(log_file, f"Model: {job.model}")
-            self.log(log_file, f"Input: {job.input_file}")
-            self.log(log_file, f"Output: {job.output_file}")
+            self.log(log_file, f"Input file ID: {job.input_file_id}")
+            self.log(log_file, f"Input path: {input_file_path}")
+            self.log(log_file, f"Output path: {output_file_path}")
             self.log(log_file, f"Total requests: {job.total_requests}")
             self.log(log_file, f"Chunk size: {CHUNK_SIZE}")
             self.log(log_file, "=" * 80)
@@ -237,9 +250,9 @@ class BatchWorker:
             self.load_model(job.model, log_file)
 
             # Load requests
-            self.log(log_file, f"\n📥 Loading requests from {job.input_file}")
+            self.log(log_file, f"\n📥 Loading requests from {input_file_path}")
             all_requests = []
-            with open(job.input_file) as f:
+            with open(input_file_path) as f:
                 for line in f:
                     if line.strip():
                         all_requests.append(json.loads(line))
@@ -248,7 +261,7 @@ class BatchWorker:
             self.log(log_file, f"✅ Loaded {total_requests} requests")
 
             # Check for resume point
-            completed_count = self.count_completed_results(job.output_file)
+            completed_count = self.count_completed_results(str(output_file_path))
             if completed_count > 0:
                 self.log(log_file, f"\n📍 RESUMING from request {completed_count + 1}")
                 self.log(log_file, f"Already completed: {completed_count}/{total_requests}")
@@ -317,7 +330,7 @@ class BatchWorker:
                     saved = self.save_chunk_results(
                         outputs,
                         chunk_requests,
-                        job.output_file,
+                        str(output_file_path),
                         completed_count + chunk_idx,
                         log_file
                     )
@@ -358,9 +371,34 @@ class BatchWorker:
             self.log(log_file, f"Requests/sec:          {requests_per_sec:.2f}")
             self.log(log_file, "=" * 80)
 
-            # Update job in database
+            # Create output file in Files API
+            self.log(log_file, "\n📤 Registering output file...")
+            output_file_id = f"file-out-{uuid.uuid4().hex[:20]}"
+            output_file_size = output_file_path.stat().st_size if output_file_path.exists() else 0
+
+            output_file_db = File(
+                file_id=output_file_id,
+                object='file',
+                bytes=output_file_size,
+                created_at=int(time.time()),
+                filename=f"{job.batch_id}_results.jsonl",
+                purpose='batch',
+                file_path=str(output_file_path),
+                deleted=False
+            )
+            db.add(output_file_db)
+
+            # Update job status to finalizing then completed (OpenAI format)
+            job.status = 'finalizing'
+            job.finalizing_at = int(time.time())
+            db.commit()
+
+            self.log(log_file, f"✅ Output file registered: {output_file_id}")
+
+            # Mark as completed
             job.status = 'completed'
-            job.completed_at = datetime.utcnow()
+            job.completed_at = int(time.time())
+            job.output_file_id = output_file_id
             job.failed_requests = total_requests - job.completed_requests
             job.total_tokens = total_tokens
             job.throughput_tokens_per_sec = int(throughput)
@@ -377,10 +415,10 @@ class BatchWorker:
                 send_webhook_async(job.batch_id, job.webhook_url)
 
         except Exception as e:
-            # Mark job as failed
+            # Mark job as failed (OpenAI format)
             job.status = 'failed'
-            job.completed_at = datetime.utcnow()
-            job.error_message = str(e)
+            job.failed_at = int(time.time())
+            job.errors = json.dumps({"message": str(e)})
             db.commit()
 
             self.log(log_file, f"\n❌ ERROR: {e}")

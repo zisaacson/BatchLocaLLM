@@ -7,17 +7,19 @@ Features:
 - Request validation
 """
 
-from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, UploadFile, File as FastAPIFile, Form, Depends, HTTPException, Body
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel, Field
 import json
 import os
 import uuid
 from datetime import datetime
 from pathlib import Path
+import time
 
-from .database import get_db, init_db, BatchJob, FailedRequest, WorkerHeartbeat
+from .database import get_db, init_db, BatchJob, FailedRequest, WorkerHeartbeat, File
 from .benchmarks import get_benchmark_manager
 
 # Initialize FastAPI app
@@ -32,15 +34,33 @@ DATA_DIR = Path("data/batches")
 INPUT_DIR = DATA_DIR / "input"
 OUTPUT_DIR = DATA_DIR / "output"
 LOGS_DIR = DATA_DIR / "logs"
+FILES_DIR = Path("data/files")  # OpenAI Files API storage
 
 # Create directories
-for dir_path in [INPUT_DIR, OUTPUT_DIR, LOGS_DIR]:
+for dir_path in [INPUT_DIR, OUTPUT_DIR, LOGS_DIR, FILES_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
 
 # Queue limits (match OpenAI Batch API)
 MAX_REQUESTS_PER_JOB = 50000  # Max requests per batch job
 MAX_QUEUE_DEPTH = 20  # Max concurrent jobs in queue (supports up to 1M queued requests)
 MAX_TOTAL_QUEUED_REQUESTS = 1000000  # Max total requests across all queued jobs (1M = 20 jobs × 50K)
+
+
+# ============================================================================
+# PYDANTIC MODELS (OpenAI API Compatible)
+# ============================================================================
+
+class CreateBatchRequest(BaseModel):
+    """OpenAI-compatible batch creation request."""
+    input_file_id: str = Field(..., description="ID of uploaded input file")
+    endpoint: str = Field("/v1/chat/completions", description="API endpoint")
+    completion_window: str = Field("24h", description="Completion window")
+    metadata: Optional[dict] = Field(None, description="Custom metadata")
+
+
+class CancelBatchRequest(BaseModel):
+    """Request to cancel a batch."""
+    pass  # No body needed
 
 
 def check_gpu_health() -> dict:
@@ -125,6 +145,164 @@ async def startup_event():
     """Initialize database on startup."""
     init_db()
     print("✅ Batch API Server started")
+
+
+# ============================================================================
+# FILES API (OpenAI Compatible)
+# ============================================================================
+
+@app.post("/v1/files")
+async def upload_file(
+    file: UploadFile = FastAPIFile(...),
+    purpose: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload a file for batch processing (OpenAI Files API compatible).
+
+    Args:
+        file: JSONL file to upload
+        purpose: Purpose of file (must be "batch")
+
+    Returns:
+        File metadata in OpenAI format
+    """
+    # Validate purpose
+    if purpose != "batch":
+        raise HTTPException(status_code=400, detail=f"Invalid purpose: {purpose}. Must be 'batch'")
+
+    # Generate file ID
+    file_id = f"file-{uuid.uuid4().hex[:24]}"
+
+    # Save file
+    file_path = FILES_DIR / f"{file_id}.jsonl"
+    content = await file.read()
+    file_path.write_bytes(content)
+
+    # Get file size
+    file_size = len(content)
+
+    # Create database entry
+    created_at = int(time.time())
+    db_file = File(
+        file_id=file_id,
+        object='file',
+        bytes=file_size,
+        created_at=created_at,
+        filename=file.filename or "upload.jsonl",
+        purpose=purpose,
+        file_path=str(file_path),
+        deleted=False
+    )
+    db.add(db_file)
+    db.commit()
+
+    return db_file.to_dict()
+
+
+@app.get("/v1/files/{file_id}")
+async def get_file(file_id: str, db: Session = Depends(get_db)):
+    """
+    Get file metadata (OpenAI Files API compatible).
+
+    Args:
+        file_id: File ID
+
+    Returns:
+        File metadata in OpenAI format
+    """
+    db_file = db.query(File).filter(File.file_id == file_id, File.deleted == False).first()
+    if not db_file:
+        raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
+
+    return db_file.to_dict()
+
+
+@app.get("/v1/files/{file_id}/content")
+async def get_file_content(file_id: str, db: Session = Depends(get_db)):
+    """
+    Download file content (OpenAI Files API compatible).
+
+    Args:
+        file_id: File ID
+
+    Returns:
+        File content as JSONL
+    """
+    db_file = db.query(File).filter(File.file_id == file_id, File.deleted == False).first()
+    if not db_file:
+        raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
+
+    file_path = Path(db_file.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"File content not found: {file_id}")
+
+    return FileResponse(
+        path=str(file_path),
+        media_type="application/x-ndjson",
+        filename=db_file.filename
+    )
+
+
+@app.delete("/v1/files/{file_id}")
+async def delete_file(file_id: str, db: Session = Depends(get_db)):
+    """
+    Delete a file (OpenAI Files API compatible).
+
+    Args:
+        file_id: File ID
+
+    Returns:
+        Deletion confirmation
+    """
+    db_file = db.query(File).filter(File.file_id == file_id, File.deleted == False).first()
+    if not db_file:
+        raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
+
+    # Mark as deleted (soft delete)
+    db_file.deleted = True
+    db.commit()
+
+    # Optionally delete physical file
+    try:
+        file_path = Path(db_file.file_path)
+        if file_path.exists():
+            file_path.unlink()
+    except Exception as e:
+        print(f"Warning: Could not delete file {file_path}: {e}")
+
+    return {
+        "id": file_id,
+        "object": "file.deleted",
+        "deleted": True
+    }
+
+
+@app.get("/v1/files")
+async def list_files(
+    purpose: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    List all files (OpenAI Files API compatible).
+
+    Args:
+        purpose: Filter by purpose (optional)
+
+    Returns:
+        List of files in OpenAI format
+    """
+    query = db.query(File).filter(File.deleted == False)
+
+    if purpose:
+        query = query.filter(File.purpose == purpose)
+
+    files = query.order_by(File.created_at.desc()).all()
+
+    return {
+        "object": "list",
+        "data": [f.to_dict() for f in files]
+    }
 
 
 @app.get("/")
@@ -224,27 +402,22 @@ async def list_models():
 
 @app.post("/v1/batches")
 async def create_batch(
-    file: UploadFile = File(...),
-    model: str = Form(...),
-    webhook_url: Optional[str] = Form(None),
-    metadata: Optional[str] = Form(None),
+    request: CreateBatchRequest,
     db: Session = Depends(get_db)
 ):
     """
-    Submit a new batch job with queue limits and GPU health checks.
+    Create a batch job (OpenAI Batch API compatible).
 
     Args:
-        file: JSONL file with batch requests
-        model: Model to use for inference
-        webhook_url: Optional webhook URL to call when job completes
-        metadata: Optional JSON metadata string
+        request: Batch creation request with input_file_id, endpoint, completion_window, metadata
 
     Returns:
-        Batch job information with estimated completion time
+        Batch job information in OpenAI format
 
     Raises:
-        HTTPException 400: Invalid request (bad model, too many requests, invalid JSON)
-        HTTPException 429: Queue full or too many queued requests
+        HTTPException 400: Invalid request
+        HTTPException 404: Input file not found
+        HTTPException 429: Queue full
         HTTPException 503: GPU unhealthy
     """
     # Check GPU health before accepting job
@@ -255,9 +428,35 @@ async def create_batch(
             detail=f"GPU unhealthy: {gpu_status['reason']}. Try again later."
         )
 
+    # Validate endpoint
+    if request.endpoint != "/v1/chat/completions":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid endpoint: {request.endpoint}. Only /v1/chat/completions is supported."
+        )
+
+    # Validate completion_window
+    if request.completion_window != "24h":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid completion_window: {request.completion_window}. Only 24h is supported."
+        )
+
+    # Get input file
+    input_file = db.query(File).filter(
+        File.file_id == request.input_file_id,
+        File.deleted == False
+    ).first()
+
+    if not input_file:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Input file not found: {request.input_file_id}"
+        )
+
     # Check queue depth
     pending_jobs = db.query(BatchJob).filter(
-        BatchJob.status.in_(['pending', 'running'])
+        BatchJob.status.in_(['validating', 'in_progress'])
     ).all()
 
     if len(pending_jobs) >= MAX_QUEUE_DEPTH:
@@ -266,44 +465,30 @@ async def create_batch(
             detail=f"Queue full ({len(pending_jobs)}/{MAX_QUEUE_DEPTH} jobs). Try again later."
         )
 
-    # Check total queued requests
-    total_queued = sum(
-        j.total_requests - j.completed_requests
-        for j in pending_jobs
-    )
-
-    if total_queued >= MAX_TOTAL_QUEUED_REQUESTS:
+    # Read and validate input file
+    input_file_path = Path(input_file.file_path)
+    if not input_file_path.exists():
         raise HTTPException(
-            status_code=429,
-            detail=f"Too many queued requests ({total_queued:,}/{MAX_TOTAL_QUEUED_REQUESTS:,}). Try again later."
+            status_code=404,
+            detail=f"Input file content not found: {request.input_file_id}"
         )
-
-    # Validate model
-    benchmark_mgr = get_benchmark_manager()
-    if model not in benchmark_mgr.get_available_models():
-        raise HTTPException(
-            status_code=400,
-            detail=f"Model '{model}' not found. Available models: {benchmark_mgr.get_available_models()}"
-        )
-
-    # Generate batch ID
-    batch_id = f"batch_{uuid.uuid4().hex[:16]}"
-
-    # Save uploaded file
-    input_file_path = INPUT_DIR / f"{batch_id}.jsonl"
 
     try:
-        # Read and validate JSONL
-        content = await file.read()
-        lines = content.decode('utf-8').strip().split('\n')
+        content = input_file_path.read_text()
+        lines = content.strip().split('\n')
 
-        # Count requests and validate format
+        # Count requests and extract model from first request
         num_requests = 0
+        model = None
         for i, line in enumerate(lines):
             if line.strip():
                 try:
-                    json.loads(line)
+                    req = json.loads(line)
                     num_requests += 1
+
+                    # Extract model from first request
+                    if model is None and 'body' in req and 'model' in req['body']:
+                        model = req['body']['model']
                 except json.JSONDecodeError as e:
                     raise HTTPException(
                         status_code=400,
@@ -313,112 +498,184 @@ async def create_batch(
         if num_requests == 0:
             raise HTTPException(status_code=400, detail="No valid requests found in file")
 
+        if not model:
+            raise HTTPException(status_code=400, detail="No model specified in requests")
+
         # Validate job size
         if num_requests > MAX_REQUESTS_PER_JOB:
             raise HTTPException(
                 status_code=400,
                 detail=f"Too many requests ({num_requests:,}). Maximum is {MAX_REQUESTS_PER_JOB:,} per job."
             )
-        
-        # Save file
-        with open(input_file_path, 'wb') as f:
-            f.write(content)
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to process file: {str(e)}")
-    
-    # Get performance estimate
-    estimate = benchmark_mgr.estimate_completion_time(model, num_requests)
-    
-    # Create batch job in database
-    output_file_path = OUTPUT_DIR / f"{batch_id}_results.jsonl"
+        raise HTTPException(status_code=400, detail=f"Failed to validate file: {str(e)}")
+
+    # Generate batch ID
+    batch_id = f"batch_{uuid.uuid4().hex[:16]}"
+
+    # Create timestamps
+    created_at = int(time.time())
+    expires_at = created_at + 86400  # 24 hours
+
+    # Create log file path
     log_file_path = LOGS_DIR / f"{batch_id}.log"
-    
+
+    # Create batch job in database
     batch_job = BatchJob(
         batch_id=batch_id,
-        model=model,
-        status='pending',
-        input_file=str(input_file_path),
-        output_file=str(output_file_path),
-        log_file=str(log_file_path),
+        object='batch',
+        endpoint=request.endpoint,
+        input_file_id=request.input_file_id,
+        completion_window=request.completion_window,
+        status='validating',
+        output_file_id=None,
+        error_file_id=None,
+        created_at=created_at,
+        in_progress_at=None,
+        expires_at=expires_at,
+        finalizing_at=None,
+        completed_at=None,
+        failed_at=None,
+        expired_at=None,
+        cancelling_at=None,
+        cancelled_at=None,
         total_requests=num_requests,
         completed_requests=0,
         failed_requests=0,
-        webhook_url=webhook_url,
-        webhook_status='pending' if webhook_url else None,
-        metadata_json=metadata
+        errors=None,
+        metadata_json=json.dumps(request.metadata) if request.metadata else None,
+        model=model,
+        log_file=str(log_file_path),
+        throughput_tokens_per_sec=None,
+        total_tokens=None,
+        webhook_url=None,
+        webhook_status=None,
+        webhook_attempts=0,
+        webhook_last_attempt=None,
+        webhook_error=None
     )
-    
+
     db.add(batch_job)
     db.commit()
     db.refresh(batch_job)
-    
-    # Build response
-    response = batch_job.to_dict()
-    if estimate:
-        response['estimate'] = estimate
-    
-    return response
+
+    return batch_job.to_dict()
 
 
 @app.get("/v1/batches/{batch_id}")
 async def get_batch(batch_id: str, db: Session = Depends(get_db)):
-    """Get batch job status and progress."""
+    """Get batch job status (OpenAI Batch API compatible)."""
     batch_job = db.query(BatchJob).filter(BatchJob.batch_id == batch_id).first()
-    
+
     if not batch_job:
-        raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found")
-    
+        raise HTTPException(status_code=404, detail=f"Batch not found: {batch_id}")
+
     return batch_job.to_dict()
 
 
 @app.get("/v1/batches")
 async def list_batches(
-    status: Optional[str] = None,
-    limit: int = 100,
+    limit: int = 20,
+    after: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
-    List batch jobs.
-    
+    List batch jobs (OpenAI Batch API compatible).
+
     Args:
-        status: Filter by status (pending, running, completed, failed)
-        limit: Maximum number of results
+        limit: Maximum number of results (default 20)
+        after: Cursor for pagination (batch_id)
     """
-    query = db.query(BatchJob)
-    
-    if status:
-        query = query.filter(BatchJob.status == status)
-    
-    query = query.order_by(BatchJob.created_at.desc()).limit(limit)
-    
-    batches = query.all()
-    
+    query = db.query(BatchJob).order_by(BatchJob.created_at.desc())
+
+    if after:
+        # Find the batch with this ID and get batches created after it
+        after_batch = db.query(BatchJob).filter(BatchJob.batch_id == after).first()
+        if after_batch:
+            query = query.filter(BatchJob.created_at < after_batch.created_at)
+
+    batches = query.limit(limit + 1).all()
+
+    has_more = len(batches) > limit
+    if has_more:
+        batches = batches[:limit]
+
     return {
-        "batches": [batch.to_dict() for batch in batches],
-        "count": len(batches)
+        "object": "list",
+        "data": [batch.to_dict() for batch in batches],
+        "first_id": batches[0].batch_id if batches else None,
+        "last_id": batches[-1].batch_id if batches else None,
+        "has_more": has_more
     }
+
+
+@app.post("/v1/batches/{batch_id}/cancel")
+async def cancel_batch(batch_id: str, db: Session = Depends(get_db)):
+    """
+    Cancel a batch job (OpenAI Batch API compatible).
+
+    Args:
+        batch_id: Batch ID to cancel
+
+    Returns:
+        Updated batch with status 'cancelling' or 'cancelled'
+    """
+    batch_job = db.query(BatchJob).filter(BatchJob.batch_id == batch_id).first()
+
+    if not batch_job:
+        raise HTTPException(status_code=404, detail=f"Batch not found: {batch_id}")
+
+    # Can only cancel if not already completed/failed/cancelled
+    if batch_job.status in ['completed', 'failed', 'expired', 'cancelled']:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel batch with status: {batch_job.status}"
+        )
+
+    # Set status to cancelling
+    batch_job.status = 'cancelling'
+    batch_job.cancelling_at = int(time.time())
+    db.commit()
+    db.refresh(batch_job)
+
+    return batch_job.to_dict()
 
 
 @app.get("/v1/batches/{batch_id}/results")
 async def get_results(batch_id: str, db: Session = Depends(get_db)):
-    """Download batch job results."""
+    """
+    Download batch job results (DEPRECATED - use /v1/files/{output_file_id}/content instead).
+
+    This endpoint is kept for backward compatibility.
+    """
     batch_job = db.query(BatchJob).filter(BatchJob.batch_id == batch_id).first()
-    
+
     if not batch_job:
-        raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found")
-    
+        raise HTTPException(status_code=404, detail=f"Batch not found: {batch_id}")
+
     if batch_job.status != 'completed':
         raise HTTPException(
             status_code=400,
-            detail=f"Batch job is not completed yet. Current status: {batch_job.status}"
+            detail=f"Batch is not completed yet. Current status: {batch_job.status}"
         )
-    
-    if not batch_job.output_file or not os.path.exists(batch_job.output_file):
-        raise HTTPException(status_code=404, detail="Results file not found")
-    
+
+    if not batch_job.output_file_id:
+        raise HTTPException(status_code=404, detail="No output file available")
+
+    # Redirect to Files API
+    output_file = db.query(File).filter(File.file_id == batch_job.output_file_id).first()
+    if not output_file:
+        raise HTTPException(status_code=404, detail="Output file not found")
+
+    file_path = Path(output_file.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Output file content not found")
+
     return FileResponse(
-        batch_job.output_file,
+        path=str(file_path),
         media_type='application/x-ndjson',
         filename=f"{batch_id}_results.jsonl"
     )

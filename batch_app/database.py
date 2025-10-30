@@ -2,84 +2,151 @@
 Database models and utilities for batch processing system.
 
 Models:
-- BatchJob: Main batch job tracking
+- File: Uploaded files (OpenAI Files API compatible)
+- BatchJob: Main batch job tracking (OpenAI Batch API compatible)
 - FailedRequest: Dead letter queue for failed requests
 - WorkerHeartbeat: Worker health monitoring
 """
 
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Float, ForeignKey
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Float, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
+import json
 
 Base = declarative_base()
 
 
+class File(Base):
+    """File model - OpenAI Files API compatible."""
+
+    __tablename__ = 'files'
+
+    # Primary key
+    file_id = Column(String(64), primary_key=True)
+
+    # OpenAI standard fields
+    object = Column(String(32), default='file', nullable=False)
+    bytes = Column(Integer, nullable=False)
+    created_at = Column(Integer, nullable=False)  # Unix timestamp
+    filename = Column(String(512), nullable=False)
+    purpose = Column(String(32), nullable=False)  # "batch", "assistants", etc
+
+    # Internal fields
+    file_path = Column(String(512), nullable=False)
+    deleted = Column(Boolean, default=False)
+
+    def to_dict(self):
+        """Convert to OpenAI Files API format."""
+        return {
+            'id': self.file_id,
+            'object': self.object,
+            'bytes': self.bytes,
+            'created_at': self.created_at,
+            'filename': self.filename,
+            'purpose': self.purpose
+        }
+
+
 class BatchJob(Base):
-    """Batch job model."""
-    
+    """Batch job model - OpenAI Batch API compatible."""
+
     __tablename__ = 'batch_jobs'
-    
+
     # Primary key
     batch_id = Column(String(64), primary_key=True)
-    
-    # Job metadata
-    model = Column(String(256), nullable=False)
-    status = Column(String(32), nullable=False, default='pending')  # pending, running, completed, failed
-    
-    # File paths
-    input_file = Column(String(512), nullable=False)
-    output_file = Column(String(512), nullable=True)
-    log_file = Column(String(512), nullable=True)
-    
-    # Progress tracking
+
+    # OpenAI standard fields
+    object = Column(String(32), default='batch', nullable=False)
+    endpoint = Column(String(128), default='/v1/chat/completions', nullable=False)
+    input_file_id = Column(String(64), ForeignKey('files.file_id'), nullable=False)
+    completion_window = Column(String(16), default='24h', nullable=False)
+    status = Column(String(32), nullable=False, default='validating')
+    # Status values: validating, failed, in_progress, finalizing, completed, expired, cancelling, cancelled
+
+    # OpenAI file references
+    output_file_id = Column(String(64), ForeignKey('files.file_id'), nullable=True)
+    error_file_id = Column(String(64), ForeignKey('files.file_id'), nullable=True)
+
+    # OpenAI timestamps (Unix timestamps)
+    created_at = Column(Integer, nullable=False)
+    in_progress_at = Column(Integer, nullable=True)
+    expires_at = Column(Integer, nullable=False)
+    finalizing_at = Column(Integer, nullable=True)
+    completed_at = Column(Integer, nullable=True)
+    failed_at = Column(Integer, nullable=True)
+    expired_at = Column(Integer, nullable=True)
+    cancelling_at = Column(Integer, nullable=True)
+    cancelled_at = Column(Integer, nullable=True)
+
+    # OpenAI request counts
     total_requests = Column(Integer, default=0)
     completed_requests = Column(Integer, default=0)
     failed_requests = Column(Integer, default=0)
-    
-    # Performance metrics
+
+    # OpenAI errors field
+    errors = Column(Text, nullable=True)  # JSON string
+
+    # OpenAI metadata
+    metadata_json = Column(Text, nullable=True)  # JSON string
+
+    # Internal fields (not in OpenAI response)
+    model = Column(String(256), nullable=True)  # Extracted from input file
+    log_file = Column(String(512), nullable=True)
     throughput_tokens_per_sec = Column(Float, nullable=True)
     total_tokens = Column(Integer, nullable=True)
-    
-    # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
-    
-    # Error handling
-    error_message = Column(Text, nullable=True)
 
-    # Webhook support
+    # Webhook support (custom extension)
     webhook_url = Column(String(512), nullable=True)
-    webhook_status = Column(String(32), nullable=True)  # pending, sent, failed
+    webhook_status = Column(String(32), nullable=True)
     webhook_attempts = Column(Integer, default=0)
     webhook_last_attempt = Column(DateTime, nullable=True)
     webhook_error = Column(Text, nullable=True)
 
-    # Custom metadata (JSON string)
-    metadata_json = Column(Text, nullable=True)
-
     def to_dict(self):
-        """Convert to dictionary for API responses."""
+        """Convert to OpenAI Batch API format."""
+        # Parse metadata
+        metadata = {}
+        if self.metadata_json:
+            try:
+                metadata = json.loads(self.metadata_json)
+            except:
+                pass
+
+        # Parse errors
+        errors = None
+        if self.errors:
+            try:
+                errors = json.loads(self.errors)
+            except:
+                errors = {"message": self.errors}
+
         return {
-            'batch_id': self.batch_id,
-            'model': self.model,
+            'id': self.batch_id,
+            'object': self.object,
+            'endpoint': self.endpoint,
+            'errors': errors,
+            'input_file_id': self.input_file_id,
+            'completion_window': self.completion_window,
             'status': self.status,
-            'progress': {
+            'output_file_id': self.output_file_id,
+            'error_file_id': self.error_file_id,
+            'created_at': self.created_at,
+            'in_progress_at': self.in_progress_at,
+            'expires_at': self.expires_at,
+            'finalizing_at': self.finalizing_at,
+            'completed_at': self.completed_at,
+            'failed_at': self.failed_at,
+            'expired_at': self.expired_at,
+            'cancelling_at': self.cancelling_at,
+            'cancelled_at': self.cancelled_at,
+            'request_counts': {
                 'total': self.total_requests,
                 'completed': self.completed_requests,
-                'failed': self.failed_requests,
-                'percent': round(self.completed_requests / self.total_requests * 100, 2) if self.total_requests > 0 else 0
+                'failed': self.failed_requests
             },
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'started_at': self.started_at.isoformat() if self.started_at else None,
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
-            'throughput_tokens_per_sec': self.throughput_tokens_per_sec,
-            'total_tokens': self.total_tokens,
-            'error_message': self.error_message,
-            'results_url': f'/v1/batches/{self.batch_id}/results' if self.status == 'completed' else None,
-            'output_file': self.output_file
+            'metadata': metadata
         }
 
 
