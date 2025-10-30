@@ -1,0 +1,32 @@
+{
+  "test_name": "quick_test_100",
+  "model": "google/gemma-3-4b-it",
+  "mode": "offline_batch",
+  "timestamp": "2025-10-29T23:35:03.592557",
+  "model_load_time_seconds": 17.46,
+  "inference_time_seconds": 36.67,
+  "total_time_seconds": 54.13,
+  "num_requests": 100,
+  "successful_requests": 100,
+  "failed_requests": 0,
+  "success_rate_pct": 100.0,
+  "prompt_tokens": 33200,
+  "completion_tokens": 44259,
+  "total_tokens": 77459,
+  "avg_prompt_tokens": 332.0,
+  "avg_completion_tokens": 442.6,
+  "throughput_req_per_sec": 2.73,
+  "throughput_tokens_per_sec": 2112.0,
+  "latency_p50_ms": 366.73,
+  "latency_p95_ms": 366.73,
+  "latency_p99_ms": 366.73,
+  "latency_min_ms": 366.73,
+  "latency_max_ms": 366.73,
+  "config": {
+    "max_model_len": 4096,
+    "gpu_memory_utilization": 0.9,
+    "enable_prefix_caching": true,
+    "enforce_eager": true
+  },
+  "notes": ""
+}

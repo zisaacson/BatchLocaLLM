@@ -21,6 +21,7 @@ from vllm import LLM, SamplingParams
 
 from .database import SessionLocal, BatchJob, FailedRequest, WorkerHeartbeat
 from .benchmarks import get_benchmark_manager
+from .webhooks import send_webhook_async
 
 # Configuration
 CHUNK_SIZE = 5000  # Process 5K requests at a time (proven safe from benchmarks)
@@ -370,19 +371,29 @@ class BatchWorker:
 
             # Save benchmark data
             self.save_benchmark(job, total_inference_time)
-            
+
+            # Send webhook notification (async, non-blocking)
+            if job.webhook_url:
+                self.log(log_file, f"📡 Sending webhook to {job.webhook_url}...")
+                send_webhook_async(job.batch_id, job.webhook_url)
+
         except Exception as e:
             # Mark job as failed
             job.status = 'failed'
             job.completed_at = datetime.utcnow()
             job.error_message = str(e)
             db.commit()
-            
+
             self.log(log_file, f"\n❌ ERROR: {e}")
             self.log(log_file, "Batch job failed")
-            
+
             import traceback
             self.log(log_file, traceback.format_exc())
+
+            # Send webhook notification for failure (async, non-blocking)
+            if job.webhook_url:
+                self.log(log_file, f"📡 Sending failure webhook to {job.webhook_url}...")
+                send_webhook_async(job.batch_id, job.webhook_url)
     
     def save_benchmark(self, job: BatchJob, processing_time: float):
         """Save benchmark data from completed job."""

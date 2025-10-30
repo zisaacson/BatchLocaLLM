@@ -49,7 +49,17 @@ class BatchJob(Base):
     
     # Error handling
     error_message = Column(Text, nullable=True)
-    
+
+    # Webhook support
+    webhook_url = Column(String(512), nullable=True)
+    webhook_status = Column(String(32), nullable=True)  # pending, sent, failed
+    webhook_attempts = Column(Integer, default=0)
+    webhook_last_attempt = Column(DateTime, nullable=True)
+    webhook_error = Column(Text, nullable=True)
+
+    # Custom metadata (JSON string)
+    metadata_json = Column(Text, nullable=True)
+
     def to_dict(self):
         """Convert to dictionary for API responses."""
         return {

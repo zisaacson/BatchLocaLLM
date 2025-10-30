@@ -39,8 +39,8 @@ for dir_path in [INPUT_DIR, OUTPUT_DIR, LOGS_DIR]:
 
 # Queue limits (match OpenAI Batch API)
 MAX_REQUESTS_PER_JOB = 50000  # Max requests per batch job
-MAX_QUEUE_DEPTH = 10  # Max concurrent jobs in queue (increased for 170K+ candidates)
-MAX_TOTAL_QUEUED_REQUESTS = 500000  # Max total requests across all queued jobs (future-proof)
+MAX_QUEUE_DEPTH = 20  # Max concurrent jobs in queue (supports up to 1M queued requests)
+MAX_TOTAL_QUEUED_REQUESTS = 1000000  # Max total requests across all queued jobs (1M = 20 jobs × 50K)
 
 
 def check_gpu_health() -> dict:
@@ -226,6 +226,8 @@ async def list_models():
 async def create_batch(
     file: UploadFile = File(...),
     model: str = Form(...),
+    webhook_url: Optional[str] = Form(None),
+    metadata: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -234,6 +236,8 @@ async def create_batch(
     Args:
         file: JSONL file with batch requests
         model: Model to use for inference
+        webhook_url: Optional webhook URL to call when job completes
+        metadata: Optional JSON metadata string
 
     Returns:
         Batch job information with estimated completion time
@@ -339,7 +343,10 @@ async def create_batch(
         log_file=str(log_file_path),
         total_requests=num_requests,
         completed_requests=0,
-        failed_requests=0
+        failed_requests=0,
+        webhook_url=webhook_url,
+        webhook_status='pending' if webhook_url else None,
+        metadata_json=metadata
     )
     
     db.add(batch_job)

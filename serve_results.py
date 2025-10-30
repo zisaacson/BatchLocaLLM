@@ -610,11 +610,12 @@ class ResultsHandler(SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     PORT = 8001
-    print(f"🚀 Starting results viewer server on http://localhost:{PORT}")
+    HOST = '0.0.0.0'  # Listen on all interfaces
+    print(f"🚀 Starting results viewer server on http://{HOST}:{PORT}")
     print(f"📂 Serving from: {os.getcwd()}")
-    print(f"\n✨ Open in browser: http://localhost:{PORT}/view_results.html\n")
+    print(f"\n✨ Open in browser: http://10.0.0.223:{PORT}/view_results.html\n")
 
-    server = HTTPServer(('localhost', PORT), ResultsHandler)
+    server = HTTPServer((HOST, PORT), ResultsHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
