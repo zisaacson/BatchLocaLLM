@@ -579,20 +579,31 @@
                     runItem.classList.add('active');
                 }
 
-                const date = new Date(benchmark.timestamp * 1000);
-                const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-
                 // Handle both array and single object data
                 const data = Array.isArray(benchmark.data) ? benchmark.data : [benchmark.data];
-                const numTests = data.length;
-
-                // Get test name from first item if available
                 const firstTest = data[0];
-                const testName = firstTest?.test_name || firstTest?.mode || 'Unknown';
+
+                // Build descriptive title: "test_name - model - mode - size"
+                const testName = firstTest?.test_name || 'Unknown Test';
+                const model = firstTest?.model || '';
+                const mode = firstTest?.mode || '';
+                const size = firstTest?.num_requests || '';
+
+                // Format model name (remove path, just show model name)
+                const modelShort = model.split('/').pop() || model;
+
+                // Format mode badge
+                const modeBadge = mode === 'offline_batch' ? '📦 Offline' :
+                                 mode === 'server' ? '🌐 Server' :
+                                 mode;
+
+                // Create title line
+                const titleLine = `${testName}`;
+                const detailLine = `${modelShort} • ${modeBadge} • ${size} req`;
 
                 runItem.innerHTML = `
-                    <div class="run-date">${dateStr}</div>
-                    <div class="run-info">${testName} (${numTests} test${numTests !== 1 ? 's' : ''})</div>
+                    <div class="run-date" style="font-weight: 600; color: #2d3748; margin-bottom: 4px;">${titleLine}</div>
+                    <div class="run-info" style="font-size: 13px; color: #718096;">${detailLine}</div>
                 `;
 
                 runItem.onclick = () => selectRun(index);
