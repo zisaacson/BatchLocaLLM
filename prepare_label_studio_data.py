@@ -86,29 +86,36 @@ def load_llm_results(results_file):
 
 def convert_to_label_studio(batch_file, results_file, output_file, limit=None):
     """Convert batch data to Label Studio format."""
-    
+
     # Load LLM results
     llm_results = load_llm_results(results_file)
-    
+
     # Convert candidates
     tasks = []
     with open(batch_file, 'r') as f:
         for i, line in enumerate(f):
             if limit and i >= limit:
                 break
-            
+
             candidate = json.loads(line)
             custom_id = candidate.get('custom_id')
-            
+
             # Extract candidate info
             info = extract_candidate_info(candidate)
             if not info:
                 continue
-            
+
+            # Get the INPUT PROMPT (what was asked to the LLM)
+            input_prompt = ""
+            for msg in candidate.get('body', {}).get('messages', []):
+                if msg.get('role') == 'user':
+                    input_prompt = msg.get('content', '')
+                    break
+
             # Get LLM evaluation if available
             llm_eval = llm_results.get(custom_id, {})
 
-            # Extract LLM evaluation fields safely
+            # Extract LLM evaluation fields safely with DETAILED REASONING
             if llm_eval and isinstance(llm_eval, dict):
                 llm_rec = llm_eval.get('recommendation', 'N/A')
                 llm_reason = llm_eval.get('reasoning', 'N/A')
@@ -121,17 +128,26 @@ def convert_to_label_studio(batch_file, results_file, output_file, limit=None):
                     is_swe = analysis.get('is_software_engineer', {})
 
                     llm_edu = edu_pedigree.get('rating', 'N/A') if isinstance(edu_pedigree, dict) else 'N/A'
+                    llm_edu_reasoning = edu_pedigree.get('reasoning', 'N/A') if isinstance(edu_pedigree, dict) else 'N/A'
+
                     llm_company = company_pedigree.get('rating', 'N/A') if isinstance(company_pedigree, dict) else 'N/A'
+                    llm_company_reasoning = company_pedigree.get('reasoning', 'N/A') if isinstance(company_pedigree, dict) else 'N/A'
+
                     llm_traj = trajectory.get('rating', 'N/A') if isinstance(trajectory, dict) else 'N/A'
+                    llm_traj_reasoning = trajectory.get('reasoning', 'N/A') if isinstance(trajectory, dict) else 'N/A'
+
                     llm_swe = is_swe.get('value', False) if isinstance(is_swe, dict) else False
+                    llm_swe_reasoning = is_swe.get('reasoning', 'N/A') if isinstance(is_swe, dict) else 'N/A'
                 else:
                     llm_edu = llm_company = llm_traj = 'N/A'
+                    llm_edu_reasoning = llm_company_reasoning = llm_traj_reasoning = llm_swe_reasoning = 'N/A'
                     llm_swe = False
             else:
                 llm_rec = llm_reason = llm_edu = llm_company = llm_traj = 'N/A'
+                llm_edu_reasoning = llm_company_reasoning = llm_traj_reasoning = llm_swe_reasoning = 'N/A'
                 llm_swe = False
 
-            # Create Label Studio task
+            # Create Label Studio task with ALL data
             task = {
                 'data': {
                     'custom_id': custom_id,
@@ -140,15 +156,20 @@ def convert_to_label_studio(batch_file, results_file, output_file, limit=None):
                     'location': info['location'],
                     'work_history': info['work_history'][:5],  # Top 5 positions
                     'education': info['education'],
+                    'input_prompt': input_prompt,  # THE QUESTIONS ASKED
                     'llm_recommendation': llm_rec,
                     'llm_reasoning': llm_reason,
                     'llm_educational_pedigree': llm_edu,
+                    'llm_educational_pedigree_reasoning': llm_edu_reasoning,  # DETAILED REASONING
                     'llm_company_pedigree': llm_company,
+                    'llm_company_pedigree_reasoning': llm_company_reasoning,  # DETAILED REASONING
                     'llm_trajectory': llm_traj,
+                    'llm_trajectory_reasoning': llm_traj_reasoning,  # DETAILED REASONING
                     'llm_is_swe': llm_swe,
+                    'llm_is_swe_reasoning': llm_swe_reasoning,  # DETAILED REASONING
                 }
             }
-            
+
             tasks.append(task)
     
     # Write output

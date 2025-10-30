@@ -5,9 +5,12 @@ Simple HTTP server to view benchmark results
 
 import json
 import os
+import glob
+import requests
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
+from datetime import datetime
 
 class ResultsHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
@@ -16,6 +19,26 @@ class ResultsHandler(SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         super().end_headers()
+
+    def send_json(self, data):
+        """Helper to send JSON response."""
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
+
+    def query_prometheus(self, query):
+        """Query Prometheus for metrics."""
+        try:
+            prom_url = "http://localhost:4022/api/v1/query"
+            resp = requests.get(prom_url, params={"query": query}, timeout=2)
+            data = resp.json()
+            if data.get("status") == "success" and data.get("data", {}).get("result"):
+                return float(data["data"]["result"][0]["value"][1])
+            return None
+        except Exception as e:
+            print(f"Prometheus query error: {e}")
+            return None
 
     def do_POST(self):
         """Handle POST requests"""
@@ -112,7 +135,6 @@ class ResultsHandler(SimpleHTTPRequestHandler):
         # API endpoint to discover available datasets and results
         elif parsed_path.path == '/api/discover':
             try:
-                import glob
                 import re
 
                 # Find all batch input files (exclude result files)
@@ -199,6 +221,105 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                     self.send_header('Content-Type', 'application/json')
                     self.end_headers()
                     self.wfile.write(json.dumps({'error': 'Metadata not found. Run migrate_results.py first.'}).encode())
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+
+        # NEW: API endpoint to get benchmark results
+        elif parsed_path.path == '/api/benchmarks':
+            try:
+                # Find all benchmark JSON files
+                benchmark_files = glob.glob('benchmark_results/*.json')
+                benchmark_logs = glob.glob('*benchmark*.log')
+
+                benchmarks = []
+                for bf in benchmark_files:
+                    try:
+                        with open(bf, 'r') as f:
+                            data = json.load(f)
+                            mtime = os.path.getmtime(bf)
+                            benchmarks.append({
+                                'file': bf,
+                                'timestamp': mtime,
+                                'timestamp_human': datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                                'data': data
+                            })
+                    except:
+                        pass
+
+                # Sort by timestamp (newest first)
+                benchmarks.sort(key=lambda x: x['timestamp'], reverse=True)
+
+                self.send_json(benchmarks)
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+
+        # NEW: API endpoint to get real-time GPU metrics (using pynvml directly)
+        elif parsed_path.path == '/api/metrics/gpu':
+            try:
+                import pynvml
+                pynvml.nvmlInit()
+                handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+
+                # Get GPU metrics
+                temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+                mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0  # mW to W
+
+                pynvml.nvmlShutdown()
+
+                metrics = {
+                    'temperature': temp,
+                    'memory_percent': (mem_info.used / mem_info.total) * 100,
+                    'memory_used_gb': mem_info.used / (1024**3),
+                    'memory_total_gb': mem_info.total / (1024**3),
+                    'utilization': util.gpu,
+                    'power_watts': power,
+                    'timestamp': datetime.now().isoformat()
+                }
+                self.send_json(metrics)
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+
+        # NEW: API endpoint to get vLLM metrics (query vLLM server directly)
+        elif parsed_path.path == '/api/metrics/vllm':
+            try:
+                # Query vLLM metrics endpoint
+                vllm_resp = requests.get('http://localhost:4080/metrics', timeout=2)
+                vllm_metrics_text = vllm_resp.text
+
+                # Parse Prometheus format metrics
+                def parse_metric(text, metric_name):
+                    for line in text.split('\n'):
+                        if line.startswith(metric_name) and not line.startswith('#'):
+                            return float(line.split()[-1])
+                    return None
+
+                # Extract metrics
+                cache_queries = parse_metric(vllm_metrics_text, 'vllm:prefix_cache_queries_total')
+                cache_hits = parse_metric(vllm_metrics_text, 'vllm:prefix_cache_hits_total')
+                cache_hit_rate = (cache_hits / cache_queries * 100) if cache_queries and cache_hits else None
+
+                metrics = {
+                    'active_requests': parse_metric(vllm_metrics_text, 'vllm:num_requests_running'),
+                    'queued_requests': parse_metric(vllm_metrics_text, 'vllm:num_requests_waiting'),
+                    'kv_cache_usage': parse_metric(vllm_metrics_text, 'vllm:kv_cache_usage_perc'),
+                    'generation_tokens_total': parse_metric(vllm_metrics_text, 'vllm:generation_tokens_total'),
+                    'prefix_cache_hit_rate': cache_hit_rate,
+                    'prefix_cache_queries': cache_queries,
+                    'prefix_cache_hits': cache_hits,
+                    'timestamp': datetime.now().isoformat()
+                }
+                self.send_json(metrics)
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')

@@ -59,7 +59,71 @@
       font-weight: 600;
       margin-bottom: 10px;
     }
+    .llm-detail {
+      margin: 8px 0;
+      font-size: 14px;
+    }
+    .rubric-panel {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .rubric-title {
+      color: #856404;
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 15px;
+    }
+    .rubric-section {
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #ffc107;
+    }
+    .rubric-section:last-child {
+      border-bottom: none;
+    }
+    .rubric-header {
+      font-size: 13px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 5px;
+    }
+    .rubric-text {
+      font-size: 11px;
+      color: #555;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
   </Style>
+
+  <!-- Evaluation Rubrics Panel -->
+  <View className="rubric-panel">
+    <Header value="📋 Evaluation Rubrics (Editable)" className="rubric-title"/>
+
+    <View className="rubric-section">
+      <Header value="🎓 Educational Pedigree" className="rubric-header"/>
+      <TextArea name="rubric_edu" toName="name" value="• Bachelor's degree is strongest signal&#10;• Selectivity/prestige of undergrad weighted most&#10;• Top-tier CS/Eng bachelor's = Great&#10;• Mid-tier bachelor's = Average/Weak&#10;• Graduate degrees add value only if top school&#10;• Top-tier MS in CS/Eng = Good/Great&#10;• Mid-tier MS not strong signal&#10;• PhD in CS/Eng = Good, top-tier = Great/Excellent&#10;• Technical majors favored" className="rubric-text" rows="9" editable="true"/>
+    </View>
+
+    <View className="rubric-section">
+      <Header value="🏢 Company Pedigree" className="rubric-header"/>
+      <TextArea name="rubric_company" toName="name" value="• Brand and caliber of employers&#10;• Tier-1 tech companies&#10;• High-growth startups&#10;• Selective teams&#10;• Notable acquisitions" className="rubric-text" rows="5" editable="true"/>
+    </View>
+
+    <View className="rubric-section">
+      <Header value="📈 Trajectory" className="rubric-header"/>
+      <TextArea name="rubric_trajectory" toName="name" value="• Speed/consistency of promotions vs years&#10;• >8 years → should be ≥ Senior SWE&#10;• >12 years → should be ≥ Staff SWE&#10;• Faster = stronger, slower = weaker" className="rubric-text" rows="4" editable="true"/>
+    </View>
+
+    <View className="rubric-section">
+      <Header value="💻 Is Software Engineer" className="rubric-header"/>
+      <TextArea name="rubric_swe" toName="name" value="• Confirm titles are SWE&#10;• Confirm responsibilities are SWE" className="rubric-text" rows="2" editable="true"/>
+    </View>
+  </View>
 
   <!-- Candidate Profile Display -->
   <View className="profile-header">
@@ -80,29 +144,45 @@
     <List name="work_history" value="$work_history" className="item"/>
   </View>
 
+  <!-- Input Prompt (What Questions Were Asked) -->
+  <View className="section">
+    <Header value="📋 Evaluation Questions (Sent to LLM)" className="section-title"/>
+    <Text name="input_prompt" value="$input_prompt" style="white-space: pre-wrap; font-size: 12px; color: #555;"/>
+  </View>
+
   <!-- LLM Evaluation -->
   <View className="llm-section">
-    <Header value="🤖 LLM Evaluation" className="llm-title"/>
+    <Header value="🤖 LLM Evaluation (Qwen 3 4B)" className="llm-title"/>
     <View>
       <Text name="llm_rec" value="$llm_recommendation" className="llm-recommendation"/>
     </View>
-    <Text name="llm_reasoning" value="$llm_reasoning"/>
-    <br/>
-    <Text name="llm_edu" value="Educational Pedigree: $llm_educational_pedigree"/>
-    <br/>
-    <Text name="llm_company" value="Company Pedigree: $llm_company_pedigree"/>
-    <br/>
-    <Text name="llm_traj" value="Trajectory: $llm_trajectory"/>
-    <br/>
-    <Text name="llm_swe" value="Is Software Engineer: $llm_is_swe"/>
+    <Text name="llm_reasoning" value="$llm_reasoning" style="margin-bottom: 15px;"/>
+
+    <View className="llm-detail">
+      <Text name="llm_edu" value="Educational Pedigree: $llm_educational_pedigree" style="font-weight: 600;"/>
+      <Text name="llm_edu_reasoning" value="$llm_educational_pedigree_reasoning" style="margin-left: 20px; font-size: 13px; color: #555;"/>
+    </View>
+
+    <View className="llm-detail">
+      <Text name="llm_company" value="Company Pedigree: $llm_company_pedigree" style="font-weight: 600;"/>
+      <Text name="llm_company_reasoning" value="$llm_company_pedigree_reasoning" style="margin-left: 20px; font-size: 13px; color: #555;"/>
+    </View>
+
+    <View className="llm-detail">
+      <Text name="llm_traj" value="Trajectory: $llm_trajectory" style="font-weight: 600;"/>
+      <Text name="llm_traj_reasoning" value="$llm_trajectory_reasoning" style="margin-left: 20px; font-size: 13px; color: #555;"/>
+    </View>
+
+    <View className="llm-detail">
+      <Text name="llm_swe" value="Is Software Engineer: $llm_is_swe" style="font-weight: 600;"/>
+      <Text name="llm_swe_reasoning" value="$llm_is_swe_reasoning" style="margin-left: 20px; font-size: 13px; color: #555;"/>
+    </View>
   </View>
 
   <Header value="⭐ Your Evaluation"/>
 
-  <!-- Overall Rating -->
-  <Rating name="overall_rating" toName="name" maxRating="10" icon="star" size="large" required="true"/>
-
   <!-- Recommendation -->
+  <Header value="Overall Recommendation"/>
   <Choices name="recommendation" toName="name" choice="single" required="true">
     <Choice value="Strong Yes" style="background-color: #28a745"/>
     <Choice value="Yes" style="background-color: #90ee90"/>
