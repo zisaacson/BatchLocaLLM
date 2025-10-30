@@ -227,6 +227,22 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': str(e)}).encode())
 
+        # API endpoint to get current benchmark status
+        elif parsed_path.path == '/api/benchmark-status':
+            try:
+                status_file = Path('benchmark_status.json')
+                if status_file.exists():
+                    with open(status_file, 'r') as f:
+                        status = json.load(f)
+                    self.send_json(status)
+                else:
+                    self.send_json({'status': 'idle'})
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+
         # NEW: API endpoint to get benchmark results
         elif parsed_path.path == '/api/benchmarks':
             try:

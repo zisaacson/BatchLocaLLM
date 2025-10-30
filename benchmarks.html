@@ -448,6 +448,37 @@
             </div>
         </div>
 
+        <!-- Current Job Status -->
+        <div id="current-job" style="display: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; padding: 20px; margin-bottom: 20px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3 style="margin: 0 0 15px 0; color: white; display: flex; align-items: center; gap: 10px;">
+                <span class="spinner" style="border-color: rgba(255,255,255,0.3); border-top-color: white; width: 20px; height: 20px;"></span>
+                🚀 Current Benchmark Running
+            </h3>
+            <div style="background: rgba(255,255,255,0.1); border-radius: 6px; padding: 15px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
+                    <div>
+                        <div style="font-size: 12px; opacity: 0.8; margin-bottom: 5px;">Test Name</div>
+                        <div style="font-weight: 600; font-size: 16px;" id="job-test-name">--</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; opacity: 0.8; margin-bottom: 5px;">Model</div>
+                        <div style="font-weight: 600; font-size: 16px;" id="job-model">--</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; opacity: 0.8; margin-bottom: 5px;">Mode</div>
+                        <div style="font-weight: 600; font-size: 16px;" id="job-mode">--</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; opacity: 0.8; margin-bottom: 5px;">Progress</div>
+                        <div style="font-weight: 600; font-size: 16px;" id="job-progress">--</div>
+                    </div>
+                </div>
+                <div style="background: rgba(0,0,0,0.2); border-radius: 10px; height: 20px; overflow: hidden;">
+                    <div id="job-progress-bar" style="background: linear-gradient(90deg, #48bb78, #38a169); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
+                </div>
+            </div>
+        </div>
+
         <div class="run-selector">
             <h3>📊 Benchmark Runs</h3>
             <div class="run-list" id="run-list">
@@ -485,6 +516,33 @@
         let comparisonMode = true; // Enable multi-select by default
 
         // Update metrics every 5 seconds
+        async function updateCurrentJob() {
+            try {
+                const status = await fetch('/api/benchmark-status').then(r => r.json());
+
+                if (status.status === 'idle' || !status.test_name) {
+                    document.getElementById('current-job').style.display = 'none';
+                } else {
+                    document.getElementById('current-job').style.display = 'block';
+                    document.getElementById('job-test-name').textContent = status.test_name || '--';
+
+                    const modelShort = status.model ? status.model.split('/').pop() : '--';
+                    document.getElementById('job-model').textContent = modelShort;
+
+                    const modeBadge = status.mode === 'offline_batch' ? '📦 Offline' :
+                                     status.mode === 'server' ? '🌐 Server' : status.mode;
+                    document.getElementById('job-mode').textContent = modeBadge;
+
+                    document.getElementById('job-progress').textContent =
+                        `${status.progress || 0} / ${status.total || 0} (${status.percent || 0}%)`;
+
+                    document.getElementById('job-progress-bar').style.width = `${status.percent || 0}%`;
+                }
+            } catch (error) {
+                console.error('Error updating job status:', error);
+            }
+        }
+
         async function updateMetrics() {
             try {
                 const [gpu, vllm] = await Promise.all([
@@ -806,6 +864,7 @@
 
         // Initial load
         updateMetrics();
+        updateCurrentJob();
         loadBenchmarkRuns();
 
         // Set comparison mode active by default
@@ -814,6 +873,7 @@
 
         // Auto-refresh
         setInterval(updateMetrics, 5000);
+        setInterval(updateCurrentJob, 5000);
         setInterval(loadBenchmarkRuns, 30000);
     </script>
 </body>

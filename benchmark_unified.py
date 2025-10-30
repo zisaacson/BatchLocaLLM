@@ -15,6 +15,34 @@ from datetime import datetime
 from typing import List, Dict, Any
 from vllm import LLM, SamplingParams
 import requests
+import os
+import atexit
+
+# ============================================================================
+# STATUS TRACKING
+# ============================================================================
+
+STATUS_FILE = Path("benchmark_status.json")
+
+def update_status(test_name: str, model: str, mode: str, progress: int, total: int, status: str = "running"):
+    """Update the current benchmark status."""
+    status_data = {
+        "test_name": test_name,
+        "model": model,
+        "mode": mode,
+        "progress": progress,
+        "total": total,
+        "status": status,
+        "timestamp": datetime.now().isoformat(),
+        "percent": round((progress / total * 100), 1) if total > 0 else 0
+    }
+    with open(STATUS_FILE, 'w') as f:
+        json.dump(status_data, f, indent=2)
+
+def clear_status():
+    """Clear the status file when benchmark completes."""
+    if STATUS_FILE.exists():
+        STATUS_FILE.unlink()
 
 # ============================================================================
 # UNIFIED BENCHMARK RESULT FORMAT
@@ -189,9 +217,15 @@ def run_offline_batch(batch_data: List[Dict], model: str, test_name: str) -> Ben
         'enforce_eager': True
     }
     
-    # Prepare prompts
-    prompts = [req['body']['messages'] for req in batch_data]
-    
+    # Prepare prompts - extract content from messages
+    prompts = []
+    for req in batch_data:
+        messages = req['body']['messages']
+        # For now, just use the user message content
+        # vLLM will apply chat template if needed
+        prompt = messages[0]['content'] if messages else ""
+        prompts.append(prompt)
+
     sampling_params = SamplingParams(
         temperature=0.7,
         top_p=0.9,
@@ -200,9 +234,11 @@ def run_offline_batch(batch_data: List[Dict], model: str, test_name: str) -> Ben
     
     # Run batch inference
     print(f"Processing {len(prompts)} requests in batch...")
+    update_status(test_name, model, 'offline_batch', 0, len(prompts), "processing")
     inference_start = time.time()
-    
+
     outputs = llm.generate(prompts, sampling_params, use_tqdm=True)
+    update_status(test_name, model, 'offline_batch', len(prompts), len(prompts), "complete")
     
     result.inference_time_seconds = time.time() - inference_start
     result.total_time_seconds = result.model_load_time_seconds + result.inference_time_seconds
@@ -260,11 +296,15 @@ def run_server_mode(batch_data: List[Dict], model: str, server_url: str, test_na
     
     # Send requests
     print(f"Processing {len(batch_data)} requests via server...")
-    
+
     from tqdm import tqdm
     inference_start = time.time()
-    
-    for req in tqdm(batch_data, desc="Sending requests"):
+
+    for i, req in enumerate(tqdm(batch_data, desc="Sending requests")):
+        # Update status every 10 requests
+        if i % 10 == 0:
+            update_status(test_name, model, 'server', i, len(batch_data))
+
         req_start = time.time()
         try:
             response = requests.post(
@@ -364,5 +404,10 @@ def main():
         print(f"Speedup: {speedup:.2f}x ({'Offline' if speedup > 1 else 'Server'} is faster)")
 
 if __name__ == '__main__':
-    main()
+    # Register cleanup on exit
+    atexit.register(clear_status)
+    try:
+        main()
+    finally:
+        clear_status()
 
