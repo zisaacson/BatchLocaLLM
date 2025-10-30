@@ -1,0 +1,25 @@
+{
+  "test_id": "batch-job-batch_a8921ba556f541e5",
+  "timestamp": "2025-10-28T16:41:14.996145Z",
+  "platform": "vllm-native",
+  "model": "google/gemma-3-4b-it",
+  "config": {
+    "max_model_len": 4096,
+    "gpu_memory_utilization": 0.9,
+    "enable_prefix_caching": true,
+    "chunked_prefill_enabled": true
+  },
+  "test": {
+    "num_requests": 10,
+    "input_file": "data/batches/input/batch_a8921ba556f541e5.jsonl",
+    "output_file": "data/batches/output/batch_a8921ba556f541e5_results.jsonl"
+  },
+  "results": {
+    "success_count": 10,
+    "failure_count": 0,
+    "total_tokens": 11452,
+    "throughput_tokens_per_sec": 1711.0,
+    "throughput_requests_per_sec": 1.49
+  },
+  "status": "completed"
+}

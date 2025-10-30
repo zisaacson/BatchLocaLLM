@@ -1,0 +1,26 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://aristotle-prometheus:4022
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: "5s"
+      queryTimeout: "60s"
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://aristotle-loki:4021
+    editable: true
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - datasourceUid: Prometheus
+          matcherRegex: "request_id=(\\w+)"
+          name: RequestID
+          url: "/explore?left=%5B%22now-1h%22,%22now%22,%22Prometheus%22,%7B%7D%5D"
+

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Benchmark Results Viewer</title>
+    <link rel="stylesheet" href="static/css/shared.css">
+    <style>
+        .stats {
+            background: var(--surface-white);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+            box-shadow: var(--shadow-md);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--spacing-md);
+            margin-top: var(--spacing-md);
+        }
+
+        .stat-card {
+            background: var(--surface-light);
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            color: var(--text-primary);
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .controls {
+            background: var(--surface-white);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+            box-shadow: var(--shadow-md);
+        }
+
+        .control-group {
+            margin-bottom: var(--spacing-md);
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        select, input {
+            width: 100%;
+        }
+
+        .results {
+            display: grid;
+            gap: var(--spacing-lg);
+        }
+
+        .result-card {
+            background: var(--surface-white);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            box-shadow: var(--shadow-md);
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-md);
+            padding-bottom: var(--spacing-md);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .result-id {
+            color: var(--text-muted);
+            font-size: 12px;
+            font-family: var(--font-mono);
+        }
+
+        .result-tokens {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .result-content {
+            background: var(--surface-light);
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            white-space: pre-wrap;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .overall-reasoning {
+            background: var(--surface-light);
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            border-left: 4px solid var(--border-hover);
+            margin-bottom: var(--spacing-md);
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔬 Benchmark Results Viewer</h1>
+        <p class="subtitle">Compare model outputs side-by-side</p>
+        
+        <div class="stats" id="stats">
+            <h3>📊 Statistics</h3>
+            <div class="stats-grid" id="statsGrid">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="modelSelect">Select Model:</label>
+                <select id="modelSelect">
+                    <option value="llama32_3b_5k_results.jsonl">Llama 3.2 3B (13 min, 6,696 tok/s)</option>
+                    <option value="benchmarks/raw/vllm-native-gemma3-4b-5000-2025-10-28.jsonl">Gemma 3 4B (37 min, 2,511 tok/s)</option>
+                    <option value="qwen3_4b_5k_results.jsonl">Qwen 3 4B (in progress)</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="searchInput">Search by ID or content:</label>
+                <input type="text" id="searchInput" placeholder="Type to search...">
+            </div>
+            
+            <div class="control-group">
+                <label>Results per page:</label>
+                <select id="perPageSelect">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                </select>
+            </div>
+        </div>
+        
+        <div id="error" style="display: none;" class="error"></div>
+        
+        <div class="results" id="results">
+            <div class="loading">Select a model to view results</div>
+        </div>
+        
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <script src="static/js/parsers.js"></script>
+    <script>
+        let allResults = [];
+        let filteredResults = [];
+        let currentPage = 1;
+        let perPage = 10;
+        
+        const modelSelect = document.getElementById('modelSelect');
+        const searchInput = document.getElementById('searchInput');
+        const perPageSelect = document.getElementById('perPageSelect');
+        const resultsDiv = document.getElementById('results');
+        const paginationDiv = document.getElementById('pagination');
+        const statsGrid = document.getElementById('statsGrid');
+        const errorDiv = document.getElementById('error');
+        
+        modelSelect.addEventListener('change', loadResults);
+        searchInput.addEventListener('input', filterResults);
+        perPageSelect.addEventListener('change', () => {
+            perPage = parseInt(perPageSelect.value);
+            currentPage = 1;
+            renderResults();
+        });
+        
+        async function loadResults() {
+            const file = modelSelect.value;
+            resultsDiv.innerHTML = '<div class="loading">Loading results...</div>';
+            errorDiv.style.display = 'none';
+
+            try {
+                // Try to load via API first
+                const response = await fetch(`/api/results?model=${encodeURIComponent(file)}`);
+
+                if (response.ok) {
+                    allResults = await response.json();
+                } else {
+                    // Fallback: try direct file access
+                    const fileResponse = await fetch(file);
+                    if (!fileResponse.ok) throw new Error(`Failed to load ${file}`);
+
+                    const text = await fileResponse.text();
+                    const lines = text.trim().split('\n').filter(line => line.trim());
+                    allResults = lines.map(line => JSON.parse(line));
+                }
+
+                filteredResults = allResults;
+                currentPage = 1;
+
+                updateStats();
+                renderResults();
+            } catch (error) {
+                errorDiv.textContent = `Error loading results: ${error.message}. Try running: python3 serve_results.py`;
+                errorDiv.style.display = 'block';
+                resultsDiv.innerHTML = '';
+                console.error('Load error:', error);
+            }
+        }
+        
+        function updateStats() {
+            const totalPromptTokens = allResults.reduce((sum, r) => sum + (r.response?.body?.usage?.prompt_tokens || 0), 0);
+            const totalCompletionTokens = allResults.reduce((sum, r) => sum + (r.response?.body?.usage?.completion_tokens || 0), 0);
+            const avgPrompt = Math.round(totalPromptTokens / allResults.length);
+            const avgCompletion = Math.round(totalCompletionTokens / allResults.length);
+            
+            statsGrid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">Total Results</div>
+                    <div class="stat-value">${allResults.length.toLocaleString()}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Avg Prompt Tokens</div>
+                    <div class="stat-value">${avgPrompt.toLocaleString()}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Avg Completion Tokens</div>
+                    <div class="stat-value">${avgCompletion.toLocaleString()}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Tokens</div>
+                    <div class="stat-value">${(totalPromptTokens + totalCompletionTokens).toLocaleString()}</div>
+                </div>
+            `;
+        }
+        
+        function filterResults() {
+            const query = searchInput.value.toLowerCase();
+            if (!query) {
+                filteredResults = allResults;
+            } else {
+                filteredResults = allResults.filter(r => {
+                    const content = r.response?.body?.choices?.[0]?.message?.content || '';
+                    const id = r.custom_id || '';
+                    return content.toLowerCase().includes(query) || id.toLowerCase().includes(query);
+                });
+            }
+            currentPage = 1;
+            renderResults();
+        }
+        
+        function renderResults() {
+            const start = (currentPage - 1) * perPage;
+            const end = start + perPage;
+            const pageResults = filteredResults.slice(start, end);
+            
+            if (pageResults.length === 0) {
+                resultsDiv.innerHTML = '<div class="loading">No results found</div>';
+                paginationDiv.innerHTML = '';
+                return;
+            }
+            
+            resultsDiv.innerHTML = pageResults.map((result, idx) => {
+                const content = result.response?.body?.choices?.[0]?.message?.content || 'No content';
+                const usage = result.response?.body?.usage || {};
+                const globalIdx = start + idx + 1;
+
+                // Parse evaluation from response
+                const evaluation = parseEvaluation(result);
+                const recommendation = evaluation?.recommendation || 'N/A';
+                const reasoning = evaluation?.reasoning || '';
+                const recClass = getRecommendationClass(recommendation);
+                const candidateName = extractCandidateName(result);
+
+                return `
+                    <div class="result-card">
+                        <div class="result-header">
+                            <div>
+                                <div style="font-size: 16px; font-weight: bold; color: var(--text-primary); margin-bottom: 4px;">
+                                    ${candidateName}
+                                </div>
+                                <div class="result-id">Result #${globalIdx} - ID: ${result.custom_id}</div>
+                            </div>
+                            <div class="result-tokens">
+                                📝 ${usage.prompt_tokens || 0} → 💬 ${usage.completion_tokens || 0} (${usage.total_tokens || 0} total)
+                            </div>
+                        </div>
+                        <div style="margin-bottom: var(--spacing-md);">
+                            <span class="badge ${recClass}">${recommendation}</span>
+                        </div>
+                        ${reasoning ? `<div class="overall-reasoning"><strong>Overall:</strong> ${escapeHtml(reasoning)}</div>` : ''}
+                        ${formatCriteriaSection(evaluation)}
+                    </div>
+                `;
+            }).join('');
+            
+            renderPagination();
+        }
+        
+        function renderPagination() {
+            const totalPages = Math.ceil(filteredResults.length / perPage);
+            
+            if (totalPages <= 1) {
+                paginationDiv.innerHTML = '';
+                return;
+            }
+            
+            let buttons = '';
+            
+            buttons += `<button ${currentPage === 1 ? 'disabled' : ''} onclick="goToPage(1)">First</button>`;
+            buttons += `<button ${currentPage === 1 ? 'disabled' : ''} onclick="goToPage(${currentPage - 1})">Previous</button>`;
+            buttons += `<span style="padding: 8px 16px; color: #8b949e;">Page ${currentPage} of ${totalPages}</span>`;
+            buttons += `<button ${currentPage === totalPages ? 'disabled' : ''} onclick="goToPage(${currentPage + 1})">Next</button>`;
+            buttons += `<button ${currentPage === totalPages ? 'disabled' : ''} onclick="goToPage(${totalPages})">Last</button>`;
+            
+            paginationDiv.innerHTML = buttons;
+        }
+        
+        function goToPage(page) {
+            currentPage = page;
+            renderResults();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // escapeHtml is now in parsers.js
+    </script>
+</body>
+</html>
+

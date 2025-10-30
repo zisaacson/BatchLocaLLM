@@ -1,0 +1,30 @@
+{
+  "test_id": "vllm-native-gemma3-4b-5000-2025-10-28",
+  "timestamp": "2025-10-28T08:40:32Z",
+  "platform": "vllm-native",
+  "model": "google/gemma-3-4b-it",
+  "config": {
+    "max_model_len": 4096,
+    "gpu_memory_utilization": 0.9,
+    "enable_prefix_caching": true,
+    "chunked_prefill_enabled": true
+  },
+  "test": {
+    "num_requests": 5000,
+    "input_file": "batch_5k.jsonl",
+    "output_file": "benchmarks/raw/vllm-native-gemma3-4b-5000-2025-10-28.jsonl"
+  },
+  "results": {
+    "success_count": 5000,
+    "failure_count": 0,
+    "model_load_time_seconds": 26.083271503448486,
+    "inference_time_seconds": 2183.026051044464,
+    "total_time_seconds": 2209.1093225479126,
+    "prompt_tokens": 3942154,
+    "completion_tokens": 1540218,
+    "total_tokens": 5482372,
+    "throughput_tokens_per_sec": 2511,
+    "throughput_requests_per_sec": 2.29
+  },
+  "status": "completed"
+}

@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candidate Comparison Table</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+            color: #2c3e50;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-weight: 700;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .controls {
+            background: white;
+            border: 1px solid #e1e4e8;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .table-container {
+            overflow-x: auto;
+            background: white;
+            border: 1px solid #e1e4e8;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 14px 12px;
+            text-align: left;
+            border-bottom: none;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 16px 12px;
+            border-bottom: 1px solid #e1e4e8;
+            vertical-align: top;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .candidate-name {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .candidate-name:hover {
+            color: #667eea;
+        }
+
+        .expand-icon {
+            font-size: 12px;
+            color: #6a737d;
+            transition: transform 0.2s;
+        }
+
+        .expand-icon.expanded {
+            transform: rotate(90deg);
+        }
+
+        .candidate-details {
+            display: none;
+            padding: 15px;
+            background: #f8f9fa;
+            border-left: 3px solid #667eea;
+            margin: 10px 0;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .candidate-details.visible {
+            display: block;
+        }
+
+        .candidate-details h4 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+            font-size: 14px;
+        }
+
+        .candidate-details .section {
+            margin-bottom: 15px;
+        }
+
+        .candidate-details .section-title {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .candidate-details ul {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+
+        .candidate-details li {
+            margin: 3px 0;
+            color: #586069;
+        }
+
+        .model-gemma {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            border-left: 4px solid #2196f3;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .model-llama {
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            border-left: 4px solid #4caf50;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .model-qwen {
+            background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+            border-left: 4px solid #ff9800;
+            padding: 12px;
+            border-radius: 8px;
+        }
+        
+        .recommendation {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .rec-strong-yes {
+            background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+            color: white;
+        }
+
+        .rec-yes {
+            background: linear-gradient(135deg, #2196f3 0%, #42a5f5 100%);
+            color: white;
+        }
+
+        .rec-maybe {
+            background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%);
+            color: white;
+        }
+
+        .rec-no {
+            background: linear-gradient(135deg, #f44336 0%, #ef5350 100%);
+            color: white;
+        }
+
+        .rating-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-right: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .rating-great {
+            background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+            color: white;
+        }
+
+        .rating-good {
+            background: linear-gradient(135deg, #2196f3 0%, #42a5f5 100%);
+            color: white;
+        }
+
+        .rating-average {
+            background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%);
+            color: white;
+        }
+
+        .rating-weak {
+            background: linear-gradient(135deg, #f44336 0%, #ef5350 100%);
+            color: white;
+        }
+
+        .rating-none {
+            background: linear-gradient(135deg, #9e9e9e 0%, #bdbdbd 100%);
+            color: white;
+        }
+
+        .criteria-section {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e1e4e8;
+        }
+
+        .criteria-item {
+            margin-bottom: 8px;
+            font-size: 11px;
+        }
+
+        .criteria-label {
+            color: #586069;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        .criteria-reasoning {
+            color: #6a737d;
+            font-size: 10px;
+            line-height: 1.5;
+            margin-top: 3px;
+            padding-left: 4px;
+        }
+
+        .gold-star-btn {
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            border: 2px solid #f0c000;
+            color: #333;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .gold-star-btn:hover {
+            background: linear-gradient(135deg, #ffed4e 0%, #ffd700 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .gold-star-btn:disabled {
+            background: #e0e0e0;
+            border-color: #bdbdbd;
+            color: #757575;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .gold-star-btn.starred {
+            background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+            border-color: #388e3c;
+            color: white;
+        }
+
+        tr.starred {
+            background: #f1f8f4 !important;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6a737d;
+        }
+
+        .error {
+            background: linear-gradient(135deg, #f44336 0%, #ef5350 100%);
+            color: white;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 24px;
+        }
+
+        button {
+            padding: 10px 18px;
+            background: white;
+            border: 1px solid #d1d5da;
+            border-radius: 8px;
+            color: #24292e;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        button:hover:not(:disabled) {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        select, input {
+            padding: 10px 14px;
+            background: white;
+            border: 1px solid #d1d5da;
+            border-radius: 8px;
+            color: #24292e;
+            font-size: 14px;
+            margin-right: 10px;
+            transition: border-color 0.2s ease;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Candidate Comparison Table</h1>
+        <p style="color: #6a737d; margin-bottom: 20px; font-size: 15px;">Compare model responses side-by-side with detailed evaluation criteria</p>
+
+        <div class="controls">
+            <label>Dataset: <span id="datasetName" style="color: #667eea; font-weight: 600;"></span></label>
+            <label style="margin-left: 20px;">Models: <span id="modelCount" style="color: #667eea; font-weight: 600;"></span></label>
+            <label style="margin-left: 20px;">Candidates: <span id="candidateCount" style="color: #667eea; font-weight: 600;"></span></label>
+            <div style="margin-top: 10px;">
+                <label>Show per page:</label>
+                <select id="perPageSelect">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+
+                <label style="margin-left: 20px;">
+                    <input type="checkbox" id="showDiffsOnly" style="width: auto; margin-right: 5px;">
+                    Show only different recommendations
+                </label>
+            </div>
+
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e1e4e8;">
+                <strong style="color: #2c3e50;">⭐ Gold-Star Export:</strong>
+                <button onclick="exportGoldStar('icl', 9)" style="margin-left: 10px; padding: 8px 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                    📥 Export ICL Examples (Quality ≥ 9)
+                </button>
+                <button onclick="exportGoldStar('finetuning', 8)" style="margin-left: 10px; padding: 8px 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                    📥 Export Fine-tuning Data (Quality ≥ 8)
+                </button>
+                <button onclick="exportGoldStar('raw', 1)" style="margin-left: 10px; padding: 8px 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                    📥 Export All Starred
+                </button>
+            </div>
+        </div>
+        
+        <div id="error" style="display: none;" class="error"></div>
+        <div id="loading" class="loading">Loading data...</div>
+        
+        <div id="tableContainer" style="display: none;" class="table-container">
+            <table id="resultsTable">
+                <thead id="tableHead"></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+        
+        <div class="pagination" id="pagination"></div>
+    </div>
+    
+    <script>
+        let allCandidates = [];
+        let filteredCandidates = [];
+        let modelData = {};
+        let currentPage = 1;
+        let perPage = 25;
+        let showDiffsOnly = false;
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const datasetName = urlParams.get('dataset') || 'batch_5k.jsonl';
+
+        const errorDiv = document.getElementById('error');
+        const loadingDiv = document.getElementById('loading');
+        const tableContainer = document.getElementById('tableContainer');
+        const tableHead = document.getElementById('tableHead');
+        const tableBody = document.getElementById('tableBody');
+        const paginationDiv = document.getElementById('pagination');
+        const perPageSelect = document.getElementById('perPageSelect');
+        const showDiffsCheckbox = document.getElementById('showDiffsOnly');
+
+        document.getElementById('datasetName').textContent = datasetName;
+
+        perPageSelect.addEventListener('change', () => {
+            perPage = parseInt(perPageSelect.value);
+            currentPage = 1;
+            renderTable();
+        });
+
+        showDiffsCheckbox.addEventListener('change', () => {
+            showDiffsOnly = showDiffsCheckbox.checked;
+            currentPage = 1;
+            applyFilters();
+            renderTable();
+        });
+        
+        async function init() {
+            try {
+                // Discover datasets and their results
+                const discoverResponse = await fetch('/api/discover');
+                if (!discoverResponse.ok) throw new Error('Failed to discover datasets');
+                
+                const datasets = await discoverResponse.json();
+                const datasetInfo = datasets[datasetName];
+                
+                if (!datasetInfo) {
+                    throw new Error(`Dataset ${datasetName} not found`);
+                }
+                
+                if (!datasetInfo.results || datasetInfo.results.length === 0) {
+                    throw new Error(`No results available for ${datasetName}`);
+                }
+                
+                // Load candidate data
+                const candidatesResponse = await fetch(`/api/candidates?dataset=${encodeURIComponent(datasetName)}`);
+                if (candidatesResponse.ok) {
+                    allCandidates = await candidatesResponse.json();
+                }
+                
+                // Load all model results
+                for (const resultInfo of datasetInfo.results) {
+                    const response = await fetch(`/api/results?model=${encodeURIComponent(resultInfo.file)}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        const modelName = extractModelName(resultInfo.file);
+                        modelData[modelName] = data;
+                    }
+                }
+                
+                document.getElementById('modelCount').textContent = Object.keys(modelData).length;
+                document.getElementById('candidateCount').textContent = allCandidates.length;
+
+                loadingDiv.style.display = 'none';
+                tableContainer.style.display = 'block';
+
+                applyFilters();
+                renderTable();
+                
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                errorDiv.textContent = `Error: ${error.message}`;
+                errorDiv.style.display = 'block';
+                console.error('Init error:', error);
+            }
+        }
+        
+        function extractModelName(filename) {
+            if (filename.includes('gemma3')) return 'Gemma 3 4B';
+            if (filename.includes('llama32_3b')) return 'Llama 3.2 3B';
+            if (filename.includes('llama32_1b')) return 'Llama 3.2 1B';
+            if (filename.includes('qwen3_4b')) return 'Qwen 3 4B';
+            if (filename.includes('qwen')) return 'Qwen 2.5-3B';
+            if (filename.includes('olmo')) return 'OLMo 2 7B';
+            return filename;
+        }
+        
+        function extractCandidateName(candidate) {
+            // Try to extract from user message
+            const messages = candidate.body?.messages || [];
+            const userMsg = messages.find(m => m.role === 'user');
+            if (userMsg && userMsg.content) {
+                // Look for **Candidate:** pattern first
+                let nameMatch = userMsg.content.match(/\*\*Candidate:\*\*\s*([^\n]+)/);
+                if (nameMatch) {
+                    const name = nameMatch[1].trim();
+                    // Also try to get current role for context
+                    const roleMatch = userMsg.content.match(/\*\*Current Role:\*\*\s*([^\n]+)/);
+                    if (roleMatch) {
+                        const role = roleMatch[1].trim();
+                        // Shorten role if too long
+                        const shortRole = role.length > 30 ? role.substring(0, 27) + '...' : role;
+                        return `${name} (${shortRole})`;
+                    }
+                    return name;
+                }
+                // Fallback to Name: pattern
+                nameMatch = userMsg.content.match(/Name:\s*([^\n]+)/i);
+                if (nameMatch) return nameMatch[1].trim();
+            }
+            return candidate.custom_id?.substring(0, 8) || 'Unknown';
+        }
+
+        function extractCandidateDetails(candidate) {
+            const messages = candidate.body?.messages || [];
+            const userMsg = messages.find(m => m.role === 'user');
+            if (!userMsg || !userMsg.content) return null;
+
+            const content = userMsg.content;
+            const details = {};
+
+            // Extract name
+            const nameMatch = content.match(/\*\*Candidate:\*\*\s*([^\n]+)/);
+            details.name = nameMatch ? nameMatch[1].trim() : 'Unknown';
+
+            // Extract current role
+            const roleMatch = content.match(/\*\*Current Role:\*\*\s*([^\n]+)/);
+            details.currentRole = roleMatch ? roleMatch[1].trim() : 'Not specified';
+
+            // Extract location
+            const locationMatch = content.match(/\*\*Location:\*\*\s*([^\n]+)/);
+            details.location = locationMatch ? locationMatch[1].trim() : 'Not specified';
+
+            // Extract work history
+            const workHistoryMatch = content.match(/\*\*Work History:\*\*\s*([\s\S]*?)(?=\n\*\*|$)/);
+            if (workHistoryMatch) {
+                const workText = workHistoryMatch[1].trim();
+                if (workText.includes('No work history')) {
+                    details.workHistory = [];
+                } else {
+                    details.workHistory = workText.split('\n')
+                        .filter(line => line.trim().startsWith('•'))
+                        .map(line => line.trim().substring(1).trim())
+                        .slice(0, 5); // Show first 5 roles
+                }
+            } else {
+                details.workHistory = [];
+            }
+
+            // Extract education
+            const educationMatch = content.match(/\*\*Education:\*\*\s*([\s\S]*?)(?=\n\*\*|$)/);
+            if (educationMatch) {
+                const eduText = educationMatch[1].trim();
+                if (eduText.includes('No education')) {
+                    details.education = [];
+                } else {
+                    details.education = eduText.split('\n')
+                        .filter(line => line.trim().startsWith('•'))
+                        .map(line => line.trim().substring(1).trim());
+                }
+            } else {
+                details.education = [];
+            }
+
+            return details;
+        }
+
+        function toggleCandidateDetails(customId) {
+            const detailsDiv = document.getElementById(`details-${customId}`);
+            const icon = document.getElementById(`icon-${customId}`);
+
+            if (detailsDiv.classList.contains('visible')) {
+                detailsDiv.classList.remove('visible');
+                icon.classList.remove('expanded');
+            } else {
+                detailsDiv.classList.add('visible');
+                icon.classList.add('expanded');
+            }
+        }
+        
+        function parseEvaluation(response) {
+            try {
+                const content = response.response?.body?.choices?.[0]?.message?.content || '';
+                // Try to extract JSON from markdown code block
+                const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const jsonStr = jsonMatch[1] || jsonMatch[0];
+                    return JSON.parse(jsonStr);
+                }
+            } catch (e) {
+                console.error('Failed to parse evaluation:', e);
+            }
+            return null;
+        }
+
+        function extractRecommendation(response) {
+            const evaluation = parseEvaluation(response);
+            return evaluation?.recommendation || 'N/A';
+        }
+        
+        function getRecommendationClass(rec) {
+            const lower = rec.toLowerCase();
+            if (lower.includes('strong yes')) return 'rec-strong-yes';
+            if (lower.includes('yes')) return 'rec-yes';
+            if (lower.includes('maybe') || lower.includes('neutral')) return 'rec-maybe';
+            if (lower.includes('no')) return 'rec-no';
+            return '';
+        }
+
+        function getRatingClass(rating) {
+            const normalized = (rating || '').toLowerCase();
+            if (normalized === 'great') return 'rating-great';
+            if (normalized === 'good') return 'rating-good';
+            if (normalized === 'average') return 'rating-average';
+            if (normalized === 'weak') return 'rating-weak';
+            if (normalized === 'none') return 'rating-none';
+            return 'rating-average';
+        }
+
+        function formatCriteriaSection(evaluation) {
+            if (!evaluation || !evaluation.analysis) return '';
+
+            const analysis = evaluation.analysis;
+            let html = '<div class="criteria-section">';
+
+            // Educational Pedigree
+            if (analysis.educational_pedigree) {
+                const ep = analysis.educational_pedigree;
+                html += `
+                    <div class="criteria-item">
+                        <span class="criteria-label">🎓 Education:</span>
+                        <span class="rating-badge ${getRatingClass(ep.rating)}">${ep.rating || 'N/A'}</span>
+                        ${ep.reasoning ? `<div class="criteria-reasoning">${escapeHtml(ep.reasoning)}</div>` : ''}
+                    </div>
+                `;
+            }
+
+            // Company Pedigree
+            if (analysis.company_pedigree) {
+                const cp = analysis.company_pedigree;
+                html += `
+                    <div class="criteria-item">
+                        <span class="criteria-label">🏢 Company:</span>
+                        <span class="rating-badge ${getRatingClass(cp.rating)}">${cp.rating || 'N/A'}</span>
+                        ${cp.reasoning ? `<div class="criteria-reasoning">${escapeHtml(cp.reasoning)}</div>` : ''}
+                    </div>
+                `;
+            }
+
+            // Trajectory
+            if (analysis.trajectory) {
+                const traj = analysis.trajectory;
+                html += `
+                    <div class="criteria-item">
+                        <span class="criteria-label">📈 Trajectory:</span>
+                        <span class="rating-badge ${getRatingClass(traj.rating)}">${traj.rating || 'N/A'}</span>
+                        ${traj.reasoning ? `<div class="criteria-reasoning">${escapeHtml(traj.reasoning)}</div>` : ''}
+                    </div>
+                `;
+            }
+
+            // Is Software Engineer
+            if (analysis.is_software_engineer) {
+                const swe = analysis.is_software_engineer;
+                const sweValue = swe.value ? 'Yes' : 'No';
+                const sweClass = swe.value ? 'rating-great' : 'rating-weak';
+                html += `
+                    <div class="criteria-item">
+                        <span class="criteria-label">💻 SWE:</span>
+                        <span class="rating-badge ${sweClass}">${sweValue}</span>
+                        ${swe.reasoning ? `<div class="criteria-reasoning">${escapeHtml(swe.reasoning)}</div>` : ''}
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+            return html;
+        }
+
+        function applyFilters() {
+            const modelNames = Object.keys(modelData);
+
+            if (showDiffsOnly) {
+                // Filter to only show candidates where models disagree
+                filteredCandidates = allCandidates.filter((candidate, idx) => {
+                    const recommendations = modelNames.map(modelName => {
+                        const result = modelData[modelName][idx];
+                        return result ? extractRecommendation(result) : null;
+                    }).filter(r => r !== null);
+
+                    // Check if all recommendations are the same
+                    const allSame = recommendations.length > 0 && recommendations.every(r => r === recommendations[0]);
+                    return !allSame && recommendations.length > 1;
+                });
+            } else {
+                filteredCandidates = allCandidates;
+            }
+        }
+
+        function renderTable() {
+            const start = (currentPage - 1) * perPage;
+            const end = start + perPage;
+            const pageCandidates = filteredCandidates.slice(start, end);
+            
+            // Build table header
+            const modelNames = Object.keys(modelData);
+            tableHead.innerHTML = `
+                <tr>
+                    <th style="min-width: 50px;">#</th>
+                    <th style="min-width: 150px;">Candidate</th>
+                    ${modelNames.map(name => `<th style="min-width: 200px;">${name}</th>`).join('')}
+                    <th style="min-width: 120px;">⭐ Gold Star</th>
+                </tr>
+            `;
+            
+            // Build table body
+            tableBody.innerHTML = pageCandidates.map((candidate, idx) => {
+                const globalIdx = start + idx;
+                const candidateName = extractCandidateName(candidate);
+
+                // Collect all recommendations for this candidate to detect differences
+                const recommendations = modelNames.map(modelName => {
+                    const result = modelData[modelName][globalIdx];
+                    return result ? extractRecommendation(result) : null;
+                }).filter(r => r !== null);
+
+                // Check if all recommendations are the same
+                const allSame = recommendations.length > 0 && recommendations.every(r => r === recommendations[0]);
+                const hasDifferences = !allSame && recommendations.length > 1;
+
+                const modelCells = modelNames.map(modelName => {
+                    const result = modelData[modelName][globalIdx];
+                    if (!result) {
+                        return '<td>No data</td>';
+                    }
+
+                    const evaluation = parseEvaluation(result);
+                    const recommendation = evaluation?.recommendation || 'N/A';
+                    const recClass = getRecommendationClass(recommendation);
+                    const reasoning = evaluation?.reasoning || '';
+
+                    const modelClass = modelName.includes('Gemma') ? 'model-gemma' :
+                                      modelName.includes('Llama') ? 'model-llama' : 'model-qwen';
+
+                    // Add highlight if this row has different recommendations
+                    const highlightStyle = hasDifferences ? 'border: 2px solid #f85149;' : '';
+
+                    return `
+                        <td>
+                            <div class="${modelClass}" style="${highlightStyle}">
+                                <div style="margin-bottom: 8px;">
+                                    <span class="recommendation ${recClass}">${recommendation}</span>
+                                    ${hasDifferences ? '<span style="margin-left: 8px; font-size: 10px; color: #f85149;">⚠️ DIFF</span>' : ''}
+                                </div>
+                                ${reasoning ? `<div style="font-size: 11px; color: #8b949e; margin-bottom: 8px; line-height: 1.4;">${escapeHtml(reasoning)}</div>` : ''}
+                                ${formatCriteriaSection(evaluation)}
+                            </div>
+                        </td>
+                    `;
+                }).join('');
+
+                // Gold-star cell
+                const customId = candidate.custom_id || `candidate_${globalIdx}`;
+                const goldStarCell = `
+                    <td>
+                        <button
+                            class="gold-star-btn"
+                            onclick="goldStar(${globalIdx}, this)"
+                            data-candidate-id="${customId}">
+                            ⭐ Star
+                        </button>
+                    </td>
+                `;
+
+                // Extract candidate details
+                const details = extractCandidateDetails(candidate);
+                let detailsHtml = '';
+                if (details) {
+                    detailsHtml = `
+                        <tr class="candidate-details" id="details-${customId}">
+                            <td colspan="${modelNames.length + 3}" style="padding: 0;">
+                                <div style="padding: 15px; background: #f8f9fa; border-left: 3px solid #667eea;">
+                                    <h4 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px;">📋 Full Candidate Profile</h4>
+
+                                    <div class="section">
+                                        <div class="section-title">👤 Basic Info</div>
+                                        <div><strong>Name:</strong> ${escapeHtml(details.name)}</div>
+                                        <div><strong>Current Role:</strong> ${escapeHtml(details.currentRole)}</div>
+                                        <div><strong>Location:</strong> ${escapeHtml(details.location)}</div>
+                                    </div>
+
+                                    ${details.workHistory.length > 0 ? `
+                                        <div class="section">
+                                            <div class="section-title">💼 Work History (Recent)</div>
+                                            <ul>
+                                                ${details.workHistory.map(job => `<li>${escapeHtml(job)}</li>`).join('')}
+                                            </ul>
+                                        </div>
+                                    ` : '<div class="section"><div class="section-title">💼 Work History</div><div>No work history available</div></div>'}
+
+                                    ${details.education.length > 0 ? `
+                                        <div class="section">
+                                            <div class="section-title">🎓 Education</div>
+                                            <ul>
+                                                ${details.education.map(edu => `<li>${escapeHtml(edu)}</li>`).join('')}
+                                            </ul>
+                                        </div>
+                                    ` : '<div class="section"><div class="section-title">🎓 Education</div><div>No education information available</div></div>'}
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                return `
+                    <tr data-candidate-id="${customId}" data-candidate-index="${globalIdx}">
+                        <td>${globalIdx + 1}</td>
+                        <td>
+                            <div class="candidate-name" onclick="toggleCandidateDetails('${customId}')">
+                                <span class="expand-icon" id="icon-${customId}">▶</span>
+                                ${escapeHtml(candidateName)}
+                            </div>
+                        </td>
+                        ${modelCells}
+                        ${goldStarCell}
+                    </tr>
+                    ${detailsHtml}
+                `;
+            }).join('');
+            
+            renderPagination();
+        }
+        
+        function renderPagination() {
+            const totalPages = Math.ceil(filteredCandidates.length / perPage);
+            
+            if (totalPages <= 1) {
+                paginationDiv.innerHTML = '';
+                return;
+            }
+            
+            let buttons = '';
+            buttons += `<button ${currentPage === 1 ? 'disabled' : ''} onclick="goToPage(1)">First</button>`;
+            buttons += `<button ${currentPage === 1 ? 'disabled' : ''} onclick="goToPage(${currentPage - 1})">Previous</button>`;
+            buttons += `<span style="padding: 8px 16px; color: #8b949e;">Page ${currentPage} of ${totalPages}</span>`;
+            buttons += `<button ${currentPage === totalPages ? 'disabled' : ''} onclick="goToPage(${currentPage + 1})">Next</button>`;
+            buttons += `<button ${currentPage === totalPages ? 'disabled' : ''} onclick="goToPage(${totalPages})">Last</button>`;
+            
+            paginationDiv.innerHTML = buttons;
+        }
+        
+        function goToPage(page) {
+            currentPage = page;
+            renderTable();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Gold-star functionality
+        async function goldStar(candidateIndex, btn) {
+            // Get the candidate data from the global array
+            const candidate = filteredCandidates[candidateIndex];
+            if (!candidate) {
+                alert('❌ Error: Could not find candidate data');
+                return;
+            }
+
+            const customId = candidate.custom_id;
+            const candidateName = extractCandidateName(candidate);
+
+            // Prompt for rating with validation
+            const ratingStr = prompt(`Rate this evaluation (1-10) for ${candidateName}:`, '9');
+            if (ratingStr === null) return; // User cancelled
+
+            const rating = parseInt(ratingStr);
+            if (isNaN(rating) || rating < 1 || rating > 10) {
+                alert('❌ Please enter a number between 1 and 10');
+                return;
+            }
+
+            // Prompt for tags
+            const tagsInput = prompt('Tags (comma-separated, e.g., "excellent, senior, tech"):', 'excellent');
+            const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t) : [];
+
+            // Prompt for notes
+            const notes = prompt('Notes (why is this a good example?):', '');
+
+            // Extract input prompt from candidate
+            const messages = candidate.body?.messages || [];
+            const systemMsg = messages.find(m => m.role === 'system');
+            const userMsg = messages.find(m => m.role === 'user');
+
+            const inputPrompt = {
+                system: systemMsg?.content || '',
+                user: userMsg?.content || ''
+            };
+
+            // Get LLM output from the first model's result
+            const modelNames = Object.keys(modelData);
+            let llmOutput = '';
+            let rawResponse = null;
+
+            if (modelNames.length > 0) {
+                const firstModel = modelNames[0];
+                const result = modelData[firstModel][candidateIndex];
+                if (result) {
+                    rawResponse = result.response?.body?.choices?.[0]?.message?.content || '';
+                    llmOutput = rawResponse;
+                }
+            }
+
+            if (!llmOutput) {
+                alert('❌ Error: Could not extract LLM output');
+                return;
+            }
+
+            // Prepare data for storage
+            const data = {
+                custom_id: customId,
+                candidate_name: candidateName,
+                input_prompt: inputPrompt,
+                llm_output: llmOutput,
+                quality_score: rating,
+                tags: tags,
+                notes: notes || '',
+                starred_by: 'user',
+                starred_at: new Date().toISOString(),
+                model: modelNames[0] || 'unknown'
+            };
+
+            try {
+                // Save to server
+                const response = await fetch('/api/gold-star', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to save gold-star');
+                }
+
+                // Update UI
+                btn.textContent = `⭐ ${rating}/10`;
+                btn.classList.add('starred');
+                btn.disabled = true;
+
+                const row = btn.closest('tr');
+                row.classList.add('starred');
+
+                alert(`✅ Gold-starred! Rating: ${rating}/10\nModel: ${data.model}`);
+            } catch (error) {
+                console.error('Error saving gold-star:', error);
+                alert(`❌ Failed to save gold-star: ${error.message}`);
+            }
+        }
+
+        // Export gold-star dataset
+        async function exportGoldStar(format = 'icl', minQuality = 9) {
+            try {
+                const response = await fetch(`/api/export-gold-star?format=${format}&min_quality=${minQuality}`);
+
+                if (!response.ok) {
+                    throw new Error('Failed to export gold-star dataset');
+                }
+
+                // Download file
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `gold_star_${format}_${Date.now()}.jsonl`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                alert(`✅ Exported ${format} dataset!`);
+            } catch (error) {
+                console.error('Error exporting gold-star:', error);
+                alert('❌ Failed to export. Please try again.');
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
+

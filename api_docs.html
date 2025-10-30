@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vLLM Batch API - Documentation</title>
+    <link rel="stylesheet" href="static/css/shared.css">
+    <style>
+        .api-section {
+            background: var(--surface-white);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .endpoint {
+            background: #388bfd10;
+            border-left: 4px solid #58a6ff;
+            padding: var(--spacing-md);
+            margin: var(--spacing-md) 0;
+            border-radius: var(--radius-md);
+        }
+
+        .method {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 12px;
+            margin-right: 8px;
+        }
+
+        .method-get { background: #3fb950; color: white; }
+        .method-post { background: #58a6ff; color: white; }
+        .method-delete { background: #f85149; color: white; }
+
+        .code-block {
+            background: #0d1117;
+            color: #c9d1d9;
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            overflow-x: auto;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            margin: var(--spacing-sm) 0;
+        }
+
+        .code-inline {
+            background: #0d111720;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .param-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: var(--spacing-sm) 0;
+        }
+
+        .param-table th {
+            background: var(--border-color);
+            padding: 8px;
+            text-align: left;
+            font-size: 13px;
+        }
+
+        .param-table td {
+            padding: 8px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 13px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-live { background: #3fb95020; color: #3fb950; }
+        .badge-info { background: #388bfd20; color: #58a6ff; }
+
+        .quick-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-xl);
+        }
+
+        .quick-link {
+            background: var(--surface-white);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            text-align: center;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: all 0.2s;
+        }
+
+        .quick-link:hover {
+            border-color: #58a6ff;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .toc {
+            background: var(--surface-white);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .toc a {
+            display: block;
+            padding: 4px 0;
+            color: #58a6ff;
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 vLLM Batch Processing API</h1>
+        <p class="subtitle">Enterprise-grade batch inference service for LLMs</p>
+
+        <div class="quick-links">
+            <a href="dashboard.html" class="quick-link">
+                📊 Dashboard<br>
+                <small>Monitor jobs</small>
+            </a>
+            <a href="submit_batch.html" class="quick-link">
+                ➕ Submit Batch<br>
+                <small>Create new job</small>
+            </a>
+            <a href="http://localhost:4080/docs" class="quick-link" target="_blank">
+                📖 Swagger UI<br>
+                <small>Interactive API</small>
+            </a>
+            <a href="http://localhost:4080/health" class="quick-link" target="_blank">
+                ❤️ Health Check<br>
+                <small>System status</small>
+            </a>
+        </div>
+
+        <!-- Table of Contents -->
+        <div class="toc">
+            <h3>📋 Table of Contents</h3>
+            <a href="#overview">Overview</a>
+            <a href="#quickstart">Quick Start</a>
+            <a href="#endpoints">API Endpoints</a>
+            <a href="#examples">Code Examples</a>
+            <a href="#workflow">Complete Workflow</a>
+            <a href="#limits">Limits & Quotas</a>
+        </div>
+
+        <!-- Overview -->
+        <div id="overview" class="api-section">
+            <h2>📖 Overview</h2>
+            <p><strong>Base URL:</strong> <code class="code-inline">http://localhost:4080</code></p>
+            <p><strong>Purpose:</strong> Process large batches of LLM inference requests (up to 50K per batch)</p>
+            <p><strong>Status:</strong> <span class="status-badge badge-live">● LIVE</span></p>
+            
+            <h3>Key Features</h3>
+            <ul>
+                <li>✅ OpenAI-compatible batch API</li>
+                <li>✅ Intelligent chunking (5K chunks for RTX 4080)</li>
+                <li>✅ Incremental saves (no data loss)</li>
+                <li>✅ Resume capability (crash recovery)</li>
+                <li>✅ GPU health monitoring</li>
+                <li>✅ Queue management (max 5 concurrent jobs)</li>
+                <li>✅ Dead letter queue for failed requests</li>
+            </ul>
+        </div>
+
+        <!-- Quick Start -->
+        <div id="quickstart" class="api-section">
+            <h2>🚀 Quick Start</h2>
+            
+            <h3>1. Submit a Batch Job</h3>
+            <div class="code-block">curl -X POST http://localhost:4080/v1/batches \
+  -F "file=@batch_requests.jsonl" \
+  -F "model=google/gemma-3-4b-it"</div>
+
+            <h3>2. Check Status</h3>
+            <div class="code-block">curl http://localhost:4080/v1/batches/{batch_id} | jq</div>
+
+            <h3>3. Download Results</h3>
+            <div class="code-block">curl http://localhost:4080/v1/batches/{batch_id}/results -o results.jsonl</div>
+        </div>
+
+        <!-- API Endpoints -->
+        <div id="endpoints" class="api-section">
+            <h2>🔌 API Endpoints</h2>
+
+            <!-- Health Check -->
+            <div class="endpoint">
+                <h3><span class="method method-get">GET</span> /health</h3>
+                <p>System health check with GPU status, worker heartbeat, and queue info.</p>
+                
+                <h4>Response:</h4>
+                <div class="code-block">{
+  "status": "healthy",
+  "gpu": {
+    "healthy": true,
+    "memory_percent": 68.5,
+    "temperature_c": 72
+  },
+  "worker": {
+    "status": "processing",
+    "current_job_id": "batch_abc123",
+    "last_seen": "2025-10-29T13:45:32Z"
+  },
+  "queue": {
+    "active_jobs": 1,
+    "max_queue_depth": 5,
+    "queue_available": 4
+  }
+}</div>
+            </div>
+
+            <!-- List Models -->
+            <div class="endpoint">
+                <h3><span class="method method-get">GET</span> /v1/models</h3>
+                <p>List available models for inference.</p>
+                
+                <h4>Response:</h4>
+                <div class="code-block">{
+  "models": [
+    {
+      "name": "google/gemma-3-4b-it",
+      "display_name": "Gemma 3 4B Instruct",
+      "size": "4B parameters"
+    }
+  ]
+}</div>
+            </div>
+
+            <!-- Submit Batch -->
+            <div class="endpoint">
+                <h3><span class="method method-post">POST</span> /v1/batches</h3>
+                <p>Submit a new batch job for processing.</p>
+                
+                <h4>Request (multipart/form-data):</h4>
+                <table class="param-table">
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Type</th>
+                        <th>Required</th>
+                        <th>Description</th>
+                    </tr>
+                    <tr>
+                        <td><code>file</code></td>
+                        <td>File</td>
+                        <td>Yes</td>
+                        <td>JSONL file with batch requests</td>
+                    </tr>
+                    <tr>
+                        <td><code>model</code></td>
+                        <td>String</td>
+                        <td>Yes</td>
+                        <td>Model name (e.g., "google/gemma-3-4b-it")</td>
+                    </tr>
+                </table>
+
+                <h4>JSONL Format:</h4>
+                <div class="code-block">{"custom_id": "req-1", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "gpt-4", "messages": [{"role": "user", "content": "Hello!"}]}}
+{"custom_id": "req-2", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "gpt-4", "messages": [{"role": "user", "content": "Hi!"}]}}</div>
+
+                <h4>Response:</h4>
+                <div class="code-block">{
+  "batch_id": "batch_abc123",
+  "status": "pending",
+  "model": "google/gemma-3-4b-it",
+  "total_requests": 10000,
+  "created_at": "2025-10-29T13:45:00Z"
+}</div>
+            </div>
+
+            <!-- List Batches -->
+            <div class="endpoint">
+                <h3><span class="method method-get">GET</span> /v1/batches</h3>
+                <p>List all batch jobs.</p>
+                
+                <h4>Response:</h4>
+                <div class="code-block">{
+  "batches": [
+    {
+      "batch_id": "batch_abc123",
+      "status": "running",
+      "model": "google/gemma-3-4b-it",
+      "progress": {
+        "total": 10000,
+        "completed": 4500,
+        "failed": 0,
+        "percent": 45
+      },
+      "throughput_tokens_per_sec": 2511
+    }
+  ]
+}</div>
+            </div>
+
+            <!-- Get Batch Status -->
+            <div class="endpoint">
+                <h3><span class="method method-get">GET</span> /v1/batches/{batch_id}</h3>
+                <p>Get status of a specific batch job.</p>
+                
+                <h4>Response:</h4>
+                <div class="code-block">{
+  "batch_id": "batch_abc123",
+  "status": "completed",
+  "model": "google/gemma-3-4b-it",
+  "total_requests": 10000,
+  "completed_requests": 10000,
+  "failed_requests": 0,
+  "throughput_tokens_per_sec": 2511,
+  "created_at": "2025-10-29T13:00:00Z",
+  "completed_at": "2025-10-29T14:12:00Z"
+}</div>
+            </div>
+
+            <!-- Download Results -->
+            <div class="endpoint">
+                <h3><span class="method method-get">GET</span> /v1/batches/{batch_id}/results</h3>
+                <p>Download batch results as JSONL file.</p>
+                
+                <h4>Response (JSONL):</h4>
+                <div class="code-block">{"custom_id": "req-1", "response": {"status_code": 200, "body": {"choices": [{"message": {"content": "4"}}]}}}
+{"custom_id": "req-2", "response": {"status_code": 200, "body": {"choices": [{"message": {"content": "Paris"}}]}}}</div>
+            </div>
+
+            <!-- Get Failed Requests -->
+            <div class="endpoint">
+                <h3><span class="method method-get">GET</span> /v1/batches/{batch_id}/failed</h3>
+                <p>Get failed requests from dead letter queue.</p>
+                
+                <h4>Response:</h4>
+                <div class="code-block">{
+  "batch_id": "batch_abc123",
+  "failed_requests": [
+    {
+      "custom_id": "req-999",
+      "error_message": "Context length exceeded",
+      "error_type": "validation_error",
+      "retry_count": 3
+    }
+  ]
+}</div>
+            </div>
+
+            <!-- Cancel Batch -->
+            <div class="endpoint">
+                <h3><span class="method method-delete">DELETE</span> /v1/batches/{batch_id}</h3>
+                <p>Cancel a pending batch job.</p>
+                
+                <h4>Response:</h4>
+                <div class="code-block">{
+  "batch_id": "batch_abc123",
+  "status": "cancelled"
+}</div>
+            </div>
+        </div>
+
+        <!-- Code Examples -->
+        <div id="examples" class="api-section">
+            <h2>💻 Code Examples</h2>
+
+            <h3>Python</h3>
+            <div class="code-block">import requests
+
+# Submit batch
+with open('batch_requests.jsonl', 'rb') as f:
+    response = requests.post(
+        'http://localhost:4080/v1/batches',
+        files={'file': f},
+        data={'model': 'google/gemma-3-4b-it'}
+    )
+batch_id = response.json()['batch_id']
+
+# Poll for completion
+import time
+while True:
+    status = requests.get(f'http://localhost:4080/v1/batches/{batch_id}').json()
+    if status['status'] == 'completed':
+        break
+    print(f"Progress: {status['progress']['percent']}%")
+    time.sleep(10)
+
+# Download results
+results = requests.get(f'http://localhost:4080/v1/batches/{batch_id}/results')
+with open('results.jsonl', 'wb') as f:
+    f.write(results.content)</div>
+
+            <h3>cURL</h3>
+            <div class="code-block"># Submit batch
+BATCH_ID=$(curl -X POST http://localhost:4080/v1/batches \
+  -F "file=@batch_requests.jsonl" \
+  -F "model=google/gemma-3-4b-it" \
+  | jq -r '.batch_id')
+
+# Check status
+curl http://localhost:4080/v1/batches/$BATCH_ID | jq
+
+# Download results
+curl http://localhost:4080/v1/batches/$BATCH_ID/results -o results.jsonl</div>
+        </div>
+
+        <!-- Complete Workflow -->
+        <div id="workflow" class="api-section">
+            <h2>🔄 Complete Workflow</h2>
+            
+            <ol>
+                <li><strong>Prepare JSONL file</strong> with batch requests</li>
+                <li><strong>Submit batch</strong> via <code>POST /v1/batches</code></li>
+                <li><strong>Receive batch_id</strong> in response</li>
+                <li><strong>Poll for status</strong> via <code>GET /v1/batches/{batch_id}</code></li>
+                <li><strong>Wait for completion</strong> (status = "completed")</li>
+                <li><strong>Download results</strong> via <code>GET /v1/batches/{batch_id}/results</code></li>
+                <li><strong>Process results</strong> in your application</li>
+                <li><strong>(Optional) Check failed requests</strong> via <code>GET /v1/batches/{batch_id}/failed</code></li>
+            </ol>
+
+            <p><strong>Note:</strong> Results are stored for 30 days. Download within this window!</p>
+        </div>
+
+        <!-- Limits & Quotas -->
+        <div id="limits" class="api-section">
+            <h2>⚠️ Limits & Quotas</h2>
+            
+            <table class="param-table">
+                <tr>
+                    <th>Limit</th>
+                    <th>Value</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>Max requests per batch</td>
+                    <td>50,000</td>
+                    <td>Maximum number of requests in a single batch</td>
+                </tr>
+                <tr>
+                    <td>Max concurrent batches</td>
+                    <td>5</td>
+                    <td>Maximum number of active/pending batches</td>
+                </tr>
+                <tr>
+                    <td>Max total queued requests</td>
+                    <td>100,000</td>
+                    <td>Total requests across all pending batches</td>
+                </tr>
+                <tr>
+                    <td>GPU memory threshold</td>
+                    <td>95%</td>
+                    <td>Reject new batches if GPU memory exceeds this</td>
+                </tr>
+                <tr>
+                    <td>GPU temperature threshold</td>
+                    <td>85°C</td>
+                    <td>Reject new batches if GPU temperature exceeds this</td>
+                </tr>
+                <tr>
+                    <td>Result retention</td>
+                    <td>30 days</td>
+                    <td>Results are automatically deleted after 30 days</td>
+                </tr>
+            </table>
+        </div>
+
+        <div style="text-align: center; margin-top: var(--spacing-xl); padding: var(--spacing-lg); background: var(--surface-white); border-radius: var(--radius-md);">
+            <p><strong>Need help?</strong> Check the <a href="dashboard.html">Dashboard</a> for real-time system status.</p>
+            <p><small>vLLM Batch Processing Server v1.0.0 | Running on RTX 4080 16GB</small></p>
+        </div>
+    </div>
+</body>
+</html>
+

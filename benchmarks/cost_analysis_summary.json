@@ -1,0 +1,538 @@
+[
+  {
+    "benchmark": "benchmarks/metadata/batch-job-google-gemma-3-4b-it-10-2025-10-28.json",
+    "model": "google/gemma-3-4b-it",
+    "tokens": {
+      "prompt": 0,
+      "completion": 0,
+      "total": 11452,
+      "avg_prompt_per_request": 0.0,
+      "avg_completion_per_request": 0.0
+    },
+    "parasail_comparisons": [
+      {
+        "model": "parasail-gemma3-27b-it",
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "total_cost": 0.0,
+        "pricing": {
+          "input": 0.2,
+          "output": 0.5
+        }
+      },
+      {
+        "model": "parasail-gpt-oss-20b",
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "total_cost": 0.0,
+        "pricing": {
+          "input": 0.04,
+          "output": 0.2
+        }
+      },
+      {
+        "model": "parasail-olmo-2-32b-instruct",
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "total_cost": 0.0,
+        "pricing": {
+          "input": 0.2,
+          "output": 0.35
+        }
+      }
+    ],
+    "scale_projections": [
+      {
+        "num_requests": 1000,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "costs": [
+          {
+            "model": "parasail-gemma3-27b-it",
+            "total_cost": 0.0
+          },
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 0.0
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 0.0
+          }
+        ]
+      },
+      {
+        "num_requests": 10000,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "costs": [
+          {
+            "model": "parasail-gemma3-27b-it",
+            "total_cost": 0.0
+          },
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 0.0
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 0.0
+          }
+        ]
+      },
+      {
+        "num_requests": 100000,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "costs": [
+          {
+            "model": "parasail-gemma3-27b-it",
+            "total_cost": 0.0
+          },
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 0.0
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 0.0
+          }
+        ]
+      },
+      {
+        "num_requests": 1000000,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "costs": [
+          {
+            "model": "parasail-gemma3-27b-it",
+            "total_cost": 0.0
+          },
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 0.0
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 0.0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "benchmark": "benchmarks/metadata/llama32-1b-5k-2025-10-28.json",
+    "model": "meta-llama/Llama-3.2-1B-Instruct",
+    "tokens": {
+      "prompt": 1540000,
+      "completion": 606875,
+      "total": 2146875,
+      "avg_prompt_per_request": 308.0,
+      "avg_completion_per_request": 121.4
+    },
+    "parasail_comparisons": [
+      {
+        "model": "parasail-gpt-oss-20b",
+        "prompt_tokens": 1540000,
+        "completion_tokens": 606875,
+        "total_tokens": 2146875,
+        "input_cost": 0.0616,
+        "output_cost": 0.1214,
+        "total_cost": 0.183,
+        "pricing": {
+          "input": 0.04,
+          "output": 0.2
+        }
+      },
+      {
+        "model": "parasail-olmo-2-32b-instruct",
+        "prompt_tokens": 1540000,
+        "completion_tokens": 606875,
+        "total_tokens": 2146875,
+        "input_cost": 0.308,
+        "output_cost": 0.2124,
+        "total_cost": 0.5204,
+        "pricing": {
+          "input": 0.2,
+          "output": 0.35
+        }
+      }
+    ],
+    "scale_projections": [
+      {
+        "num_requests": 1000,
+        "prompt_tokens": 308000,
+        "completion_tokens": 121375,
+        "total_tokens": 429375,
+        "costs": [
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 0.04
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 0.1
+          }
+        ]
+      },
+      {
+        "num_requests": 10000,
+        "prompt_tokens": 3080000,
+        "completion_tokens": 1213750,
+        "total_tokens": 4293750,
+        "costs": [
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 0.37
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 1.04
+          }
+        ]
+      },
+      {
+        "num_requests": 100000,
+        "prompt_tokens": 30800000,
+        "completion_tokens": 12137500,
+        "total_tokens": 42937500,
+        "costs": [
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 3.66
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 10.41
+          }
+        ]
+      },
+      {
+        "num_requests": 1000000,
+        "prompt_tokens": 308000000,
+        "completion_tokens": 121375000,
+        "total_tokens": 429375000,
+        "costs": [
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 36.59
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 104.08
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "benchmark": "benchmarks/metadata/qwen3-4b-10-2025-10-28.json",
+    "model": "Qwen/Qwen3-4B-Instruct-2507",
+    "tokens": {
+      "prompt": 7946,
+      "completion": 3112,
+      "total": 11058,
+      "avg_prompt_per_request": 794.6,
+      "avg_completion_per_request": 311.2
+    },
+    "parasail_comparisons": [
+      {
+        "model": "parasail-qwen3-14b",
+        "prompt_tokens": 7946,
+        "completion_tokens": 3112,
+        "total_tokens": 11058,
+        "input_cost": 0.0012,
+        "output_cost": 0.0009,
+        "total_cost": 0.0021,
+        "pricing": {
+          "input": 0.15,
+          "output": 0.3
+        }
+      },
+      {
+        "model": "parasail-qwen3-30b-a3b",
+        "prompt_tokens": 7946,
+        "completion_tokens": 3112,
+        "total_tokens": 11058,
+        "input_cost": 0.0012,
+        "output_cost": 0.002,
+        "total_cost": 0.0032,
+        "pricing": {
+          "input": 0.15,
+          "output": 0.65
+        }
+      },
+      {
+        "model": "parasail-gpt-oss-20b",
+        "prompt_tokens": 7946,
+        "completion_tokens": 3112,
+        "total_tokens": 11058,
+        "input_cost": 0.0003,
+        "output_cost": 0.0006,
+        "total_cost": 0.0009,
+        "pricing": {
+          "input": 0.04,
+          "output": 0.2
+        }
+      },
+      {
+        "model": "parasail-olmo-2-32b-instruct",
+        "prompt_tokens": 7946,
+        "completion_tokens": 3112,
+        "total_tokens": 11058,
+        "input_cost": 0.0016,
+        "output_cost": 0.0011,
+        "total_cost": 0.0027,
+        "pricing": {
+          "input": 0.2,
+          "output": 0.35
+        }
+      }
+    ],
+    "scale_projections": [
+      {
+        "num_requests": 1000,
+        "prompt_tokens": 794600,
+        "completion_tokens": 311200,
+        "total_tokens": 1105800,
+        "costs": [
+          {
+            "model": "parasail-qwen3-14b",
+            "total_cost": 0.21
+          },
+          {
+            "model": "parasail-qwen3-30b-a3b",
+            "total_cost": 0.32
+          },
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 0.09
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 0.27
+          }
+        ]
+      },
+      {
+        "num_requests": 10000,
+        "prompt_tokens": 7946000,
+        "completion_tokens": 3112000,
+        "total_tokens": 11058000,
+        "costs": [
+          {
+            "model": "parasail-qwen3-14b",
+            "total_cost": 2.13
+          },
+          {
+            "model": "parasail-qwen3-30b-a3b",
+            "total_cost": 3.21
+          },
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 0.94
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 2.68
+          }
+        ]
+      },
+      {
+        "num_requests": 100000,
+        "prompt_tokens": 79460000,
+        "completion_tokens": 31120000,
+        "total_tokens": 110580000,
+        "costs": [
+          {
+            "model": "parasail-qwen3-14b",
+            "total_cost": 21.25
+          },
+          {
+            "model": "parasail-qwen3-30b-a3b",
+            "total_cost": 32.15
+          },
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 9.4
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 26.78
+          }
+        ]
+      },
+      {
+        "num_requests": 1000000,
+        "prompt_tokens": 794600000,
+        "completion_tokens": 311200000,
+        "total_tokens": 1105800000,
+        "costs": [
+          {
+            "model": "parasail-qwen3-14b",
+            "total_cost": 212.55
+          },
+          {
+            "model": "parasail-qwen3-30b-a3b",
+            "total_cost": 321.47
+          },
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 94.02
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 267.84
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "benchmark": "benchmarks/metadata/vllm-native-gemma3-4b-5000-2025-10-28.json",
+    "model": "google/gemma-3-4b-it",
+    "tokens": {
+      "prompt": 3942154,
+      "completion": 1540218,
+      "total": 5482372,
+      "avg_prompt_per_request": 788.4,
+      "avg_completion_per_request": 308.0
+    },
+    "parasail_comparisons": [
+      {
+        "model": "parasail-gemma3-27b-it",
+        "prompt_tokens": 3942154,
+        "completion_tokens": 1540218,
+        "total_tokens": 5482372,
+        "input_cost": 0.7884,
+        "output_cost": 0.7701,
+        "total_cost": 1.5585,
+        "pricing": {
+          "input": 0.2,
+          "output": 0.5
+        }
+      },
+      {
+        "model": "parasail-gpt-oss-20b",
+        "prompt_tokens": 3942154,
+        "completion_tokens": 1540218,
+        "total_tokens": 5482372,
+        "input_cost": 0.1577,
+        "output_cost": 0.308,
+        "total_cost": 0.4657,
+        "pricing": {
+          "input": 0.04,
+          "output": 0.2
+        }
+      },
+      {
+        "model": "parasail-olmo-2-32b-instruct",
+        "prompt_tokens": 3942154,
+        "completion_tokens": 1540218,
+        "total_tokens": 5482372,
+        "input_cost": 0.7884,
+        "output_cost": 0.5391,
+        "total_cost": 1.3275,
+        "pricing": {
+          "input": 0.2,
+          "output": 0.35
+        }
+      }
+    ],
+    "scale_projections": [
+      {
+        "num_requests": 1000,
+        "prompt_tokens": 788430,
+        "completion_tokens": 308043,
+        "total_tokens": 1096473,
+        "costs": [
+          {
+            "model": "parasail-gemma3-27b-it",
+            "total_cost": 0.31
+          },
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 0.09
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 0.27
+          }
+        ]
+      },
+      {
+        "num_requests": 10000,
+        "prompt_tokens": 7884308,
+        "completion_tokens": 3080436,
+        "total_tokens": 10964744,
+        "costs": [
+          {
+            "model": "parasail-gemma3-27b-it",
+            "total_cost": 3.12
+          },
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 0.93
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 2.66
+          }
+        ]
+      },
+      {
+        "num_requests": 100000,
+        "prompt_tokens": 78843080,
+        "completion_tokens": 30804360,
+        "total_tokens": 109647440,
+        "costs": [
+          {
+            "model": "parasail-gemma3-27b-it",
+            "total_cost": 31.17
+          },
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 9.31
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 26.55
+          }
+        ]
+      },
+      {
+        "num_requests": 1000000,
+        "prompt_tokens": 788430800,
+        "completion_tokens": 308043600,
+        "total_tokens": 1096474400,
+        "costs": [
+          {
+            "model": "parasail-gemma3-27b-it",
+            "total_cost": 311.71
+          },
+          {
+            "model": "parasail-gpt-oss-20b",
+            "total_cost": 93.15
+          },
+          {
+            "model": "parasail-olmo-2-32b-instruct",
+            "total_cost": 265.5
+          }
+        ]
+      }
+    ]
+  }
+]

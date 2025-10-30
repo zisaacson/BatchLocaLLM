@@ -1,0 +1,76 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:4022']
+
+  - job_name: 'aristotle-app'
+    static_configs:
+      - targets: ['host.docker.internal:4000']
+    metrics_path: '/api/metrics'
+    scrape_interval: 30s
+
+  - job_name: 'inngest'
+    static_configs:
+      - targets: ['inngest:4004']
+    scrape_interval: 30s
+
+  - job_name: 'postgres-dev'
+    static_configs:
+      - targets: ['dev-db:4002']
+    scrape_interval: 60s
+
+  - job_name: 'postgres-test'
+    static_configs:
+      - targets: ['test-db:4003']
+    scrape_interval: 60s
+
+  - job_name: 'typesense'
+    static_configs:
+      - targets: ['typesense:4008']
+    scrape_interval: 30s
+
+  - job_name: 'neo4j'
+    static_configs:
+      - targets: ['neo4j:4006']
+    scrape_interval: 30s
+
+  - job_name: 'chromadb'
+    static_configs:
+      - targets: ['chromadb:4005']
+    scrape_interval: 30s
+
+  - job_name: 'ollama'
+    static_configs:
+      - targets: ['ollama:4014']
+    scrape_interval: 30s
+
+  # =============================================================================
+  # vLLM Batch Server Monitoring
+  # =============================================================================
+  - job_name: 'vllm-server'
+    static_configs:
+      - targets: ['host.docker.internal:4080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s  # More frequent for GPU metrics
+    scrape_timeout: 5s
+
+  - job_name: 'vllm-batch-api'
+    static_configs:
+      - targets: ['host.docker.internal:4081']  # If you have separate API server
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # GPU metrics (if using nvidia-smi exporter)
+  - job_name: 'nvidia-gpu'
+    static_configs:
+      - targets: ['host.docker.internal:9835']  # nvidia_gpu_exporter default port
+    scrape_interval: 5s  # Frequent for GPU monitoring
+

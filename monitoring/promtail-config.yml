@@ -1,0 +1,70 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://localhost:4021/loki/api/v1/push
+
+scrape_configs:
+  # vLLM Server logs
+  - job_name: vllm-server
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: vllm-server
+          __path__: /home/zack/Documents/augment-projects/Local/vllm-batch-server/vllm*.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\S+\s+\S+)\s+(?P<level>\w+)\s+(?P<message>.*)$'
+      - labels:
+          level:
+      - timestamp:
+          source: timestamp
+          format: '2006-01-02 15:04:05'
+
+  # Benchmark logs
+  - job_name: vllm-benchmarks
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: vllm-benchmarks
+          __path__: /home/zack/Documents/augment-projects/Local/vllm-batch-server/benchmark*.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\S+\s+\S+)\s+(?P<level>\w+)\s+(?P<message>.*)$'
+      - labels:
+          level:
+
+  # Batch processing logs
+  - job_name: vllm-batch
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: vllm-batch
+          __path__: /home/zack/Documents/augment-projects/Local/vllm-batch-server/batch*.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\S+\s+\S+)\s+(?P<level>\w+)\s+(?P<message>.*)$'
+      - labels:
+          level:
+
+  # API Server logs
+  - job_name: vllm-api
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: vllm-api
+          __path__: /home/zack/Documents/augment-projects/Local/vllm-batch-server/server.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\S+\s+\S+)\s+(?P<level>\w+)\s+(?P<message>.*)$'
+      - labels:
+          level:
+

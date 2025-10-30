@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candidate Comparison Viewer</title>
+    <link rel="stylesheet" href="static/css/shared.css">
+    <style>
+        .controls {
+            background: var(--surface-white);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+            box-shadow: var(--shadow-md);
+        }
+        
+        .control-row {
+            display: flex;
+            gap: var(--spacing-lg);
+            align-items: center;
+            margin-bottom: var(--spacing-md);
+        }
+
+        label {
+            color: var(--text-secondary);
+            font-size: 14px;
+            min-width: 120px;
+        }
+
+        select, input {
+            flex: 1;
+        }
+
+        .candidate-section {
+            background: var(--surface-white);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+            box-shadow: var(--shadow-md);
+        }
+
+        .candidate-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-md);
+            padding-bottom: var(--spacing-md);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .candidate-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        .candidate-id {
+            color: var(--text-muted);
+            font-size: 12px;
+            font-family: var(--font-mono);
+        }
+
+        .candidate-data {
+            background: var(--surface-light);
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            white-space: pre-wrap;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: var(--spacing-lg);
+            margin-top: var(--spacing-lg);
+        }
+
+        .model-response {
+            background: var(--surface-white);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            box-shadow: var(--shadow-md);
+        }
+
+        .model-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-md);
+            padding-bottom: var(--spacing-md);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .model-name {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        .model-stats {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        .response-content {
+            background: var(--surface-light);
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            white-space: pre-wrap;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .overall-reasoning {
+            background: var(--surface-light);
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            border-left: 4px solid var(--border-hover);
+            margin-bottom: var(--spacing-md);
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .badge-fast {
+            background: var(--rating-great);
+            color: white;
+        }
+
+        .badge-quality {
+            background: var(--rating-good);
+            color: white;
+        }
+
+        .badge-pending {
+            background: var(--rating-average);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>👥 Candidate Comparison Viewer</h1>
+        <p class="subtitle">Compare model responses for each candidate side-by-side</p>
+        
+        <div class="controls">
+            <div class="control-row">
+                <label>Candidate:</label>
+                <select id="candidateSelect">
+                    <option value="">Loading candidates...</option>
+                </select>
+            </div>
+            
+            <div class="control-row">
+                <label>Search:</label>
+                <input type="text" id="searchInput" placeholder="Search by name, company, or ID...">
+            </div>
+        </div>
+        
+        <div id="error" style="display: none;" class="error"></div>
+        
+        <div id="candidateSection" style="display: none;">
+            <div class="candidate-section">
+                <div class="candidate-header">
+                    <div>
+                        <div class="candidate-name" id="candidateName">Loading...</div>
+                        <div class="candidate-id" id="candidateId"></div>
+                    </div>
+                </div>
+                <div class="candidate-data" id="candidateData"></div>
+            </div>
+            
+            <h2 style="color: #58a6ff; margin-bottom: 15px;">🤖 Model Responses</h2>
+            <div class="comparison-grid" id="responsesGrid"></div>
+        </div>
+        
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <script src="static/js/parsers.js"></script>
+    <script>
+        let candidates = [];
+        let candidateData = [];
+        let modelResults = {
+            'llama32_3b': [],
+            'gemma3_4b': [],
+            'qwen3_4b': []
+        };
+        let currentIndex = 0;
+        
+        const candidateSelect = document.getElementById('candidateSelect');
+        const searchInput = document.getElementById('searchInput');
+        const candidateSection = document.getElementById('candidateSection');
+        const candidateName = document.getElementById('candidateName');
+        const candidateId = document.getElementById('candidateId');
+        const candidateData = document.getElementById('candidateData');
+        const responsesGrid = document.getElementById('responsesGrid');
+        const paginationDiv = document.getElementById('pagination');
+        const errorDiv = document.getElementById('error');
+        
+        const models = [
+            { id: 'llama32_3b', name: 'Llama 3.2 3B', file: 'llama32_3b_5k_results.jsonl', badge: 'FAST', badgeClass: 'badge-fast', time: '13 min' },
+            { id: 'gemma3_4b', name: 'Gemma 3 4B', file: 'benchmarks/raw/vllm-native-gemma3-4b-5000-2025-10-28.jsonl', badge: 'QUALITY', badgeClass: 'badge-quality', time: '37 min' },
+            { id: 'qwen3_4b', name: 'Qwen 3 4B', file: 'qwen3_4b_5k_results.jsonl', badge: 'PENDING', badgeClass: 'badge-pending', time: '~2.5 hrs' }
+        ];
+        
+        candidateSelect.addEventListener('change', () => {
+            currentIndex = parseInt(candidateSelect.value);
+            showCandidate(currentIndex);
+        });
+        
+        searchInput.addEventListener('input', filterCandidates);
+        
+        async function init() {
+            try {
+                // Get dataset from URL parameter
+                const urlParams = new URLSearchParams(window.location.search);
+                const datasetName = urlParams.get('dataset') || 'batch_5k.jsonl';
+
+                // First, discover what results are available for this dataset
+                const discoverResponse = await fetch('/api/discover');
+                if (!discoverResponse.ok) throw new Error('Failed to discover datasets');
+
+                const datasets = await discoverResponse.json();
+                const datasetInfo = datasets[datasetName];
+
+                if (!datasetInfo) {
+                    throw new Error(`Dataset ${datasetName} not found`);
+                }
+
+                if (!datasetInfo.results || datasetInfo.results.length === 0) {
+                    throw new Error(`No results available for ${datasetName}`);
+                }
+
+                // Load original candidate data
+                const candidatesResponse = await fetch(`/api/candidates?dataset=${encodeURIComponent(datasetName)}`);
+                if (candidatesResponse.ok) {
+                    candidateData = await candidatesResponse.json();
+                }
+
+                // Load all available model results for this dataset
+                for (const resultInfo of datasetInfo.results) {
+                    try {
+                        const response = await fetch(`/api/results?model=${encodeURIComponent(resultInfo.file)}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            // Store by file name for now
+                            const modelId = resultInfo.file.replace(/[^a-z0-9]/gi, '_');
+                            modelResults[modelId] = data;
+                        }
+                    } catch (e) {
+                        console.warn(`Failed to load ${resultInfo.file}:`, e);
+                    }
+                }
+
+                // Use the first available model's results to build candidate list
+                const firstModelId = Object.keys(modelResults)[0];
+                if (!firstModelId) {
+                    throw new Error('No model results loaded');
+                }
+
+                candidates = modelResults[firstModelId];
+
+                if (candidates.length === 0) {
+                    throw new Error('No results loaded');
+                }
+
+                populateCandidateSelect();
+                showCandidate(0);
+
+            } catch (error) {
+                errorDiv.textContent = `Error loading results: ${error.message}`;
+                errorDiv.style.display = 'block';
+                console.error('Init error:', error);
+            }
+        }
+        
+        function populateCandidateSelect() {
+            candidateSelect.innerHTML = candidates.map((c, idx) => {
+                const name = extractCandidateName(c);
+                return `<option value="${idx}">#${idx + 1} - ${name}</option>`;
+            }).join('');
+        }
+
+        function showCandidate(index) {
+            if (index < 0 || index >= candidates.length) return;
+
+            currentIndex = index;
+            const candidate = candidates[index];
+
+            // Show candidate info
+            candidateName.textContent = `Candidate #${index + 1}`;
+            candidateId.textContent = `ID: ${candidate.custom_id}`;
+
+            // Extract and show candidate data from the original request
+            const originalData = candidateData[index];
+            if (originalData) {
+                const messages = originalData.body?.messages || [];
+                const userMessage = messages.find(m => m.role === 'user');
+                candidateData.textContent = userMessage ? userMessage.content : JSON.stringify(originalData, null, 2);
+            } else {
+                candidateData.textContent = `Custom ID: ${candidate.custom_id}\n\nOriginal candidate data not available`;
+            }
+            
+            // Show model responses
+            responsesGrid.innerHTML = Object.entries(modelResults).map(([modelId, results]) => {
+                const result = results[index];
+                if (!result) {
+                    return `
+                        <div class="model-response">
+                            <div class="model-header">
+                                <div class="model-name">${modelId}</div>
+                                <div class="model-stats">No result</div>
+                            </div>
+                            <div class="response-content">No result available</div>
+                        </div>
+                    `;
+                }
+
+                const content = result.response?.body?.choices?.[0]?.message?.content || 'No content';
+                const usage = result.response?.body?.usage || {};
+                const modelName = extractModelName(modelId);
+
+                // Parse evaluation from response
+                const evaluation = parseEvaluation(result);
+                const recommendation = evaluation?.recommendation || 'N/A';
+                const reasoning = evaluation?.reasoning || '';
+                const recClass = getRecommendationClass(recommendation);
+
+                return `
+                    <div class="model-response">
+                        <div class="model-header">
+                            <div class="model-name">${modelName}</div>
+                            <div class="model-stats">
+                                📝 ${usage.prompt_tokens || 0} → 💬 ${usage.completion_tokens || 0}
+                            </div>
+                        </div>
+                        <div style="margin-bottom: var(--spacing-md);">
+                            <span class="badge ${recClass}">${recommendation}</span>
+                        </div>
+                        ${reasoning ? `<div class="overall-reasoning"><strong>Overall:</strong> ${escapeHtml(reasoning)}</div>` : ''}
+                        ${formatCriteriaSection(evaluation)}
+                    </div>
+                `;
+            }).join('');
+            
+            candidateSection.style.display = 'block';
+            renderPagination();
+        }
+        
+        function renderPagination() {
+            const total = candidates.length;
+            let buttons = '';
+            
+            buttons += `<button ${currentIndex === 0 ? 'disabled' : ''} onclick="showCandidate(0)">First</button>`;
+            buttons += `<button ${currentIndex === 0 ? 'disabled' : ''} onclick="showCandidate(${currentIndex - 1})">Previous</button>`;
+            buttons += `<span style="padding: 8px 16px; color: #8b949e;">Candidate ${currentIndex + 1} of ${total}</span>`;
+            buttons += `<button ${currentIndex === total - 1 ? 'disabled' : ''} onclick="showCandidate(${currentIndex + 1})">Next</button>`;
+            buttons += `<button ${currentIndex === total - 1 ? 'disabled' : ''} onclick="showCandidate(${total - 1})">Last</button>`;
+            
+            paginationDiv.innerHTML = buttons;
+        }
+        
+        function filterCandidates() {
+            const query = searchInput.value.toLowerCase();
+            if (!query) {
+                populateCandidateSelect();
+                return;
+            }
+            
+            const filtered = candidates.map((c, idx) => ({ c, idx }))
+                .filter(({ c }) => {
+                    const name = extractCandidateName(c);
+                    const content = c.response?.body?.choices?.[0]?.message?.content || '';
+                    return name.toLowerCase().includes(query) || 
+                           c.custom_id.toLowerCase().includes(query) ||
+                           content.toLowerCase().includes(query);
+                });
+            
+            candidateSelect.innerHTML = filtered.map(({ c, idx }) => {
+                const name = extractCandidateName(c);
+                return `<option value="${idx}">#${idx + 1} - ${name}</option>`;
+            }).join('');
+        }
+        
+        // extractModelName and escapeHtml are now in parsers.js
+
+        // Update extractCandidateName to use the shared function
+        function extractCandidateName(result) {
+            // Use the shared parser if available, otherwise fallback
+            if (typeof window.extractCandidateName === 'function') {
+                return window.extractCandidateName(result);
+            }
+            const customId = result.custom_id || '';
+            return customId.split('-')[1] || customId || 'Unknown';
+            return div.innerHTML;
+        }
+
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial_scale=1.0">
+    <title>Submit Batch Job</title>
+    <link rel="stylesheet" href="static/css/shared.css">
+    <style>
+        .form-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: var(--surface-white);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-xl);
+            box-shadow: var(--shadow-md);
+        }
+
+        .form-group {
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: var(--spacing-sm);
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            background: var(--surface-white);
+            color: var(--text-primary);
+        }
+
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input-label {
+            display: block;
+            padding: 12px;
+            border: 2px dashed var(--border-color);
+            border-radius: var(--radius-md);
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .file-input-label:hover {
+            border-color: #58a6ff;
+            background: #388bfd10;
+        }
+
+        .file-input {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .file-name {
+            margin-top: var(--spacing-sm);
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary-gradient);
+            color: white;
+            width: 100%;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--surface-white);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: var(--spacing-xs);
+        }
+
+        .success-message {
+            background: #3fb95020;
+            border: 1px solid #3fb950;
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+            color: #3fb950;
+        }
+
+        .error-message {
+            background: #f8514920;
+            border: 1px solid #f85149;
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+            color: #f85149;
+        }
+
+        .estimate-box {
+            background: #388bfd10;
+            border: 1px solid #58a6ff;
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            margin-top: var(--spacing-lg);
+        }
+
+        .estimate-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>➕ Submit Batch Job</h1>
+        <p class="subtitle">Upload a JSONL file and select a model to process</p>
+
+        <div class="form-container">
+            <div id="successMessage" style="display: none;" class="success-message"></div>
+            <div id="errorMessage" style="display: none;" class="error-message"></div>
+
+            <form id="batchForm" onsubmit="submitBatch(event)">
+                <div class="form-group">
+                    <label class="form-label">Batch File (JSONL)</label>
+                    <div class="file-input-wrapper">
+                        <label class="file-input-label">
+                            📁 Click to select file or drag & drop
+                            <input type="file" id="fileInput" class="file-input" accept=".jsonl" required onchange="updateFileName()">
+                        </label>
+                    </div>
+                    <div id="fileName" class="file-name"></div>
+                    <div class="help-text">
+                        Upload a JSONL file with batch requests. Each line should be a JSON object with custom_id, method, url, and body fields.
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Model</label>
+                    <select id="modelSelect" class="form-select" required>
+                        <option value="">Loading models...</option>
+                    </select>
+                    <div class="help-text">
+                        Select the model to use for inference. Model performance varies by size and task.
+                    </div>
+                </div>
+
+                <div id="estimateBox" style="display: none;" class="estimate-box">
+                    <h4 style="margin: 0 0 8px 0;">📊 Estimate</h4>
+                    <div class="estimate-row">
+                        <span>Requests:</span>
+                        <strong id="estimateRequests">-</strong>
+                    </div>
+                    <div class="estimate-row">
+                        <span>Estimated Time:</span>
+                        <strong id="estimateTime">-</strong>
+                    </div>
+                    <div class="estimate-row">
+                        <span>Queue Position:</span>
+                        <strong id="estimateQueue">-</strong>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: var(--spacing-xl);">
+                    <button type="submit" id="submitBtn" class="btn btn-primary">
+                        🚀 Submit Batch Job
+                    </button>
+                </div>
+
+                <div class="form-group">
+                    <button type="button" class="btn btn-secondary" onclick="window.location.href='dashboard.html'" style="width: 100%;">
+                        ← Back to Dashboard
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:4080';
+
+        async function loadModels() {
+            try {
+                const res = await fetch(`${API_BASE}/v1/models`);
+                const data = await res.json();
+                
+                const select = document.getElementById('modelSelect');
+                select.innerHTML = '<option value="">Select a model...</option>';
+                
+                data.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.name;
+                    option.textContent = `${model.display_name || model.name} (${model.size || 'Unknown size'})`;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                document.getElementById('modelSelect').innerHTML = '<option value="">Error loading models</option>';
+                showError('Failed to load models. Make sure API server is running.');
+            }
+        }
+
+        function updateFileName() {
+            const input = document.getElementById('fileInput');
+            const fileName = document.getElementById('fileName');
+            
+            if (input.files.length > 0) {
+                const file = input.files[0];
+                fileName.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+                
+                // Try to count lines for estimate
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const lines = e.target.result.split('\n').filter(l => l.trim()).length;
+                    showEstimate(lines);
+                };
+                reader.readAsText(file);
+            } else {
+                fileName.textContent = '';
+                document.getElementById('estimateBox').style.display = 'none';
+            }
+        }
+
+        async function showEstimate(requestCount) {
+            try {
+                const res = await fetch(`${API_BASE}/health`);
+                const health = await res.json();
+                
+                // Rough estimate: 2500 tok/s, 2000 tokens per request
+                const tokensPerRequest = 2000;
+                const throughput = 2500; // tokens/sec
+                const timeSeconds = (requestCount * tokensPerRequest) / throughput;
+                const timeMinutes = Math.round(timeSeconds / 60);
+                
+                document.getElementById('estimateRequests').textContent = requestCount.toLocaleString();
+                document.getElementById('estimateTime').textContent = 
+                    timeMinutes < 60 ? `~${timeMinutes} minutes` : `~${(timeMinutes / 60).toFixed(1)} hours`;
+                document.getElementById('estimateQueue').textContent = 
+                    health.queue.active_jobs === 0 ? 'Will start immediately' : `${health.queue.active_jobs} jobs ahead`;
+                
+                document.getElementById('estimateBox').style.display = 'block';
+            } catch (error) {
+                console.error('Failed to get estimate:', error);
+            }
+        }
+
+        async function submitBatch(event) {
+            event.preventDefault();
+            
+            const fileInput = document.getElementById('fileInput');
+            const modelSelect = document.getElementById('modelSelect');
+            const submitBtn = document.getElementById('submitBtn');
+            
+            if (!fileInput.files.length) {
+                showError('Please select a file');
+                return;
+            }
+            
+            if (!modelSelect.value) {
+                showError('Please select a model');
+                return;
+            }
+            
+            // Disable submit button
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Submitting...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                formData.append('model', modelSelect.value);
+                
+                const res = await fetch(`${API_BASE}/v1/batches`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!res.ok) {
+                    const error = await res.json();
+                    throw new Error(error.detail || 'Failed to submit batch');
+                }
+                
+                const data = await res.json();
+                showSuccess(`Batch job submitted successfully! Batch ID: ${data.batch_id}`);
+                
+                // Redirect to dashboard after 2 seconds
+                setTimeout(() => {
+                    window.location.href = 'dashboard.html';
+                }, 2000);
+                
+            } catch (error) {
+                showError(error.message);
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 Submit Batch Job';
+            }
+        }
+
+        function showSuccess(message) {
+            const div = document.getElementById('successMessage');
+            div.textContent = message;
+            div.style.display = 'block';
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        function showError(message) {
+            const div = document.getElementById('errorMessage');
+            div.textContent = message;
+            div.style.display = 'block';
+            document.getElementById('successMessage').style.display = 'none';
+        }
+
+        // Load models on page load
+        loadModels();
+    </script>
+</body>
+</html>
+

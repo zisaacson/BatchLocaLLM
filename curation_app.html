@@ -698,15 +698,8 @@
         <!-- Actions Bar -->
         <div class="actions-bar">
             <div class="rating-buttons">
-                <button class="rating-btn" onclick="rateCandidate(1)">1</button>
-                <button class="rating-btn" onclick="rateCandidate(2)">2</button>
-                <button class="rating-btn" onclick="rateCandidate(3)">3</button>
-                <button class="rating-btn" onclick="rateCandidate(4)">4</button>
-                <button class="rating-btn" onclick="rateCandidate(5)">5</button>
-                <button class="rating-btn" onclick="rateCandidate(6)">6</button>
-                <button class="rating-btn" onclick="rateCandidate(7)">7</button>
-                <button class="rating-btn" onclick="rateCandidate(8)">8</button>
-                <button class="rating-btn" onclick="rateCandidate(9)">9</button>
+                <button class="rating-btn" onclick="rateCandidate('bad')" style="background: #dc3545; color: white; font-size: 18px; padding: 18px 50px; font-weight: 700;">❌ Bad Sample</button>
+                <button class="rating-btn" onclick="rateCandidate('good')" style="background: #28a745; color: white; font-size: 18px; padding: 18px 50px; font-weight: 700;">✅ Good Sample</button>
             </div>
             <div class="nav-buttons">
                 <button class="nav-btn btn-skip" onclick="skipCandidate()">Skip (s)</button>
@@ -1392,7 +1385,8 @@
                 updateStats();
 
                 // Show feedback
-                showToast(`⭐ Rated ${rating}/10`);
+                const label = rating === 'good' ? '✅ Good Sample' : '❌ Bad Sample';
+                showToast(label);
 
                 // Auto-advance - reapply filter if needed
                 setTimeout(() => {

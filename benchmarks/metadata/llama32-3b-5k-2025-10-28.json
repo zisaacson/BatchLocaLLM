@@ -1,0 +1,22 @@
+{
+  "model": "meta-llama/Llama-3.2-3B-Instruct",
+  "timestamp": "2025-10-28T19:00:11.967101",
+  "batch_size": 5000,
+  "successful": 5000,
+  "failed": 0,
+  "total_time_seconds": 781.7753481864929,
+  "load_time_seconds": 6.4695141315460205,
+  "prompt_tokens": 3577156,
+  "completion_tokens": 1657438,
+  "total_tokens": 5234594,
+  "throughput_tokens_per_second": 6695.777773170823,
+  "avg_prompt_tokens": 715.4312,
+  "avg_completion_tokens": 331.4876,
+  "configuration": {
+    "max_model_len": 4096,
+    "gpu_memory_utilization": 0.9,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "max_tokens": 2000
+  }
+}
