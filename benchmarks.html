@@ -634,7 +634,7 @@
                 return;
             }
 
-            if (comparisonMode && selectedRuns.length > 1) {
+            if (comparisonMode) {
                 displayComparison();
             } else {
                 displaySingleRun(selectedRuns[0]);
@@ -723,39 +723,62 @@
         }
 
         function displayComparison() {
-            let html = '<h3 style="color: #2d3748; margin-bottom: 20px;">Comparing ' + selectedRuns.length + ' Benchmark Runs</h3>';
+            let html = '<h3 style="color: #2d3748; margin-bottom: 20px;">Comparing ' + selectedRuns.length + ' Benchmark Run(s)</h3>';
             html += '<div class="comparison-grid">';
 
             selectedRuns.forEach(index => {
                 const benchmark = allBenchmarks[index];
-                const data = benchmark.data;
+                const data = Array.isArray(benchmark.data) ? benchmark.data : [benchmark.data];
+                const firstTest = data[0];
+
+                // Get display info
+                const model = firstTest?.model || 'Unknown';
+                const modelShort = model.split('/').pop() || model;
+                const testName = firstTest?.test_name || 'Unknown Test';
 
                 html += `
                     <div class="comparison-card">
-                        <h4>📅 ${benchmark.timestamp_human || new Date(benchmark.timestamp * 1000).toLocaleString()}</h4>
+                        <h4>${modelShort} - ${testName}</h4>
+                        <p style="color: #718096; font-size: 12px; margin: 5px 0 10px 0;">
+                            ${benchmark.timestamp_human || new Date(benchmark.timestamp * 1000).toLocaleString()}
+                        </p>
                         <table class="benchmark-table" style="font-size: 13px;">
                             <thead>
                                 <tr>
                                     <th>Mode</th>
-                                    <th>Size</th>
-                                    <th>Throughput</th>
-                                    <th>P50 Latency</th>
+                                    <th>Requests</th>
+                                    <th>Time (min)</th>
+                                    <th>Throughput (req/s)</th>
+                                    <th>Throughput (tok/s)</th>
+                                    <th>Success Rate</th>
                                 </tr>
                             </thead>
                             <tbody>
                 `;
 
                 data.forEach(result => {
-                    const modeBadge = result.mode === 'serve_high_parallelism'
-                        ? '<span class="mode-badge mode-batched">HP</span>'
-                        : '<span class="mode-badge mode-inngest">IS</span>';
+                    const mode = result.mode || 'N/A';
+                    const modeBadge = mode === 'offline_batch'
+                        ? '<span class="mode-badge mode-batched">📦 Offline</span>'
+                        : mode === 'server'
+                        ? '<span class="mode-badge mode-inngest">🌐 Server</span>'
+                        : mode;
+
+                    const timeMin = result.total_time_seconds ? (result.total_time_seconds / 60).toFixed(2) : 'N/A';
+                    const throughputReq = result.throughput_req_per_sec ? result.throughput_req_per_sec.toFixed(2) : 'N/A';
+                    const throughputTok = result.throughput_tokens_per_sec ? Math.round(result.throughput_tokens_per_sec) : 'N/A';
+                    const successRate = result.success_rate_pct !== null && result.success_rate_pct !== undefined
+                        ? result.success_rate_pct.toFixed(1) + '%'
+                        : 'N/A';
 
                     html += `
                         <tr>
                             <td>${modeBadge}</td>
-                            <td>${result.size}</td>
-                            <td>${result.throughput_req_per_sec.toFixed(0)} req/s</td>
-                            <td>${result.latency_p50_ms.toFixed(2)} ms</td>
+                            <td>${result.num_requests || 'N/A'}</td>
+                            <td>${timeMin}</td>
+                            <td>${throughputReq}</td>
+                            <td>${throughputTok}</td>
+                            <td>${successRate}</td>
                         </tr>
                     `;
                 });
