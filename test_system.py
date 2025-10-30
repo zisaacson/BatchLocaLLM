@@ -90,14 +90,17 @@ def test_html_files():
             'compare_models.html',
             'compare_results.html',
             'view_results.html',
-            'dashboard.html'
+            'dashboard.html',
+            'api_docs.html',
+            'monitor.html',
+            'submit_batch.html'
         ]
-        
+
         missing = []
         for file in required_files:
             if not Path(file).exists():
                 missing.append(file)
-        
+
         if missing:
             print(f"❌ Missing HTML files: {', '.join(missing)}")
             return False
