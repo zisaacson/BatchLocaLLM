@@ -17,6 +17,8 @@ from vllm import LLM, SamplingParams
 import requests
 import os
 import atexit
+import asyncio
+import aiohttp
 
 # ============================================================================
 # STATUS TRACKING
@@ -272,15 +274,100 @@ def run_offline_batch(batch_data: List[Dict], model: str, test_name: str) -> Ben
     
     return result
 
-def run_server_mode(batch_data: List[Dict], model: str, server_url: str, test_name: str) -> BenchmarkResult:
-    """Run vLLM server mode benchmark."""
-    print(f"\n{'='*80}")
-    print(f"🌐 SERVER MODE - {model}")
-    print(f"{'='*80}")
-    
+async def send_request_async(session, server_url: str, model: str, req: Dict, semaphore):
+    """Send a single request asynchronously with concurrency control."""
+    async with semaphore:
+        req_start = time.time()
+        try:
+            async with session.post(
+                f"{server_url}/v1/chat/completions",
+                json={
+                    "model": model,
+                    "messages": req['body']['messages'],
+                    "temperature": 0.7,
+                    "top_p": 0.9,
+                    "max_tokens": 2000
+                },
+                timeout=aiohttp.ClientTimeout(total=120)
+            ) as response:
+                req_latency_ms = (time.time() - req_start) * 1000
+
+                if response.status == 200:
+                    res_data = await response.json()
+                    usage = res_data.get('usage', {})
+                    return {
+                        'success': True,
+                        'latency_ms': req_latency_ms,
+                        'prompt_tokens': usage.get('prompt_tokens', 0),
+                        'completion_tokens': usage.get('completion_tokens', 0)
+                    }
+                else:
+                    return {'success': False, 'latency_ms': req_latency_ms}
+        except Exception as e:
+            return {'success': False, 'latency_ms': (time.time() - req_start) * 1000}
+
+async def run_server_mode_async(batch_data: List[Dict], model: str, server_url: str, test_name: str, concurrency: int = 10):
+    """Run vLLM server mode benchmark with parallel requests."""
     result = BenchmarkResult(test_name, model, 'server')
     result.num_requests = len(batch_data)
-    
+    result.config = {'server_url': server_url, 'concurrency': concurrency}
+
+    print(f"Processing {len(batch_data)} requests via server with concurrency={concurrency}...")
+
+    from tqdm.asyncio import tqdm as async_tqdm
+
+    inference_start = time.time()
+
+    # Create semaphore to limit concurrency
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for i, req in enumerate(batch_data):
+            task = send_request_async(session, server_url, model, req, semaphore)
+            tasks.append(task)
+
+        # Process all requests with progress bar
+        results = []
+        for i, coro in enumerate(async_tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="Sending requests")):
+            res = await coro
+            results.append(res)
+
+            # Update status every 10 requests
+            if i % 10 == 0:
+                update_status(test_name, model, 'server', i, len(batch_data))
+
+    # Aggregate results
+    for res in results:
+        if res['success']:
+            result.successful_requests += 1
+            result.latencies_ms.append(res['latency_ms'])
+            result.prompt_tokens += res.get('prompt_tokens', 0)
+            result.completion_tokens += res.get('completion_tokens', 0)
+        else:
+            result.failed_requests += 1
+
+    result.inference_time_seconds = time.time() - inference_start
+    result.total_time_seconds = result.inference_time_seconds
+    result.total_tokens = result.prompt_tokens + result.completion_tokens
+
+    result.calculate_metrics()
+
+    print(f"\n📊 Results:")
+    print(f"  Inference Time: {result.inference_time_seconds:.2f}s ({result.inference_time_seconds/60:.2f} min)")
+    print(f"  Throughput: {result.throughput_req_per_sec:.2f} req/s")
+    print(f"  Throughput: {result.throughput_tokens_per_sec:.0f} tokens/s")
+    print(f"  Success Rate: {result.success_rate_pct:.1f}%")
+    print(f"  Concurrency: {concurrency}")
+
+    return result
+
+def run_server_mode(batch_data: List[Dict], model: str, server_url: str, test_name: str, concurrency: int = 10) -> BenchmarkResult:
+    """Run vLLM server mode benchmark with parallel requests."""
+    print(f"\n{'='*80}")
+    print(f"🌐 SERVER MODE - {model} (Concurrency: {concurrency})")
+    print(f"{'='*80}")
+
     # Check server
     try:
         response = requests.get(f"{server_url}/v1/models", timeout=5)
@@ -291,66 +378,9 @@ def run_server_mode(batch_data: List[Dict], model: str, server_url: str, test_na
         print(f"❌ ERROR: vLLM server not running at {server_url}")
         print(f"   Start server with: vllm serve {model} --port 4080")
         return None
-    
-    result.config = {'server_url': server_url}
-    
-    # Send requests
-    print(f"Processing {len(batch_data)} requests via server...")
 
-    from tqdm import tqdm
-    inference_start = time.time()
-
-    for i, req in enumerate(tqdm(batch_data, desc="Sending requests")):
-        # Update status every 10 requests
-        if i % 10 == 0:
-            update_status(test_name, model, 'server', i, len(batch_data))
-
-        req_start = time.time()
-        try:
-            response = requests.post(
-                f"{server_url}/v1/chat/completions",
-                json={
-                    "model": model,
-                    "messages": req['body']['messages'],
-                    "temperature": 0.7,
-                    "top_p": 0.9,
-                    "max_tokens": 2000
-                },
-                timeout=120
-            )
-            
-            req_latency_ms = (time.time() - req_start) * 1000
-            
-            if response.status_code == 200:
-                res_data = response.json()
-                result.successful_requests += 1
-                result.latencies_ms.append(req_latency_ms)
-                
-                usage = res_data.get('usage', {})
-                result.prompt_tokens += usage.get('prompt_tokens', 0)
-                result.completion_tokens += usage.get('completion_tokens', 0)
-            else:
-                result.failed_requests += 1
-                
-        except Exception as e:
-            result.failed_requests += 1
-    
-    result.inference_time_seconds = time.time() - inference_start
-    result.total_time_seconds = result.inference_time_seconds
-    result.total_tokens = result.prompt_tokens + result.completion_tokens
-    
-    result.calculate_metrics()
-    
-    print(f"\n📊 Results:")
-    print(f"  Inference Time: {result.inference_time_seconds:.2f}s ({result.inference_time_seconds/60:.2f} min)")
-    print(f"  Successful: {result.successful_requests}/{result.num_requests}")
-    print(f"  Throughput: {result.throughput_req_per_sec:.2f} req/s")
-    print(f"  Throughput: {result.throughput_tokens_per_sec:.0f} tokens/s")
-    print(f"  Latency P50: {result.latency_p50_ms:.2f}ms")
-    print(f"  Latency P95: {result.latency_p95_ms:.2f}ms")
-    print(f"  Success Rate: {result.success_rate_pct:.1f}%")
-    
-    return result
+    # Run async version
+    return asyncio.run(run_server_mode_async(batch_data, model, server_url, test_name, concurrency))
 
 # ============================================================================
 # MAIN
@@ -362,9 +392,10 @@ def main():
     parser.add_argument('--model', type=str, default='google/gemma-3-4b-it', help='Model to benchmark')
     parser.add_argument('--batch-file', type=str, default='batch_5k.jsonl', help='Input batch file')
     parser.add_argument('--size', type=int, help='Limit number of requests')
-    parser.add_argument('--mode', type=str, choices=['offline', 'server', 'both'], default='offline', 
+    parser.add_argument('--mode', type=str, choices=['offline', 'server', 'both'], default='offline',
                         help='Benchmark mode')
     parser.add_argument('--server-url', type=str, default='http://localhost:4080', help='vLLM server URL')
+    parser.add_argument('--concurrency', type=int, default=10, help='Number of parallel requests for server mode (default: 10)')
     
     args = parser.parse_args()
     
@@ -387,7 +418,7 @@ def main():
             results.append(result)
     
     if args.mode in ['server', 'both']:
-        result = run_server_mode(batch_data, args.model, args.server_url, args.name)
+        result = run_server_mode(batch_data, args.model, args.server_url, args.name, args.concurrency)
         if result:
             result.save()
             results.append(result)
