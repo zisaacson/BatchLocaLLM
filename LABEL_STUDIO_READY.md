@@ -1,8 +1,8 @@
-# ✅ Label Studio is Ready!
+# ⚠️ Label Studio - PLANNED FEATURE (Not Yet Integrated)
 
-## 🎉 Everything is Set Up
+## 📋 Current Status: PREPARED BUT NOT INTEGRATED
 
-I've configured Label Studio for your gold-star candidate curation. Here's what's ready:
+Label Studio container is running and data is prepared, but **integration with the web app is not yet implemented**. The custom curation UI (`curation_app.html`) is currently being used instead.
 
 ---
 

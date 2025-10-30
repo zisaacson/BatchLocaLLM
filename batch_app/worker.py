@@ -10,16 +10,15 @@ Features:
 
 import time
 import json
-import sys
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional
 
 from sqlalchemy.orm import Session
 from vllm import LLM, SamplingParams
 
-from .database import SessionLocal, BatchJob, FailedRequest, WorkerHeartbeat
+from .database import SessionLocal, BatchJob, WorkerHeartbeat
 from .benchmarks import get_benchmark_manager
 from .webhooks import send_webhook_async
 
@@ -314,7 +313,7 @@ class BatchWorker:
                     self.log(log_file, f"📊 Chunk throughput: {chunk_throughput:.0f} tokens/sec")
 
                     # Save chunk results incrementally
-                    self.log(log_file, f"💾 Saving chunk results...")
+                    self.log(log_file, "💾 Saving chunk results...")
                     saved = self.save_chunk_results(
                         outputs,
                         chunk_requests,
@@ -340,7 +339,7 @@ class BatchWorker:
                     self.log(log_file, f"❌ Chunk {chunk_num} failed: {e}")
                     raise
 
-            self.log(log_file, f"\n✅ All chunks processed successfully!")
+            self.log(log_file, "\n✅ All chunks processed successfully!")
 
             # Calculate final metrics
             throughput = total_tokens / total_inference_time if total_inference_time > 0 else 0

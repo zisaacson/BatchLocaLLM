@@ -109,6 +109,24 @@
             border-color: #667eea;
         }
 
+        .export-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .export-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
         /* Main Card Container */
         .card-container {
             flex: 1;
@@ -651,6 +669,7 @@
                     <option value="skipped">Skipped Only</option>
                 </select>
                 <input type="text" class="search-input" id="search-input" placeholder="Search by name..." oninput="applyFilter()">
+                <button class="export-btn" onclick="exportDataset()">📤 Export</button>
             </div>
 
             <div class="stats">
@@ -1702,6 +1721,52 @@
 
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 2000);
+        }
+
+        // Export dataset
+        window.exportDataset = async function() {
+            const format = prompt('Export format:\n1. ICL (In-Context Learning)\n2. Fine-tuning\n3. Raw\n\nEnter 1, 2, or 3:', '1');
+
+            if (!format) return;
+
+            const formatMap = {
+                '1': 'icl',
+                '2': 'finetuning',
+                '3': 'raw'
+            };
+
+            const exportFormat = formatMap[format] || 'icl';
+            const minQuality = prompt('Minimum quality score (1-10):', '7');
+
+            if (!minQuality) return;
+
+            try {
+                showToast('Exporting dataset...', 'info');
+
+                const response = await fetch(`/api/export-gold-star?format=${exportFormat}&min_quality=${minQuality}`);
+
+                if (!response.ok) {
+                    throw new Error('Export failed');
+                }
+
+                const result = await response.json();
+
+                // Download the file
+                const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = result.filename || `gold_star_${exportFormat}_${Date.now()}.jsonl`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                showToast(`Exported ${result.count} examples!`, 'success');
+            } catch (error) {
+                console.error('Export error:', error);
+                showToast('Export failed', 'error');
+            }
         }
     </script>
 </body>

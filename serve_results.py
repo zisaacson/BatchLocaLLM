@@ -261,7 +261,7 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                                 'timestamp_human': datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S'),
                                 'data': data
                             })
-                    except Exception as e:
+                    except Exception:
                         pass
 
                 # Sort by timestamp (newest first)
@@ -591,6 +591,77 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': str(e)}).encode())
+
+        # API endpoint to export gold-star dataset
+        elif parsed_path.path == '/api/export-gold-star':
+            try:
+                query = parse_qs(parsed_path.query)
+                export_format = query.get('format', ['icl'])[0]
+                min_quality = int(query.get('min_quality', ['7'])[0])
+
+                starred_file = 'data/gold_star/starred.jsonl'
+
+                if not os.path.exists(starred_file):
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        'count': 0,
+                        'data': [],
+                        'filename': f'gold_star_{export_format}.jsonl'
+                    }).encode())
+                    return
+
+                # Load starred examples
+                starred_examples = []
+                with open(starred_file, 'r') as f:
+                    for line in f:
+                        if line.strip():
+                            example = json.loads(line)
+                            quality = example.get('quality_score', 0)
+                            if quality >= min_quality:
+                                starred_examples.append(example)
+
+                # Format based on export type
+                if export_format == 'icl':
+                    # In-Context Learning format: just the examples
+                    data = starred_examples
+                elif export_format == 'finetuning':
+                    # Fine-tuning format: convert to messages format
+                    data = []
+                    for ex in starred_examples:
+                        data.append({
+                            'messages': [
+                                {'role': 'user', 'content': ex.get('prompt', '')},
+                                {'role': 'assistant', 'content': ex.get('response', '')}
+                            ],
+                            'metadata': {
+                                'custom_id': ex.get('custom_id'),
+                                'quality_score': ex.get('quality_score'),
+                                'notes': ex.get('notes', '')
+                            }
+                        })
+                else:  # raw
+                    data = starred_examples
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'count': len(data),
+                    'data': data,
+                    'filename': f'gold_star_{export_format}_{len(data)}_examples.jsonl',
+                    'format': export_format,
+                    'min_quality': min_quality
+                }).encode())
+
+            except Exception as e:
+                print(f"Export error: {e}")
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+
         # Serve curation app
         elif parsed_path.path == '/curate' or parsed_path.path == '/curate/':
             try:

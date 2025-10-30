@@ -9,7 +9,6 @@ import requests
 import json
 import time
 from datetime import datetime
-from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 
 from .database import BatchJob

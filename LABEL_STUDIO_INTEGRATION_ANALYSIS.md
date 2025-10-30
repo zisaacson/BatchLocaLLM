@@ -1,5 +1,9 @@
 # Label Studio Integration Analysis
 
+## ⚠️ STATUS: PLANNED FEATURE (NOT YET IMPLEMENTED)
+
+This document describes the **planned architecture** for Label Studio integration. Currently, the system uses a custom curation UI (`curation_app.html`) with local JSONL storage (`data/gold_star/starred.jsonl`).
+
 ## 🎯 Executive Summary
 
 **Recommendation: Use Label Studio as backend + build custom web UI on top**
