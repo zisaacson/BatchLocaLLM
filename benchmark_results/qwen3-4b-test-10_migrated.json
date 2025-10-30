@@ -1,0 +1,32 @@
+{
+  "test_name": "qwen3-4b-test-10",
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "mode": "offline_batch",
+  "timestamp": "2025-10-28T17:04:49Z",
+  "model_load_time_seconds": 678.5035054683685,
+  "inference_time_seconds": 7.211113452911377,
+  "total_time_seconds": 685.7146189212799,
+  "num_requests": 10,
+  "successful_requests": 10,
+  "failed_requests": 0,
+  "success_rate_pct": 100.0,
+  "prompt_tokens": 7946,
+  "completion_tokens": 3112,
+  "total_tokens": 11058,
+  "avg_prompt_tokens": 794.6,
+  "avg_completion_tokens": 311.2,
+  "throughput_req_per_sec": 1.39,
+  "throughput_tokens_per_sec": 1533,
+  "latency_p50_ms": 0,
+  "latency_p95_ms": 0,
+  "latency_p99_ms": 0,
+  "latency_min_ms": 0,
+  "latency_max_ms": 0,
+  "config": {
+    "max_model_len": 4096,
+    "gpu_memory_utilization": 0.9,
+    "enable_prefix_caching": true,
+    "chunked_prefill_enabled": true
+  },
+  "notes": "Migrated from benchmarks/metadata/qwen3-4b-10-2025-10-28.json"
+}
