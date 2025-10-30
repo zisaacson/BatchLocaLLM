@@ -482,7 +482,7 @@
     <script>
         let allBenchmarks = [];
         let selectedRuns = [];
-        let comparisonMode = false;
+        let comparisonMode = true; // Enable multi-select by default
 
         // Update metrics every 5 seconds
         async function updateMetrics() {
@@ -774,6 +774,10 @@
         // Initial load
         updateMetrics();
         loadBenchmarkRuns();
+
+        // Set comparison mode active by default
+        document.getElementById('comparison-toggle').classList.add('active');
+        document.getElementById('comparison-help').style.display = 'block';
 
         // Auto-refresh
         setInterval(updateMetrics, 5000);
