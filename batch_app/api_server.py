@@ -55,7 +55,7 @@ class CreateBatchRequest(BaseModel):
     input_file_id: str = Field(..., description="ID of uploaded input file")
     endpoint: str = Field("/v1/chat/completions", description="API endpoint")
     completion_window: str = Field("24h", description="Completion window")
-    metadata: (dict] = Field(None, description="Custom metadata")
+    metadata: dict[str, any] | None = Field(None, description="Custom metadata")
 
 
 class CancelBatchRequest(BaseModel):

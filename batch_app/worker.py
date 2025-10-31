@@ -80,7 +80,7 @@ class BatchWorker:
         self.current_model = None
         self.benchmark_mgr = get_benchmark_manager()
 
-    def update_heartbeat(self, db: Session, status: str = 'idle', job_id: (str) | None = None):
+    def update_heartbeat(self, db: Session, status: str = 'idle', job_id: str | None = None):
         """Update worker heartbeat for health monitoring."""
         try:
             gpu_status = check_gpu_health()

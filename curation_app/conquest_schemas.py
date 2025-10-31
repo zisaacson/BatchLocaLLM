@@ -40,13 +40,13 @@ class RenderingConfig(BaseModel):
     showLLMPrediction: bool = True
     showDataSources: bool = True
     showRubrics: bool = True
-    customCSS: (str) | None = None
+    customCSS: str | None = None
 
 
 class ExportConfig(BaseModel):
     """Export format configuration"""
-    iclFormat: (dict[str, str]) | None = None
-    finetuningFormat: (dict[str, list[str]]) | None = None
+    iclFormat: dict[str, str] | None = None
+    finetuningFormat: dict[str, list[str]] | None = None
 
 
 class ConquestSchema(BaseModel):
@@ -58,8 +58,8 @@ class ConquestSchema(BaseModel):
     dataSources: list[DataSource]
     questions: list[Question]
     rendering: RenderingConfig
-    export: (ExportConfig) | None = None
-    labelStudioConfig: (str) | None = None
+    export: ExportConfig | None = None
+    labelStudioConfig: str | None = None
 
 
 class ConquestSchemaRegistry:
@@ -86,7 +86,7 @@ class ConquestSchemaRegistry:
             except Exception as e:
                 logger.error(f"Failed to load schema {schema_file}: {e}")
     
-    def get_schema(self, conquest_type: str) -> (ConquestSchema]:
+    def get_schema(self, conquest_type: str) -> ConquestSchema | None:
         """Get schema by conquest type ID"""
         return self.schemas.get(conquest_type)
     

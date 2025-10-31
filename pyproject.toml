@@ -3,23 +3,25 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ollama-batch-server"
-version = "0.1.0"
-description = "OpenAI-compatible batch processing server powered by Ollama for consumer GPUs"
+name = "vllm-batch-server"
+version = "1.0.0"
+description = "OpenAI-compatible batch processing server powered by vLLM with integrated data curation system"
 readme = "README.md"
 requires-python = ">=3.13"
 license = {text = "Apache-2.0"}
 authors = [
-    {name = "Ollama Batch Server Contributors"}
+    {name = "vLLM Batch Server Contributors"}
 ]
 keywords = [
     "llm",
     "batch-processing",
-    "ollama",
+    "vllm",
     "openai",
     "inference",
-    "consumer-gpu",
-    "machine-learning"
+    "gpu",
+    "machine-learning",
+    "data-curation",
+    "label-studio"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -64,13 +66,10 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/YOUR_ORG/vllm-batch-server"
-Documentation = "https://github.com/YOUR_ORG/vllm-batch-server/blob/main/README.md"
-Repository = "https://github.com/YOUR_ORG/vllm-batch-server"
-Issues = "https://github.com/YOUR_ORG/vllm-batch-server/issues"
-
-[tool.setuptools.packages.find]
-where = ["src"]
+Homepage = "https://github.com/zisaacson/vllm-batch-server"
+Documentation = "https://github.com/zisaacson/vllm-batch-server/blob/main/README.md"
+Repository = "https://github.com/zisaacson/vllm-batch-server"
+Issues = "https://github.com/zisaacson/vllm-batch-server/issues"
 
 [tool.black]
 line-length = 100
@@ -140,7 +139,8 @@ asyncio_mode = "auto"
 addopts = [
     "--strict-markers",
     "--strict-config",
-    "--cov=src",
+    "--cov=batch_app",
+    "--cov=curation_app",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
@@ -152,7 +152,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src"]
+source = ["batch_app", "curation_app"]
 omit = ["tests/*", "**/__pycache__/*"]
 
 [tool.coverage.report]

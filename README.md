@@ -4,122 +4,133 @@
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![vLLM](https://img.shields.io/badge/vLLM-0.11.0-green.svg)](https://github.com/vllm-project/vllm)
 
-**Two independent implementations for batch LLM inference**
+**OpenAI-compatible batch processing server powered by vLLM with integrated data curation system**
 
-This repository contains **two separate branches** for different use cases:
+Production-ready batch inference system for local LLMs running on consumer GPUs (RTX 4080 16GB). Includes beautiful web UI for curating training datasets from batch results.
 
-- **`ollama` branch** - Consumer GPU implementation (RTX 4080 16GB) using Ollama
-- **`vllm` branch** - Production GPU implementation (24GB+ VRAM) using vLLM with model hot-swapping
+## ✨ Features
 
-**⚠️ These branches never merge - they are independent implementations.**
+### 🚀 Batch Processing
+- **OpenAI-compatible API** - Drop-in replacement for OpenAI Batch API
+- **vLLM Offline Engine** - Optimized for RTX 4080 16GB (Gemma 3 4B, Qwen 2.5 3B, Llama 3.2 3B)
+- **Intelligent Chunking** - Process 5K+ requests safely with automatic memory management
+- **Incremental Saves** - Resume from crashes, never lose progress
+- **Webhook Notifications** - Get notified when batches complete
 
-## 📊 Benchmark Results
+### 🎨 Data Curation System
+- **Beautiful Web UI** - View and curate all batch results
+- **Label Studio Backend** - PostgreSQL-backed annotation database
+- **Schema-Driven** - Support for 6 conquest types (candidate evaluation, CV parsing, etc.)
+- **Gold-Star Datasets** - Mark best examples for in-context learning and fine-tuning
+- **Auto-Import** - Batch results automatically flow into curation UI
 
-See **[BENCHMARKS.md](BENCHMARKS.md)** for the single source of truth on all testing, decisions, and performance comparisons.
+### 📊 Monitoring & Benchmarking
+- **Prometheus + Grafana** - GPU metrics, throughput tracking
+- **Benchmark System** - Compare models, track quality vs speed
+- **Health Checks** - GPU temperature and memory monitoring
 
-## 🎯 Which Branch Should I Use?
+## 🏗️ Architecture
 
-### `ollama` Branch - Consumer GPUs (16GB VRAM)
-**Use this if you have:** RTX 4080, RTX 3090, RTX 4090, or similar consumer GPUs
-
-**Features:**
-- ✅ Optimized for 16GB VRAM
-- ✅ Uses Ollama for easy model management
-- ✅ Parallel batch processing (8 workers)
-- ✅ Comprehensive benchmarking system
-- ✅ **Tested:** gemma3:1b @ 0.92 req/s (73% GPU efficiency)
-
-**Best for:** Local development, testing, cost-effective inference
-
-### `vllm` Branch - Production GPUs (24GB+ VRAM)
-**Use this if you have:** A100, H100, RTX 6000 Ada, or cloud GPUs
-
-**Features:**
-- ✅ vLLM's native continuous batching
-- ✅ Model hot-swapping for A/B testing
-- ✅ 4-bit quantization support (fits 12B models in 16GB)
-- ✅ OpenAI-compatible API
-- ✅ **Testing:** Offline vs Server mode comparison
-
-**Best for:** Production deployments, A/B testing, maximum throughput
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Aris (Next.js App)                       │
+│              http://10.0.0.223:3000                         │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│              vLLM Batch API (Port 4080)                     │
+│  • OpenAI-compatible endpoints                              │
+│  • SQLite job queue                                         │
+│  • File upload/download                                     │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Batch Worker (Background)                      │
+│  • Polls job queue                                          │
+│  • Loads models with vLLM                                   │
+│  • Processes 5K chunks                                      │
+│  • Saves incrementally                                      │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│           Label Studio (Port 8080)                          │
+│  • PostgreSQL database                                      │
+│  • Stores tasks & annotations                               │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│           Curation API (Port 8001)                          │
+│  • Schema-driven wrapper                                    │
+│  • Beautiful web UI                                         │
+│  • Export gold-star datasets                                │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ## 🚀 Quick Start
 
-### 1. Choose Your Branch
+### Prerequisites
+
+- **GPU**: RTX 4080 16GB (or similar with 16GB+ VRAM)
+- **Python**: 3.13+
+- **CUDA**: 12.1+
+- **PostgreSQL**: 14+ (for Label Studio)
+
+### Installation
 
 ```bash
-# For consumer GPUs (16GB VRAM)
+# Clone repository
 git clone https://github.com/zisaacson/vllm-batch-server.git
 cd vllm-batch-server
-git checkout ollama
 
-# For production GPUs (24GB+ VRAM) or 4-bit quantization
-git checkout vllm
+# Create virtual environment
+python3.13 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install vLLM (requires CUDA)
+pip install vllm==0.11.0
+
+# Initialize databases
+python -c "from batch_app.database import init_db; init_db()"
 ```
 
-### 2. Follow Branch-Specific Instructions
+### Start Services
 
-Each branch has its own README with setup instructions:
-- **`ollama` branch:** See README for Ollama setup
-- **`vllm` branch:** See README for vLLM setup
+```bash
+# Terminal 1: Start Label Studio
+docker-compose -f docker/docker-compose.yml up label-studio
 
-### 3. Check Benchmark Results
+# Terminal 2: Start Batch API
+make run-api
 
-See **[BENCHMARKS.md](BENCHMARKS.md)** for:
-- Performance comparisons
-- Test results
-- Decision log
-- Hardware requirements
+# Terminal 3: Start Batch Worker
+make run-worker
 
-## 📋 Repository Structure
-
-```
-master (this branch)
-├── BENCHMARKS.md          ← Single source of truth for all testing
-├── README.md              ← This file
-└── batch_5k.jsonl         ← 5K sample dataset for testing
-
-ollama branch
-├── Full Ollama implementation
-├── Parallel batch processing
-├── Benchmarking system
-└── Tested on RTX 4080 16GB
-
-vllm branch
-├── Full vLLM implementation
-├── Model hot-swapping
-├── A/B testing scripts
-└── 4-bit quantization support
+# Terminal 4: Start Curation UI
+make run-curation
 ```
 
-## 🧪 Testing & Benchmarking
+### Access UIs
 
-All benchmark results are tracked in **[BENCHMARKS.md](BENCHMARKS.md)**.
-
-# Start the server
-docker-compose up -d
-
-# Check health
-curl http://localhost:8000/health
-```
-
-The server will:
-1. Download the model (first run only)
-2. Load it into GPU memory
-3. Start accepting batch requests on port 8000
+- **Batch API**: http://localhost:4080
+- **Curation UI**: http://localhost:8001
+- **Label Studio**: http://localhost:8080
+- **Prometheus**: http://localhost:4022
+- **Grafana**: http://localhost:4023
 
 ## 📖 Usage
 
 ### Submit a Batch Job
 
 ```python
-from openai import OpenAI
-
-# Point to your local vLLM batch server
-client = OpenAI(
-    base_url="http://localhost:8000/v1",
-    api_key="not-needed-for-local"
-)
+import requests
+import json
 
 # Create batch input file (JSONL format)
 batch_requests = [
@@ -128,129 +139,80 @@ batch_requests = [
         "method": "POST",
         "url": "/v1/chat/completions",
         "body": {
-            "model": "meta-llama/Llama-3.1-8B-Instruct",
+            "model": "google/gemma-2-2b-it",
             "messages": [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "What is the capital of France?"}
+                {"role": "user", "content": "Evaluate this candidate..."}
             ],
-            "max_tokens": 100
-        }
-    },
-    {
-        "custom_id": "request-2",
-        "method": "POST",
-        "url": "/v1/chat/completions",
-        "body": {
-            "model": "meta-llama/Llama-3.1-8B-Instruct",
-            "messages": [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "What is 2+2?"}
-            ],
-            "max_tokens": 100
+            "max_tokens": 500
         }
     }
 ]
 
-# Write to JSONL file
+# Write to file
 with open("batch_input.jsonl", "w") as f:
     for req in batch_requests:
         f.write(json.dumps(req) + "\n")
 
-# Upload file
-with open("batch_input.jsonl", "rb") as f:
-    file = client.files.create(file=f, purpose="batch")
+# Upload file and create batch
+response = requests.post(
+    "http://localhost:4080/v1/files",
+    files={"file": open("batch_input.jsonl", "rb")},
+    data={"purpose": "batch"}
+)
+file_id = response.json()["id"]
 
 # Create batch job
-batch = client.batches.create(
-    input_file_id=file.id,
-    endpoint="/v1/chat/completions",
-    completion_window="24h"
+batch_response = requests.post(
+    "http://localhost:4080/v1/batches",
+    json={
+        "input_file_id": file_id,
+        "endpoint": "/v1/chat/completions",
+        "completion_window": "24h"
+    }
 )
-
-print(f"Batch created: {batch.id}")
-print(f"Status: {batch.status}")
+batch_id = batch_response.json()["id"]
+print(f"Batch created: {batch_id}")
 ```
 
-### Check Batch Status
+### View Results in Curation UI
 
-```python
-# Poll for completion
-import time
+After batch completes, results are automatically imported to the curation UI:
 
-while True:
-    batch_status = client.batches.retrieve(batch.id)
-    print(f"Status: {batch_status.status}")
-    
-    if batch_status.status == "completed":
-        break
-    elif batch_status.status == "failed":
-        print("Batch failed!")
-        break
-    
-    time.sleep(5)
-```
+1. Open http://localhost:8001
+2. Select conquest type (e.g., "candidate_evaluation")
+3. View all results side-by-side
+4. Mark gold-star examples for training datasets
+5. Export curated datasets for ICL or fine-tuning
 
-### Download Results
-
-```python
-# Get results
-if batch_status.output_file_id:
-    result_content = client.files.content(batch_status.output_file_id)
-    results = result_content.text()
-    
-    # Parse JSONL results
-    for line in results.strip().split("\n"):
-        result = json.loads(line)
-        print(f"Request {result['custom_id']}: {result['response']['body']['choices'][0]['message']['content']}")
-```
-
-## 🏗️ Architecture
+## 📋 Repository Structure
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Your Application                      │
-│              (Uses OpenAI Python SDK)                    │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     │ HTTP (OpenAI-compatible API)
-                     │
-┌────────────────────▼────────────────────────────────────┐
-│              vLLM Batch Server (FastAPI)                │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Batch API Endpoints                            │   │
-│  │  - POST /v1/batches (create)                    │   │
-│  │  - GET /v1/batches/{id} (status)                │   │
-│  │  - POST /v1/batches/{id}/cancel                 │   │
-│  │  - POST /v1/files (upload)                      │   │
-│  │  - GET /v1/files/{id}/content (download)        │   │
-│  └─────────────────────────────────────────────────┘   │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Batch Processor                                │   │
-│  │  - JSONL parsing                                │   │
-│  │  - Job queue management                         │   │
-│  │  - Result aggregation                           │   │
-│  └─────────────────────────────────────────────────┘   │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Storage Layer                                  │   │
-│  │  - Local file storage for jobs/results         │   │
-│  │  - SQLite for job metadata                     │   │
-│  └─────────────────────────────────────────────────┘   │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     │ Python API calls
-                     │
-┌────────────────────▼────────────────────────────────────┐
-│                   vLLM Engine                           │
-│  - Continuous batching                                  │
-│  - Automatic prefix caching                             │
-│  - PagedAttention                                       │
-│  - GPU memory management                                │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     │ CUDA
-                     │
-┌────────────────────▼────────────────────────────────────┐
-│                  NVIDIA GPU                             │
+vllm-batch-server/
+├── batch_app/              # Batch processing system
+│   ├── api_server.py       # OpenAI-compatible API (port 4080)
+│   ├── worker.py           # Background job processor
+│   ├── database.py         # SQLite models
+│   ├── webhooks.py         # Webhook notifications
+│   └── benchmarks.py       # Benchmark tracking
+├── curation_app/           # Data curation system
+│   ├── api.py              # FastAPI backend (port 8001)
+│   ├── conquest_schemas.py # Schema registry
+│   └── label_studio_client.py  # Label Studio integration
+├── conquest_schemas/       # JSON schema definitions
+│   ├── candidate_evaluation.json
+│   ├── cv_parsing.json
+│   ├── cartographer.json
+│   ├── quil_email.json
+│   ├── email_evaluation.json
+│   └── report_evaluation.json
+├── static/                 # Web UI assets
+├── tests/                  # Test suite
+├── tools/                  # Utility scripts
+├── benchmarks/             # Benchmark results
+├── docker/                 # Docker configs
+├── docs/                   # Documentation
+└── Makefile               # Common commands
+```
 │              (RTX 4080 / A100 / etc.)                   │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -280,83 +242,32 @@ STORAGE_PATH=/data/batches
 
 ## 📚 Documentation
 
-- [Installation Guide](docs/INSTALLATION.md)
-- [Configuration Reference](docs/CONFIGURATION.md)
-- [API Documentation](docs/API.md)
-- [Integration with ARIS](docs/ARIS_INTEGRATION.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-
-## 🤝 Integration Examples
-
-### Switching Between Local and Production
-
-```typescript
-// config.ts
-const BATCH_CLIENT_CONFIG = {
-  baseURL: process.env.NODE_ENV === 'production' 
-    ? 'https://api.parasail.io/v1'  // Production: Parasail
-    : 'http://localhost:8000/v1',   // Local: vLLM Batch Server
-  apiKey: process.env.BATCH_API_KEY || 'local-dev'
-}
-
-// Your existing ParasailBatchClient works unchanged!
-const client = new OpenAI(BATCH_CLIENT_CONFIG)
-```
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture deep dive
+- **[docs/API.md](docs/API.md)** - API reference
+- **[docs/ARIS_INTEGRATION.md](docs/ARIS_INTEGRATION.md)** - Integration with Aris app
+- **[ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md)** - Architecture analysis
 
 ## 🧪 Testing
 
 ```bash
-# Run unit tests
-docker-compose run --rm server pytest tests/
+# Run all tests
+make test
 
-# Run integration tests
-docker-compose run --rm server pytest tests/integration/
-
-# Load testing
-docker-compose run --rm server python tests/load_test.py
+# Run specific test
+pytest tests/test_curation_api.py -v
 ```
-
-## 📊 Performance
-
-Tested on RTX 4080 (16GB VRAM):
-
-| Model | Batch Size | Throughput | Latency (p50) |
-|-------|-----------|------------|---------------|
-| Llama-3.1-8B | 100 | 45 tok/s | 2.3s |
-| Llama-3.1-8B | 500 | 52 tok/s | 9.8s |
-| Mistral-7B | 100 | 48 tok/s | 2.1s |
-
-With prefix caching enabled: **80% reduction in prompt processing time** for repeated system prompts.
-
-## 🛣️ Roadmap
-
-- [ ] Support for multiple models simultaneously
-- [ ] Redis-based job queue for multi-instance deployments
-- [ ] Prometheus metrics export
-- [ ] Web UI for job monitoring
-- [ ] S3-compatible storage backend
-- [ ] Streaming batch results
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## 📄 License
 
-Apache License 2.0 - see [LICENSE](LICENSE) for details.
+Apache 2.0 - See [LICENSE](LICENSE) for details.
 
 ## 🙏 Acknowledgments
 
-- [vLLM](https://github.com/vllm-project/vllm) - High-performance LLM inference engine
-- [OpenAI](https://openai.com) - Batch API specification
-- [Parasail](https://parasail.io) - Inspiration for production batch processing
-
-## 💬 Community
-
-- **Issues**: [GitHub Issues](https://github.com/YOUR_ORG/vllm-batch-server/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/YOUR_ORG/vllm-batch-server/discussions)
-
----
-
-**Built with ❤️ for the open-source community**
+- **vLLM Team** - For the excellent inference engine
+- **Label Studio** - For the annotation platform
+- **OpenAI** - For the Batch API specification
 
