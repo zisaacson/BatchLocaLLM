@@ -8,11 +8,10 @@ This script:
 4. Preserves all existing batch jobs
 """
 
-import sqlite3
 import os
-import json
-from datetime import datetime
 import shutil
+import sqlite3
+from datetime import datetime
 
 DATABASE_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'database', 'batch_jobs.db')
 
@@ -22,7 +21,7 @@ def backup_database():
     if not os.path.exists(DATABASE_PATH):
         print("⚠️  No database found - will create new one")
         return
-    
+
     backup_path = DATABASE_PATH + f'.backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
     shutil.copy2(DATABASE_PATH, backup_path)
     print(f"✅ Database backed up to: {backup_path}")
@@ -30,16 +29,16 @@ def backup_database():
 
 def migrate_database():
     """Migrate database to OpenAI-compatible format."""
-    
+
     # Backup first
     backup_database()
-    
+
     # Connect to database
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
-    
+
     print("\n🔄 Starting migration to OpenAI-compatible format...")
-    
+
     # Step 1: Create files table
     print("\n1️⃣  Creating 'files' table...")
     cursor.execute("""
@@ -55,16 +54,16 @@ def migrate_database():
         )
     """)
     print("✅ Files table created")
-    
+
     # Step 2: Check if batch_jobs needs migration
     cursor.execute("PRAGMA table_info(batch_jobs)")
     columns = {row[1] for row in cursor.fetchall()}
-    
+
     if 'input_file_id' in columns:
         print("\n✅ Database already migrated!")
         conn.close()
         return
-    
+
     # Step 3: Create new batch_jobs table with OpenAI format
     print("\n2️⃣  Creating new batch_jobs table...")
     cursor.execute("DROP TABLE IF EXISTS batch_jobs_new")
@@ -107,36 +106,36 @@ def migrate_database():
         )
     """)
     print("✅ New batch_jobs table created")
-    
+
     # Step 4: Migrate existing batch jobs
     print("\n3️⃣  Migrating existing batch jobs...")
     cursor.execute("SELECT * FROM batch_jobs")
     old_jobs = cursor.fetchall()
-    
+
     if old_jobs:
         print(f"   Found {len(old_jobs)} existing batch jobs to migrate")
-        
+
         # Get column names from old table
         cursor.execute("PRAGMA table_info(batch_jobs)")
         old_columns = [row[1] for row in cursor.fetchall()]
-        
+
         migrated = 0
         for job in old_jobs:
             job_dict = dict(zip(old_columns, job))
-            
+
             # Create file entry for input file
             input_file_id = f"file-{job_dict['batch_id'].replace('batch_', '')}"
             input_file_path = job_dict.get('input_file', '')
-            
+
             if input_file_path and os.path.exists(input_file_path):
                 file_size = os.path.getsize(input_file_path)
                 file_created = int(job_dict.get('created_at', datetime.now()).timestamp()) if isinstance(job_dict.get('created_at'), datetime) else int(datetime.now().timestamp())
-                
+
                 cursor.execute("""
                     INSERT OR IGNORE INTO files (file_id, object, bytes, created_at, filename, purpose, file_path, deleted)
                     VALUES (?, 'file', ?, ?, ?, 'batch', ?, 0)
                 """, (input_file_id, file_size, file_created, os.path.basename(input_file_path), input_file_path))
-            
+
             # Create file entry for output file if exists
             output_file_id = None
             output_file_path = job_dict.get('output_file', '')
@@ -144,12 +143,12 @@ def migrate_database():
                 output_file_id = f"file-out-{job_dict['batch_id'].replace('batch_', '')}"
                 file_size = os.path.getsize(output_file_path)
                 file_created = int(job_dict.get('completed_at', datetime.now()).timestamp()) if isinstance(job_dict.get('completed_at'), datetime) else int(datetime.now().timestamp())
-                
+
                 cursor.execute("""
                     INSERT OR IGNORE INTO files (file_id, object, bytes, created_at, filename, purpose, file_path, deleted)
                     VALUES (?, 'file', ?, ?, ?, 'batch', ?, 0)
                 """, (output_file_id, file_size, file_created, os.path.basename(output_file_path), output_file_path))
-            
+
             # Convert status
             old_status = job_dict.get('status', 'pending')
             status_map = {
@@ -159,7 +158,7 @@ def migrate_database():
                 'failed': 'failed'
             }
             new_status = status_map.get(old_status, old_status)
-            
+
             # Convert timestamps
             created_at = job_dict.get('created_at')
             if isinstance(created_at, datetime):
@@ -196,7 +195,7 @@ def migrate_database():
                     pass
 
             expires_at = int(created_at) + 86400  # 24 hours
-            
+
             # Insert into new table
             cursor.execute("""
                 INSERT INTO batch_jobs_new (
@@ -241,36 +240,36 @@ def migrate_database():
                 job_dict.get('webhook_error')
             ))
             migrated += 1
-        
+
         print(f"✅ Migrated {migrated} batch jobs")
     else:
         print("   No existing batch jobs to migrate")
-    
+
     # Step 5: Replace old table with new table
     print("\n4️⃣  Replacing old table with new table...")
     cursor.execute("DROP TABLE batch_jobs")
     cursor.execute("ALTER TABLE batch_jobs_new RENAME TO batch_jobs")
     print("✅ Table replaced")
-    
+
     # Commit changes
     conn.commit()
     conn.close()
-    
+
     print("\n✅ Migration completed successfully!")
     print("\n📊 Summary:")
-    print(f"   - Files table created")
-    print(f"   - Batch jobs table updated to OpenAI format")
+    print("   - Files table created")
+    print("   - Batch jobs table updated to OpenAI format")
     print(f"   - {len(old_jobs) if old_jobs else 0} existing jobs migrated")
-    print(f"   - Database backup created")
+    print("   - Database backup created")
 
 
 if __name__ == '__main__':
     print("=" * 60)
     print("DATABASE MIGRATION: Custom → OpenAI-Compatible Format")
     print("=" * 60)
-    
+
     migrate_database()
-    
+
     print("\n" + "=" * 60)
     print("✅ MIGRATION COMPLETE")
     print("=" * 60)

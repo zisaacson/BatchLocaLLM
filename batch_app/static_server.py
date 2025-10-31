@@ -8,11 +8,12 @@ Usage:
     python -m batch_app.static_server
 """
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
 from pathlib import Path
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
 
 app = FastAPI(title="vLLM Batch Integration Server")
 
@@ -509,7 +510,7 @@ if __name__ == "__main__":
     print("📄 Landing page: http://10.0.0.223:4081")
     print("📥 Download client: http://10.0.0.223:4081/vllm-batch-client.ts")
     print()
-    
+
     uvicorn.run(
         app,
         host="0.0.0.0",

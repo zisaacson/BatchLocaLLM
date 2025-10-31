@@ -5,21 +5,22 @@ FastAPI backend for the unified conquest curation system.
 Integrates Label Studio backend with vLLM batch server.
 """
 
+import json
+import logging
+import re
+from datetime import UTC, datetime
+from typing import Any
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-from typing import Any
-import logging
-from pathlib import Path
-import json
-import re
-from datetime import datetime, UTC
 
 from config import settings
+
+from .conquest_schemas import ConquestSchema, get_registry
 from .label_studio_client import LabelStudioClient
-from .conquest_schemas import get_registry, ConquestSchema
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -316,7 +317,6 @@ def _parse_candidate_from_messages(messages: list[dict[str, Any]]) -> dict[str, 
     - System prompt
     - User prompt
     """
-    import re
 
     result = {
         "name": "Unknown",
@@ -511,7 +511,7 @@ async def list_tasks(
         # Get tasks from all projects
         # This is a simplified version - in production you'd aggregate across projects
         tasks = []
-    
+
     return {
         "tasks": tasks,
         "page": page,
@@ -537,21 +537,21 @@ async def submit_annotation(request: SubmitAnnotationRequest) -> dict[str, Any]:
     # Get task to determine conquest type
     task = label_studio.get_task(request.task_id)
     conquest_type = task['data'].get('conquest_type')
-    
+
     if not conquest_type:
         raise HTTPException(status_code=400, detail="Task missing conquest_type")
-    
+
     # Validate annotation
     if not schema_registry.validate_annotation(conquest_type, request.result):
         raise HTTPException(status_code=400, detail="Invalid annotation")
-    
+
     # Create annotation in Label Studio
     annotation = label_studio.create_annotation(
         task_id=request.task_id,
         result=[request.result],  # Label Studio expects list of results
         lead_time=request.time_spent_seconds
     )
-    
+
     # Calculate agreement with LLM prediction if available
     predictions = task.get('predictions', [])
     if predictions:
@@ -563,7 +563,7 @@ async def submit_annotation(request: SubmitAnnotationRequest) -> dict[str, Any]:
         )
         annotation['agreement_score'] = agreement
         logger.info(f"Annotation {annotation['id']} agreement: {agreement:.2f}")
-    
+
     return annotation
 
 
@@ -576,14 +576,14 @@ async def export_dataset(request: ExportRequest) -> dict[str, Any]:
     """
     # Get project for this conquest type
     project_id = await get_or_create_project(request.conquest_type)
-    
+
     # Get gold-star tasks
     gold_star_tasks = label_studio.get_gold_star_tasks(
         project_id=project_id,
         min_agreement=request.min_agreement,
         min_annotations=request.min_annotations
     )
-    
+
     # Export to requested format
     if request.format == "icl":
         examples = schema_registry.export_to_icl(gold_star_tasks, request.conquest_type)
@@ -591,7 +591,7 @@ async def export_dataset(request: ExportRequest) -> dict[str, Any]:
         examples = schema_registry.export_to_finetuning(gold_star_tasks, request.conquest_type)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown export format: {request.format}")
-    
+
     return {
         "conquest_type": request.conquest_type,
         "format": request.format,
@@ -609,25 +609,25 @@ async def get_stats(conquest_type: (str) | None = None) -> dict[str, Any]:
         tasks = label_studio.get_tasks(project_id=project_id, page_size=1000)
     else:
         tasks = []
-    
+
     total_tasks = len(tasks)
     annotated_tasks = len([t for t in tasks if t.get('annotations')])
     pending_tasks = total_tasks - annotated_tasks
-    
+
     # Calculate average agreement
     agreements = []
     for task in tasks:
         predictions = task.get('predictions', [])
         annotations = task.get('annotations', [])
-        
+
         if predictions and annotations:
             pred_result = predictions[0].get('result', {})
             ann_result = annotations[0].get('result', [{}])[0]
             agreement = label_studio.calculate_agreement(task['id'], pred_result, ann_result)
             agreements.append(agreement)
-    
+
     avg_agreement = sum(agreements) / len(agreements) if agreements else 0.0
-    
+
     return {
         "conquest_type": conquest_type,
         "total_tasks": total_tasks,
@@ -736,25 +736,25 @@ async def get_or_create_project(conquest_type: str) -> int:
     """Get or create Label Studio project for a conquest type"""
     if conquest_type in _project_cache:
         return _project_cache[conquest_type]
-    
+
     # Get schema
     schema = schema_registry.get_schema(conquest_type)
     if not schema:
         raise HTTPException(status_code=404, detail=f"Unknown conquest type: {conquest_type}")
-    
+
     # Generate Label Studio config
     label_config = schema_registry.generate_label_studio_config(schema)
-    
+
     # Create project
     project = label_studio.create_project(
         title=f"{schema.name} Curation",
         description=schema.description,
         label_config=label_config
     )
-    
+
     _project_cache[conquest_type] = project['id']
     logger.info(f"Created Label Studio project {project['id']} for {conquest_type}")
-    
+
     return project['id']
 
 

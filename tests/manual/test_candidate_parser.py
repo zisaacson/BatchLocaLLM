@@ -15,7 +15,7 @@ from curation_app.api import _parse_candidate_from_messages
 
 def test_parser():
     """Test parsing candidate data from real batch input"""
-    
+
     # Sample messages from real batch input
     messages = [
         {
@@ -49,10 +49,10 @@ def test_parser():
 Analyze the candidate according to the criteria above and provide your evaluation in the exact JSON format specified."""
         }
     ]
-    
+
     # Parse candidate data
     result = _parse_candidate_from_messages(messages)
-    
+
     # Print results
     print("=" * 80)
     print("CANDIDATE DATA PARSER TEST")
@@ -60,12 +60,12 @@ Analyze the candidate according to the criteria above and provide your evaluatio
     print()
     print(json.dumps(result, indent=2))
     print()
-    
+
     # Verify expected fields
     print("=" * 80)
     print("VERIFICATION")
     print("=" * 80)
-    
+
     checks = [
         ("Name", result.get("name") == "Min Thet K"),
         ("Current Role", result.get("current_role") == "Software Engineer at Bloomberg"),
@@ -75,14 +75,14 @@ Analyze the candidate according to the criteria above and provide your evaluatio
         ("System Prompt", len(result.get("system_prompt", "")) > 0),
         ("User Prompt", len(result.get("user_prompt", "")) > 0),
     ]
-    
+
     all_passed = True
     for check_name, passed in checks:
         status = "✅ PASS" if passed else "❌ FAIL"
         print(f"{status}: {check_name}")
         if not passed:
             all_passed = False
-    
+
     print()
     print("=" * 80)
     if all_passed:
@@ -90,7 +90,7 @@ Analyze the candidate according to the criteria above and provide your evaluatio
     else:
         print("❌ SOME TESTS FAILED!")
     print("=" * 80)
-    
+
     return all_passed
 
 

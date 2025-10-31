@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-
 from src.main import app
 from src.models import BatchJob, BatchStatus, FileObject, RequestCounts
 

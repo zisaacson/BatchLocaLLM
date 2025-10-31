@@ -4,16 +4,14 @@ Basic system tests for vLLM batch server.
 Tests critical workflows without requiring GPU.
 """
 
-import json
-import os
 import sys
 from pathlib import Path
+
 
 def test_imports():
     """Test that all modules can be imported."""
     print("Testing imports...")
     try:
-        from batch_app import database, api_server, worker, webhooks, benchmarks, static_server
         print("✅ All modules imported successfully")
         return True
     except Exception as e:
@@ -24,16 +22,16 @@ def test_database_schema():
     """Test database schema creation."""
     print("\nTesting database schema...")
     try:
-        from batch_app.database import Base, engine, SessionLocal, BatchJob
-        
+        from batch_app.database import Base, BatchJob, SessionLocal, engine
+
         # Create tables
         Base.metadata.create_all(bind=engine)
-        
+
         # Test session
         db = SessionLocal()
         jobs = db.query(BatchJob).all()
         db.close()
-        
+
         print(f"✅ Database schema OK ({len(jobs)} jobs in database)")
         return True
     except Exception as e:
@@ -65,10 +63,10 @@ def test_gold_star_directory():
     try:
         gold_star_dir = Path('data/gold_star')
         gold_star_dir.mkdir(parents=True, exist_ok=True)
-        
+
         starred_file = gold_star_dir / 'starred.jsonl'
         if starred_file.exists():
-            with open(starred_file, 'r') as f:
+            with open(starred_file) as f:
                 count = sum(1 for line in f if line.strip())
             print(f"✅ Gold star directory OK ({count} starred examples)")
         else:
@@ -119,12 +117,12 @@ def test_static_files():
             'static/css/shared.css',
             'static/js/parsers.js'
         ]
-        
+
         missing = []
         for file in required_files:
             if not Path(file).exists():
                 missing.append(file)
-        
+
         if missing:
             print(f"❌ Missing static files: {', '.join(missing)}")
             return False
@@ -143,12 +141,12 @@ def test_scripts():
             'start_all.sh',
             'stop_all.sh'
         ]
-        
+
         missing = []
         for file in required_files:
             if not Path(file).exists():
                 missing.append(file)
-        
+
         if missing:
             print(f"❌ Missing scripts: {', '.join(missing)}")
             return False
@@ -164,7 +162,7 @@ def main():
     print("=" * 60)
     print("vLLM Batch Server - System Tests")
     print("=" * 60)
-    
+
     tests = [
         test_imports,
         test_database_schema,
@@ -174,15 +172,15 @@ def main():
         test_static_files,
         test_scripts
     ]
-    
+
     results = []
     for test in tests:
         results.append(test())
-    
+
     print("\n" + "=" * 60)
     print(f"Results: {sum(results)}/{len(results)} tests passed")
     print("=" * 60)
-    
+
     if all(results):
         print("\n✅ All tests passed!")
         return 0

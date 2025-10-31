@@ -8,7 +8,6 @@ import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from src.models import (
     BatchRequestLine,
     ChatCompletionBody,

@@ -6,24 +6,26 @@ Test Qwen 3 4B model with vLLM native batch processing.
 import json
 import time
 from pathlib import Path
+
 from vllm import LLM, SamplingParams
+
 
 def main():
     print("=" * 80)
     print("QWEN 3 4B BENCHMARK TEST")
     print("=" * 80)
     print()
-    
+
     # Model configuration
     model_id = "Qwen/Qwen3-4B-Instruct-2507"
     input_file = "batch_10_test.jsonl"
     output_file = "qwen3_4b_test_results.jsonl"
-    
+
     print(f"Model: {model_id}")
     print(f"Input: {input_file}")
     print(f"Output: {output_file}")
     print()
-    
+
     # Load requests
     print("📥 Loading requests...")
     requests = []
@@ -31,10 +33,10 @@ def main():
         for line in f:
             if line.strip():
                 requests.append(json.loads(line))
-    
+
     print(f"✅ Loaded {len(requests)} requests")
     print()
-    
+
     # Extract prompts
     prompts = []
     for req in requests:
@@ -42,12 +44,12 @@ def main():
         # Format for Qwen (similar to Gemma)
         prompt = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
         prompts.append(prompt)
-    
+
     # Initialize vLLM
     print(f"🚀 Loading model: {model_id}")
     print("This may take 20-30 seconds...")
     print()
-    
+
     start_load = time.time()
     llm = LLM(
         model=model_id,
@@ -56,44 +58,44 @@ def main():
         disable_log_stats=True,
     )
     load_time = time.time() - start_load
-    
+
     print(f"✅ Model loaded in {load_time:.1f}s")
     print()
-    
+
     # Sampling parameters
     sampling_params = SamplingParams(
         temperature=0.7,
         top_p=0.9,
         max_tokens=2000,
     )
-    
+
     # Run inference
     print(f"⚡ Running inference on {len(prompts)} prompts...")
     print("vLLM will handle batching automatically")
     print()
-    
+
     start_inference = time.time()
     outputs = llm.generate(prompts, sampling_params)
     inference_time = time.time() - start_inference
-    
+
     print(f"✅ Inference complete in {inference_time:.1f}s ({inference_time/60:.1f} minutes)")
     print()
-    
+
     # Save results
     print(f"💾 Saving results to {output_file}")
     results = []
     total_tokens = 0
     prompt_tokens = 0
     completion_tokens = 0
-    
+
     for i, output in enumerate(outputs):
         prompt_tok = len(output.prompt_token_ids)
         completion_tok = len(output.outputs[0].token_ids)
-        
+
         prompt_tokens += prompt_tok
         completion_tokens += completion_tok
         total_tokens += prompt_tok + completion_tok
-        
+
         result = {
             "custom_id": requests[i]['custom_id'],
             "response": {
@@ -119,19 +121,19 @@ def main():
             }
         }
         results.append(result)
-    
+
     # Write results
     with open(output_file, 'w') as f:
         for result in results:
             f.write(json.dumps(result) + '\n')
-    
+
     print(f"✅ Saved {len(results)} results")
     print()
-    
+
     # Calculate metrics
     throughput = total_tokens / inference_time
     requests_per_sec = len(requests) / inference_time
-    
+
     print("=" * 80)
     print("📊 RESULTS")
     print("=" * 80)
@@ -148,7 +150,7 @@ def main():
     print(f"Requests/sec:          {requests_per_sec:.2f}")
     print("=" * 80)
     print()
-    
+
     # Save benchmark metadata
     metadata = {
         "test_id": f"qwen3-4b-test-{len(requests)}",
@@ -180,26 +182,26 @@ def main():
         },
         "status": "completed"
     }
-    
+
     metadata_file = f"benchmarks/metadata/qwen3-4b-{len(requests)}-{time.strftime('%Y-%m-%d')}.json"
     Path(metadata_file).parent.mkdir(parents=True, exist_ok=True)
-    
+
     with open(metadata_file, 'w') as f:
         json.dump(metadata, f, indent=2)
-    
+
     print(f"✅ Saved benchmark metadata: {metadata_file}")
     print()
-    
+
     # Compare to Gemma 3 4B
     print("=" * 80)
     print("📊 COMPARISON TO GEMMA 3 4B")
     print("=" * 80)
     print(f"Qwen 3 4B:             {throughput:.0f} tokens/sec")
-    print(f"Gemma 3 4B:            2,511 tokens/sec (from 5K benchmark)")
+    print("Gemma 3 4B:            2,511 tokens/sec (from 5K benchmark)")
     print(f"Difference:            {throughput - 2511:+.0f} tokens/sec ({(throughput/2511 - 1)*100:+.1f}%)")
     print("=" * 80)
     print()
-    
+
     print("🎉 Qwen 3 4B test complete!")
     print()
 

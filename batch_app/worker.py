@@ -8,22 +8,22 @@ Features:
 - GPU health monitoring
 """
 
-import time
 import json
 import os
+import time
+import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
+import requests
 from sqlalchemy.orm import Session
 from vllm import LLM, SamplingParams
 
 from config import settings
-from .database import SessionLocal, BatchJob, WorkerHeartbeat, File
+
 from .benchmarks import get_benchmark_manager
+from .database import BatchJob, File, SessionLocal, WorkerHeartbeat
 from .webhooks import send_webhook_async
-import uuid
-import requests
 
 # Configuration (all from settings)
 CHUNK_SIZE = settings.CHUNK_SIZE
@@ -185,15 +185,15 @@ class BatchWorker:
                     self.log(log_file, f"⚠️  Failed to save result {start_idx + i}: {e}")
 
         return saved_count
-    
+
     def load_model(self, model: str, log_file: str):
         """Load vLLM model if not already loaded."""
         if self.current_model == model and self.current_llm is not None:
             self.log(log_file, f"✅ Model {model} already loaded, reusing")
             return
-        
+
         self.log(log_file, f"🚀 Loading model: {model}")
-        
+
         try:
             # Unload previous model if exists
             if self.current_llm is not None:
@@ -202,7 +202,7 @@ class BatchWorker:
                 self.current_llm = None
                 self.current_model = None
                 time.sleep(2)  # Give GPU time to free memory
-            
+
             # Load new model with conservative GPU memory
             start_time = time.time()
             self.current_llm = LLM(
@@ -212,14 +212,14 @@ class BatchWorker:
                 disable_log_stats=True,
             )
             load_time = time.time() - start_time
-            
+
             self.current_model = model
             self.log(log_file, f"✅ Model loaded in {load_time:.1f}s")
-            
+
         except Exception as e:
             self.log(log_file, f"❌ Failed to load model: {e}")
             raise
-    
+
     def process_job(self, job: BatchJob, db: Session):
         """Process a single batch job with chunking and resume capability (OpenAI compatible)."""
         log_file = job.log_file
@@ -440,7 +440,7 @@ class BatchWorker:
             if job.webhook_url:
                 self.log(log_file, f"📡 Sending failure webhook to {job.webhook_url}...")
                 send_webhook_async(job.batch_id, job.webhook_url)
-    
+
     def auto_import_to_curation(self, job: BatchJob, db: Session, log_file: str):
         """
         Automatically import batch results to curation system.
@@ -473,7 +473,7 @@ class BatchWorker:
 
             # Parse results
             results = []
-            with open(output_path, 'r') as f:
+            with open(output_path) as f:
                 for line in f:
                     if line.strip():
                         results.append(json.loads(line))
@@ -518,23 +518,23 @@ class BatchWorker:
                 'input_file': job.input_file,
                 'output_file': job.output_file
             }
-            
+
             self.benchmark_mgr.save_job_benchmark(job_data)
         except Exception as e:
             print(f"⚠️  Failed to save benchmark: {e}")
-    
+
     def log(self, log_file: str, message: str):
         """Write to log file and stdout."""
         timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         log_message = f"[{timestamp}] {message}"
-        
+
         print(log_message)
-        
+
         if log_file:
             Path(log_file).parent.mkdir(parents=True, exist_ok=True)
             with open(log_file, 'a') as f:
                 f.write(log_message + '\n')
-    
+
     def run(self):
         """Main worker loop with heartbeat monitoring."""
         print("=" * 80)
@@ -566,9 +566,9 @@ class BatchWorker:
                 else:
                     # No jobs, wait
                     time.sleep(self.poll_interval)
-                
+
                 db.close()
-                
+
             except KeyboardInterrupt:
                 print("\n\n🛑 Worker stopped by user")
                 break

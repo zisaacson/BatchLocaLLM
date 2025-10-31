@@ -10,28 +10,30 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from vllm import LLM, SamplingParams
+
 from memory_optimizer import MemoryOptimizer
+from vllm import LLM, SamplingParams
+
 
 def main():
     print("=" * 80)
     print("🧪 GEMMA 3 12B QAT Q4_0 - QUANTIZED TEST")
     print("=" * 80)
     print()
-    
+
     # Configuration
     model_id = "google/gemma-3-12b-it-qat-q4_0-gguf"
     gguf_file = "gemma-3-12b-it-q4_0.gguf"
     input_file = "batch_5k.jsonl"
     output_file = "gemma3_12b_qat_5k_results.jsonl"
-    
+
     print(f"Model: {model_id}")
     print(f"GGUF File: {gguf_file}")
-    print(f"Model Size: 8.07 GB (Q4_0 quantized)")
+    print("Model Size: 8.07 GB (Q4_0 quantized)")
     print(f"Input: {input_file}")
     print(f"Output: {output_file}")
     print()
-    
+
     # Get optimized configuration
     print("🧠 Optimizing memory configuration...")
     optimizer = MemoryOptimizer()
@@ -41,15 +43,15 @@ def main():
     if config.enforce_eager:
         print(f"✅ Using enforce_eager={config.enforce_eager}")
     print()
-    
+
     # Load requests
     print(f"📂 Loading requests from {input_file}...")
     with open(input_file) as f:
         requests = [json.loads(line) for line in f]
-    
+
     print(f"✅ Loaded {len(requests):,} requests")
     print()
-    
+
     # Extract prompts
     prompts = []
     for req in requests:
@@ -65,12 +67,12 @@ def main():
                 prompt += f"user\n{content}\n"
         prompt += "model\n"
         prompts.append(prompt)
-    
+
     # Initialize vLLM with GGUF model
     print("🚀 Initializing vLLM with GGUF model...")
     print("⚠️  Note: vLLM GGUF support may require specific configuration")
     start_load = time.time()
-    
+
     try:
         vllm_kwargs = {
             "model": model_id,
@@ -78,26 +80,26 @@ def main():
             "gpu_memory_utilization": config.gpu_memory_utilization,
             "disable_log_stats": True,
         }
-        
+
         if config.enforce_eager:
             vllm_kwargs["enforce_eager"] = True
         if config.max_num_seqs:
             vllm_kwargs["max_num_seqs"] = config.max_num_seqs
-        
+
         llm = LLM(**vllm_kwargs)
-        
+
         load_time = time.time() - start_load
         print(f"✅ Model loaded in {load_time:.1f} seconds")
         print()
-        
+
     except Exception as e:
         print(f"❌ Failed to load GGUF model: {e}")
         print()
         print("💡 Trying alternative approach with explicit GGUF file...")
-        
+
         # Try with explicit GGUF file path
         vllm_kwargs["model"] = gguf_file
-        
+
         try:
             llm = LLM(**vllm_kwargs)
             load_time = time.time() - start_load
@@ -109,25 +111,25 @@ def main():
             print("📝 vLLM may not support this GGUF format yet.")
             print("   Consider using llama.cpp or Ollama for GGUF models.")
             return
-    
+
     # Sampling parameters
     sampling_params = SamplingParams(
         temperature=0.7,
         top_p=0.9,
         max_tokens=2000,
     )
-    
+
     # Run inference
     print(f"🚀 Running inference on {len(prompts):,} requests...")
     print("This will take a while...")
     print()
-    
+
     start_time = time.time()
     outputs = llm.generate(prompts, sampling_params)
     end_time = time.time()
-    
+
     total_time = end_time - start_time
-    
+
     # Process results
     print("📊 Processing results...")
     results = []
@@ -135,18 +137,18 @@ def main():
     failed = 0
     prompt_tokens = 0
     completion_tokens = 0
-    
+
     for i, (req, output) in enumerate(zip(requests, outputs)):
         try:
             response_text = output.outputs[0].text
-            
+
             # Count tokens
             prompt_tok = len(output.prompt_token_ids)
             completion_tok = len(output.outputs[0].token_ids)
-            
+
             prompt_tokens += prompt_tok
             completion_tokens += completion_tok
-            
+
             result = {
                 "id": req["custom_id"],
                 "custom_id": req["custom_id"],
@@ -176,7 +178,7 @@ def main():
             }
             results.append(result)
             successful += 1
-            
+
         except Exception as e:
             result = {
                 "id": req["custom_id"],
@@ -189,19 +191,19 @@ def main():
             }
             results.append(result)
             failed += 1
-    
+
     # Save results
     print(f"💾 Saving results to {output_file}...")
     with open(output_file, 'w') as f:
         for result in results:
             f.write(json.dumps(result) + '\n')
-    
+
     # Calculate metrics
     total_tokens = prompt_tokens + completion_tokens
     throughput = total_tokens / total_time
     avg_prompt_tokens = prompt_tokens / len(requests)
     avg_completion_tokens = completion_tokens / len(requests)
-    
+
     # Print summary
     print()
     print("=" * 80)
@@ -209,8 +211,8 @@ def main():
     print("=" * 80)
     print()
     print(f"Model: {model_id}")
-    print(f"Quantization: Q4_0 (4-bit)")
-    print(f"Model Size: 8.07 GB")
+    print("Quantization: Q4_0 (4-bit)")
+    print("Model Size: 8.07 GB")
     print()
     print(f"Total Requests: {len(requests):,}")
     print(f"Successful: {successful:,}")
@@ -232,7 +234,7 @@ def main():
     print(f"Requests/second: {len(requests)/total_time:.2f}")
     print()
     print("=" * 80)
-    
+
     # Save metadata
     metadata = {
         "model": model_id,
@@ -260,13 +262,13 @@ def main():
             "max_tokens": 2000
         }
     }
-    
+
     metadata_file = f"benchmarks/metadata/gemma3-12b-qat-5k-{datetime.utcnow().strftime('%Y-%m-%d')}.json"
     Path("benchmarks/metadata").mkdir(parents=True, exist_ok=True)
-    
+
     with open(metadata_file, 'w') as f:
         json.dump(metadata, f, indent=2)
-    
+
     print(f"✅ Metadata saved to {metadata_file}")
     print()
 

@@ -4,10 +4,10 @@ Label Studio API Client
 Wrapper around Label Studio REST API for task/annotation management.
 """
 
-import requests
-from typing import Any
-from datetime import datetime
 import logging
+from typing import Any
+
+import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -51,7 +51,7 @@ class LabelStudioClient:
             self.session.headers.update({
                 'Authorization': f'Token {self.api_key}'
             })
-    
+
     def create_project(self, title: str, description: str = "", label_config: str = "") -> dict[str, Any]:
         """Create a new Label Studio project"""
         response = self.session.post(
@@ -74,7 +74,7 @@ class LabelStudioClient:
         )
         response.raise_for_status()
         return response.json()
-    
+
     def create_task(
         self,
         project_id: int,
@@ -98,13 +98,13 @@ class LabelStudioClient:
             "data": data,
             "project": project_id
         }
-        
+
         if predictions:
             task_data["predictions"] = predictions
-        
+
         if meta:
             task_data["meta"] = meta
-        
+
         response = self.session.post(
             f"{self.base_url}/api/tasks",
             json=task_data,
@@ -121,7 +121,7 @@ class LabelStudioClient:
         )
         response.raise_for_status()
         return response.json()
-    
+
     def get_tasks(
         self,
         project_id: int,
@@ -146,10 +146,10 @@ class LabelStudioClient:
             "page": page,
             "page_size": page_size
         }
-        
+
         if filters:
             params.update(filters)
-        
+
         response = self.session.get(
             f"{self.base_url}/api/tasks",
             params=params,
@@ -157,7 +157,7 @@ class LabelStudioClient:
         )
         response.raise_for_status()
         return response.json()
-    
+
     def create_annotation(
         self,
         task_id: int,
@@ -182,13 +182,13 @@ class LabelStudioClient:
             "result": result,
             "was_cancelled": False
         }
-        
+
         if completed_by:
             annotation_data["completed_by"] = completed_by
-        
+
         if lead_time:
             annotation_data["lead_time"] = lead_time
-        
+
         response = self.session.post(
             f"{self.base_url}/api/annotations",
             json=annotation_data,
@@ -248,7 +248,7 @@ class LabelStudioClient:
             timeout=self.timeout
         )
         response.raise_for_status()
-    
+
     def export_tasks(
         self,
         project_id: int,
@@ -267,10 +267,10 @@ class LabelStudioClient:
             Exported data
         """
         params = {"exportType": export_type}
-        
+
         if filters:
             params.update(filters)
-        
+
         response = self.session.get(
             f"{self.base_url}/api/projects/{project_id}/export",
             params=params,
@@ -278,7 +278,7 @@ class LabelStudioClient:
         )
         response.raise_for_status()
         return response.json()
-    
+
     def calculate_agreement(
         self,
         task_id: int,
@@ -294,15 +294,15 @@ class LabelStudioClient:
         # Simple agreement: count matching fields
         matches = 0
         total = 0
-        
+
         for key in prediction_result:
             if key in annotation_result:
                 total += 1
                 if prediction_result[key] == annotation_result[key]:
                     matches += 1
-        
+
         return matches / total if total > 0 else 0.0
-    
+
     def get_gold_star_tasks(
         self,
         project_id: int,

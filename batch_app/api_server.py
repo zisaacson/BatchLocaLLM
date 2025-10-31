@@ -7,22 +7,24 @@ Features:
 - Request validation
 """
 
-from fastapi import FastAPI, UploadFile, File as FastAPIFile, Form, Depends, HTTPException, Body
-from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from typing import Optional, List
-from pydantic import BaseModel, Field
 import json
 import os
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-import time
+
+from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile
+from fastapi import File as FastAPIFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from config import settings
-from .database import get_db, init_db, BatchJob, FailedRequest, WorkerHeartbeat, File
+
 from .benchmarks import get_benchmark_manager
+from .database import BatchJob, FailedRequest, File, WorkerHeartbeat, get_db, init_db
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -362,7 +364,7 @@ async def root():
     """Root endpoint with API information."""
     benchmark_mgr = get_benchmark_manager()
     available_models = benchmark_mgr.get_available_models()
-    
+
     return {
         "service": "vLLM Batch Processing API",
         "version": "1.0.0",
@@ -479,12 +481,12 @@ async def prometheus_metrics(db: Session = Depends(get_db)):
     failed_batches = db.query(BatchJob).filter(BatchJob.status == 'failed').count()
     cancelled_batches = db.query(BatchJob).filter(BatchJob.status == 'cancelled').count()
 
-    metrics.append(f"# HELP vllm_batch_total Total number of batch jobs")
-    metrics.append(f"# TYPE vllm_batch_total counter")
+    metrics.append("# HELP vllm_batch_total Total number of batch jobs")
+    metrics.append("# TYPE vllm_batch_total counter")
     metrics.append(f"vllm_batch_total {total_batches}")
 
-    metrics.append(f"# HELP vllm_batch_status Number of batches by status")
-    metrics.append(f"# TYPE vllm_batch_status gauge")
+    metrics.append("# HELP vllm_batch_status Number of batches by status")
+    metrics.append("# TYPE vllm_batch_status gauge")
     metrics.append(f'vllm_batch_status{{status="validating"}} {pending_batches}')
     metrics.append(f'vllm_batch_status{{status="in_progress"}} {running_batches}')
     metrics.append(f'vllm_batch_status{{status="completed"}} {completed_batches}')
@@ -500,16 +502,16 @@ async def prometheus_metrics(db: Session = Depends(get_db)):
     ).scalar() or 0
     failed_requests_count = db.query(FailedRequest).count()
 
-    metrics.append(f"# HELP vllm_requests_total Total number of requests processed")
-    metrics.append(f"# TYPE vllm_requests_total counter")
+    metrics.append("# HELP vllm_requests_total Total number of requests processed")
+    metrics.append("# TYPE vllm_requests_total counter")
     metrics.append(f"vllm_requests_total {total_requests}")
 
-    metrics.append(f"# HELP vllm_requests_completed Number of completed requests")
-    metrics.append(f"# TYPE vllm_requests_completed counter")
+    metrics.append("# HELP vllm_requests_completed Number of completed requests")
+    metrics.append("# TYPE vllm_requests_completed counter")
     metrics.append(f"vllm_requests_completed {completed_requests}")
 
-    metrics.append(f"# HELP vllm_requests_failed Number of failed requests")
-    metrics.append(f"# TYPE vllm_requests_failed counter")
+    metrics.append("# HELP vllm_requests_failed Number of failed requests")
+    metrics.append("# TYPE vllm_requests_failed counter")
     metrics.append(f"vllm_requests_failed {failed_requests_count}")
 
     # Queue metrics
@@ -523,12 +525,12 @@ async def prometheus_metrics(db: Session = Depends(get_db)):
         for j in pending_jobs
     )
 
-    metrics.append(f"# HELP vllm_queue_depth Number of jobs in queue")
-    metrics.append(f"# TYPE vllm_queue_depth gauge")
+    metrics.append("# HELP vllm_queue_depth Number of jobs in queue")
+    metrics.append("# TYPE vllm_queue_depth gauge")
     metrics.append(f"vllm_queue_depth {queue_depth}")
 
-    metrics.append(f"# HELP vllm_queue_requests Number of requests in queue")
-    metrics.append(f"# TYPE vllm_queue_requests gauge")
+    metrics.append("# HELP vllm_queue_requests Number of requests in queue")
+    metrics.append("# TYPE vllm_queue_requests gauge")
     metrics.append(f"vllm_queue_requests {total_queued_requests}")
 
     # Worker health
@@ -538,23 +540,23 @@ async def prometheus_metrics(db: Session = Depends(get_db)):
         age = (datetime.utcnow() - heartbeat.last_seen).total_seconds()
         worker_healthy = 1 if age < 60 else 0
 
-    metrics.append(f"# HELP vllm_worker_healthy Worker health status (1=healthy, 0=unhealthy)")
-    metrics.append(f"# TYPE vllm_worker_healthy gauge")
+    metrics.append("# HELP vllm_worker_healthy Worker health status (1=healthy, 0=unhealthy)")
+    metrics.append("# TYPE vllm_worker_healthy gauge")
     metrics.append(f"vllm_worker_healthy {worker_healthy}")
 
     # GPU metrics (if available)
     gpu_status = check_gpu_health()
     if 'memory_percent' in gpu_status and gpu_status['memory_percent'] > 0:
-        metrics.append(f"# HELP vllm_gpu_memory_percent GPU memory utilization percentage")
-        metrics.append(f"# TYPE vllm_gpu_memory_percent gauge")
+        metrics.append("# HELP vllm_gpu_memory_percent GPU memory utilization percentage")
+        metrics.append("# TYPE vllm_gpu_memory_percent gauge")
         metrics.append(f"vllm_gpu_memory_percent {gpu_status['memory_percent']}")
 
-        metrics.append(f"# HELP vllm_gpu_temperature_celsius GPU temperature in Celsius")
-        metrics.append(f"# TYPE vllm_gpu_temperature_celsius gauge")
+        metrics.append("# HELP vllm_gpu_temperature_celsius GPU temperature in Celsius")
+        metrics.append("# TYPE vllm_gpu_temperature_celsius gauge")
         metrics.append(f"vllm_gpu_temperature_celsius {gpu_status['temperature_c']}")
 
-        metrics.append(f"# HELP vllm_gpu_healthy GPU health status (1=healthy, 0=unhealthy)")
-        metrics.append(f"# TYPE vllm_gpu_healthy gauge")
+        metrics.append("# HELP vllm_gpu_healthy GPU health status (1=healthy, 0=unhealthy)")
+        metrics.append("# TYPE vllm_gpu_healthy gauge")
         metrics.append(f"vllm_gpu_healthy {1 if gpu_status['healthy'] else 0}")
 
     # File metrics
@@ -563,12 +565,12 @@ async def prometheus_metrics(db: Session = Depends(get_db)):
         db.func.sum(File.bytes)
     ).scalar() or 0
 
-    metrics.append(f"# HELP vllm_files_total Total number of uploaded files")
-    metrics.append(f"# TYPE vllm_files_total gauge")
+    metrics.append("# HELP vllm_files_total Total number of uploaded files")
+    metrics.append("# TYPE vllm_files_total gauge")
     metrics.append(f"vllm_files_total {total_files}")
 
-    metrics.append(f"# HELP vllm_files_bytes Total bytes of uploaded files")
-    metrics.append(f"# TYPE vllm_files_bytes gauge")
+    metrics.append("# HELP vllm_files_bytes Total bytes of uploaded files")
+    metrics.append("# TYPE vllm_files_bytes gauge")
     metrics.append(f"vllm_files_bytes {total_bytes}")
 
     return PlainTextResponse("\n".join(metrics) + "\n")
@@ -859,16 +861,16 @@ async def get_results(batch_id: str, db: Session = Depends(get_db)):
 async def get_logs(batch_id: str, db: Session = Depends(get_db)):
     """Get batch job logs."""
     batch_job = db.query(BatchJob).filter(BatchJob.batch_id == batch_id).first()
-    
+
     if not batch_job:
         raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found")
-    
+
     if not batch_job.log_file or not os.path.exists(batch_job.log_file):
         return {"logs": "No logs available yet"}
-    
+
     with open(batch_job.log_file) as f:
         logs = f.read()
-    
+
     return {"logs": logs}
 
 
@@ -879,22 +881,22 @@ async def cancel_batch(batch_id: str, db: Session = Depends(get_db)):
     Note: Cannot cancel jobs that are already running.
     """
     batch_job = db.query(BatchJob).filter(BatchJob.batch_id == batch_id).first()
-    
+
     if not batch_job:
         raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found")
-    
+
     if batch_job.status == 'running':
         raise HTTPException(
             status_code=400,
             detail="Cannot cancel a running job. Please contact administrator."
         )
-    
+
     if batch_job.status in ['completed', 'failed']:
         raise HTTPException(
             status_code=400,
             detail=f"Job already {batch_job.status}"
         )
-    
+
     # Mark as failed with cancellation message
     batch_job.status = 'failed'
     batch_job.error_message = 'Cancelled by user'

@@ -13,12 +13,13 @@ Usage:
     python test_vllm_serve_proper.py batch_100.jsonl results.jsonl
 """
 
+import asyncio
 import json
 import sys
 import time
-import asyncio
+
 import aiohttp
-from pathlib import Path
+
 
 async def send_request(session, url, request_data, semaphore):
     """Send a single request with rate limiting."""
@@ -37,7 +38,7 @@ async def send_request(session, url, request_data, semaphore):
 async def process_batch(requests, url, max_concurrent=10):
     """Process batch with controlled concurrency."""
     semaphore = asyncio.Semaphore(max_concurrent)
-    
+
     async with aiohttp.ClientSession() as session:
         tasks = []
         for req in requests:
@@ -51,7 +52,7 @@ async def process_batch(requests, url, max_concurrent=10):
             }
             task = send_request(session, url, request_data, semaphore)
             tasks.append((req['custom_id'], task))
-        
+
         # Process all requests
         results = []
         for custom_id, task in tasks:
@@ -60,24 +61,24 @@ async def process_batch(requests, url, max_concurrent=10):
                 "custom_id": custom_id,
                 "result": result
             })
-        
+
         return results
 
 def main():
     if len(sys.argv) != 3:
         print("Usage: python test_vllm_serve_proper.py <input.jsonl> <output.jsonl>")
         sys.exit(1)
-    
+
     input_file = sys.argv[1]
     output_file = sys.argv[2]
-    
+
     print("=" * 80)
     print("vLLM SERVE BATCH TEST (OpenAI-Compatible API)")
     print("=" * 80)
     print(f"Input: {input_file}")
     print(f"Output: {output_file}")
     print("=" * 80)
-    
+
     # Check if server is running
     print("\n🔍 Checking if vLLM server is running...")
     import requests
@@ -88,12 +89,12 @@ def main():
         else:
             print(f"⚠️  Server responded with status {response.status_code}")
     except Exception as e:
-        print(f"❌ ERROR: Cannot connect to vLLM server at http://localhost:8000")
+        print("❌ ERROR: Cannot connect to vLLM server at http://localhost:8000")
         print(f"   {e}")
         print("\nPlease start the server first:")
         print("   vllm serve google/gemma-3-4b-it --max-model-len 4096 --gpu-memory-utilization 0.90")
         sys.exit(1)
-    
+
     # Load requests
     print("\n📥 Loading requests...")
     requests_data = []
@@ -101,13 +102,13 @@ def main():
         for line in f:
             req = json.loads(line)
             requests_data.append(req)
-    
+
     print(f"✅ Loaded {len(requests_data)} requests")
-    
+
     # Process batch
     print(f"\n⚡ Processing {len(requests_data)} requests...")
     print("Using OpenAI-compatible API with controlled concurrency (max 10 concurrent)")
-    
+
     start_time = time.time()
     results = asyncio.run(process_batch(
         requests_data,
@@ -115,20 +116,20 @@ def main():
         max_concurrent=10
     ))
     total_time = time.time() - start_time
-    
+
     print(f"✅ Processing complete in {total_time:.1f}s")
-    
+
     # Analyze results
     successful = sum(1 for r in results if r['result']['success'])
     failed = len(results) - successful
-    
+
     # Save results
     print(f"\n💾 Saving results to {output_file}...")
     output_data = []
     total_tokens = 0
     prompt_tokens = 0
     completion_tokens = 0
-    
+
     for r in results:
         if r['result']['success']:
             data = r['result']['data']
@@ -149,17 +150,17 @@ def main():
                 "error": r['result']['error'],
                 "status": "error"
             })
-    
+
     with open(output_file, 'w') as f:
         for item in output_data:
             f.write(json.dumps(item) + '\n')
-    
+
     print(f"✅ Saved {len(output_data)} results")
-    
+
     # Print summary
     throughput = total_tokens / total_time if total_time > 0 else 0
     requests_per_sec = len(requests_data) / total_time if total_time > 0 else 0
-    
+
     print("\n" + "=" * 80)
     print("📊 BENCHMARK RESULTS")
     print("=" * 80)
@@ -173,10 +174,10 @@ def main():
     print(f"Throughput:            {throughput:.0f} tokens/sec")
     print(f"Requests/sec:          {requests_per_sec:.2f}")
     print("=" * 80)
-    
+
     if failed > 0:
         print(f"\n⚠️  {failed} requests failed. Check {output_file} for errors.")
-    
+
     print("\n🎉 Test complete!")
 
 if __name__ == '__main__':

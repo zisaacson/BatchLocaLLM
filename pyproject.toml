@@ -131,7 +131,7 @@ module = "sqlalchemy.*"
 warn_return_any = false
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/unit", "tests/integration", "tests/e2e"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -148,6 +148,7 @@ addopts = [
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests",
     "gpu: marks tests that require GPU",
 ]
 

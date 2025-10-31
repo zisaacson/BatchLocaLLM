@@ -6,10 +6,11 @@ Saves results after every batch to prevent data loss.
 
 import json
 import time
-from datetime import datetime
 from pathlib import Path
-from vllm import LLM, SamplingParams
+
 from memory_optimizer import MemoryOptimizer
+from vllm import LLM, SamplingParams
+
 
 def main():
     print("=" * 80)
@@ -22,7 +23,7 @@ def main():
     input_file = "batch_5k.jsonl"
     output_file = "qwen3_4b_5k_results.jsonl"
     checkpoint_file = "qwen3_4b_5k_checkpoint.txt"
-    
+
     # Batch size for incremental processing
     BATCH_SIZE = 100  # Process 100 at a time, save after each batch
 
@@ -48,19 +49,19 @@ def main():
     if config.enforce_eager:
         print(f"✅ Using enforce_eager={config.enforce_eager}")
     print()
-    
+
     # Load requests
     print("📂 Loading requests...")
     requests = []
     with open(input_file) as f:
         for line in f:
             requests.append(json.loads(line))
-    
+
     total_requests = len(requests)
     print(f"✅ Loaded {total_requests} requests")
     print(f"✅ Starting from index {start_idx}")
     print()
-    
+
     # Extract prompts
     prompts = []
     for req in requests:
@@ -76,18 +77,18 @@ def main():
                 prompt += f"User: {content}\n\n"
         prompt += "Assistant:"
         prompts.append(prompt)
-    
+
     # Initialize model
     print("🔧 Initializing model...")
     start_load = time.time()
-    
+
     vllm_kwargs = {
         "model": model_id,
         "gpu_memory_utilization": config.gpu_memory_utilization,
         "max_model_len": 4096,
         "trust_remote_code": True,
     }
-    
+
     if config.enforce_eager:
         vllm_kwargs["enforce_eager"] = config.enforce_eager
     if config.max_num_seqs:
@@ -96,62 +97,62 @@ def main():
         vllm_kwargs["kv_cache_dtype"] = config.kv_cache_dtype
 
     llm = LLM(**vllm_kwargs)
-    
+
     load_time = time.time() - start_load
     print(f"✅ Model loaded in {load_time:.1f} seconds")
     print()
-    
+
     # Sampling parameters
     sampling_params = SamplingParams(
         temperature=0.7,
         top_p=0.9,
         max_tokens=2000,
     )
-    
+
     # Process in batches
     print("⚡ Running inference in batches...")
     print()
-    
+
     total_start = time.time()
     success_count = 0
     failure_count = 0
     prompt_tokens = 0
     completion_tokens = 0
-    
+
     # Open output file in append mode
     output_mode = 'a' if start_idx > 0 else 'w'
-    
+
     for batch_start in range(start_idx, total_requests, BATCH_SIZE):
         batch_end = min(batch_start + BATCH_SIZE, total_requests)
         batch_prompts = prompts[batch_start:batch_end]
         batch_requests = requests[batch_start:batch_end]
-        
+
         print(f"📦 Processing batch {batch_start}-{batch_end} ({len(batch_prompts)} requests)...")
         batch_start_time = time.time()
-        
+
         # Generate for this batch
         outputs = llm.generate(batch_prompts, sampling_params)
-        
+
         batch_time = time.time() - batch_start_time
         print(f"   ✅ Batch complete in {batch_time:.1f}s ({batch_time/len(batch_prompts):.2f}s per request)")
-        
+
         # Save results immediately
         with open(output_file, output_mode) as f:
             for i, output in enumerate(outputs):
                 custom_id = batch_requests[i]["custom_id"]
-                
+
                 if output.outputs and len(output.outputs) > 0:
                     success_count += 1
                     text = output.outputs[0].text
                     finish_reason = output.outputs[0].finish_reason
-                    
+
                     # Count tokens
                     prompt_tok = len(output.prompt_token_ids)
                     completion_tok = len(output.outputs[0].token_ids)
-                    
+
                     prompt_tokens += prompt_tok
                     completion_tokens += completion_tok
-                    
+
                     result = {
                         "custom_id": custom_id,
                         "response": {
@@ -181,29 +182,29 @@ def main():
                             "body": {"error": "No output generated"}
                         }
                     }
-                
+
                 f.write(json.dumps(result) + '\n')
-        
+
         # Update checkpoint
         with open(checkpoint_file, 'w') as f:
             f.write(str(batch_end))
-        
+
         # Switch to append mode after first batch
         output_mode = 'a'
-        
+
         # Progress update
         elapsed = time.time() - total_start
         processed = batch_end - start_idx
         rate = processed / elapsed if elapsed > 0 else 0
         remaining = total_requests - batch_end
         eta = remaining / rate if rate > 0 else 0
-        
+
         print(f"   📊 Progress: {batch_end}/{total_requests} ({100*batch_end/total_requests:.1f}%)")
         print(f"   ⏱️  Rate: {rate:.1f} req/s | ETA: {eta/60:.1f} min")
         print()
-    
+
     total_time = time.time() - total_start
-    
+
     # Final statistics
     print("=" * 80)
     print("✅ BENCHMARK COMPLETE")
@@ -218,11 +219,11 @@ def main():
     print(f"Throughput: {(prompt_tokens + completion_tokens) / total_time:.1f} tokens/sec")
     print()
     print(f"Results saved to: {output_file}")
-    
+
     # Clean up checkpoint
     if Path(checkpoint_file).exists():
         Path(checkpoint_file).unlink()
-        print(f"Checkpoint file removed")
+        print("Checkpoint file removed")
 
 if __name__ == "__main__":
     main()

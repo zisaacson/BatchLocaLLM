@@ -8,40 +8,42 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from vllm import LLM, SamplingParams
+
 from memory_optimizer import MemoryOptimizer
+from vllm import LLM, SamplingParams
+
 
 def main():
     print("=" * 80)
     print("🧪 OLMO 1B - 5K BATCH TEST")
     print("=" * 80)
     print()
-    
+
     # Configuration
     model_id = "allenai/OLMo-1B-0724-hf"
     input_file = "batch_5k.jsonl"
     output_file = "olmo_1b_5k_results.jsonl"
-    
+
     print(f"Model: {model_id}")
     print(f"Input: {input_file}")
     print(f"Output: {output_file}")
     print()
-    
+
     # Get optimized configuration
     print("🧠 Optimizing memory configuration...")
     optimizer = MemoryOptimizer()
     config = optimizer.optimize_config(model_id, max_model_len=4096)
     print(f"✅ Using gpu_memory_utilization={config.gpu_memory_utilization}")
     print()
-    
+
     # Load requests
     print(f"📂 Loading requests from {input_file}...")
     with open(input_file) as f:
         requests = [json.loads(line) for line in f]
-    
+
     print(f"✅ Loaded {len(requests):,} requests")
     print()
-    
+
     # Extract prompts
     prompts = []
     for req in requests:
@@ -57,7 +59,7 @@ def main():
                 prompt += f"User: {content}\n\n"
         prompt += "Assistant:"
         prompts.append(prompt)
-    
+
     # Initialize vLLM
     print("🚀 Initializing vLLM...")
     start_load = time.time()
@@ -69,18 +71,18 @@ def main():
         disable_log_stats=True,
         enforce_eager=True,  # Avoid engine core issues
     )
-    
+
     load_time = time.time() - start_load
     print(f"✅ Model loaded in {load_time:.1f} seconds")
     print()
-    
+
     # Sampling parameters
     sampling_params = SamplingParams(
         temperature=0.7,
         top_p=0.9,
         max_tokens=2000,
     )
-    
+
     # Run inference with incremental saving
     print(f"🚀 Running inference on {len(prompts):,} requests...")
     print(f"💾 Results will be saved incrementally to {output_file}")
@@ -165,13 +167,13 @@ def main():
     total_time = end_time - start_time
 
     print(f"✅ All results saved to {output_file}")
-    
+
     # Calculate metrics
     total_tokens = prompt_tokens + completion_tokens
     throughput = total_tokens / total_time
     avg_prompt_tokens = prompt_tokens / len(requests)
     avg_completion_tokens = completion_tokens / len(requests)
-    
+
     # Print summary
     print()
     print("=" * 80)
@@ -199,7 +201,7 @@ def main():
     print(f"Requests/second: {len(requests)/total_time:.2f}")
     print()
     print("=" * 80)
-    
+
     # Save metadata
     metadata = {
         "model": model_id,
@@ -223,13 +225,13 @@ def main():
             "max_tokens": 2000
         }
     }
-    
+
     metadata_file = f"benchmarks/metadata/olmo-1b-5k-{datetime.utcnow().strftime('%Y-%m-%d')}.json"
     Path("benchmarks/metadata").mkdir(parents=True, exist_ok=True)
-    
+
     with open(metadata_file, 'w') as f:
         json.dump(metadata, f, indent=2)
-    
+
     print(f"✅ Metadata saved to {metadata_file}")
     print()
 

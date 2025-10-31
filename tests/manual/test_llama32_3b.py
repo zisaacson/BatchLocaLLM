@@ -8,40 +8,42 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from vllm import LLM, SamplingParams
+
 from memory_optimizer import MemoryOptimizer
+from vllm import LLM, SamplingParams
+
 
 def main():
     print("=" * 80)
     print("🧪 LLAMA 3.2 3B - 5K BATCH TEST")
     print("=" * 80)
     print()
-    
+
     # Configuration
     model_id = "meta-llama/Llama-3.2-3B-Instruct"
     input_file = "batch_5k.jsonl"
     output_file = "llama32_3b_5k_results.jsonl"
-    
+
     print(f"Model: {model_id}")
     print(f"Input: {input_file}")
     print(f"Output: {output_file}")
     print()
-    
+
     # Get optimized configuration
     print("🧠 Optimizing memory configuration...")
     optimizer = MemoryOptimizer()
     config = optimizer.optimize_config(model_id, max_model_len=4096)
     print(f"✅ Using gpu_memory_utilization={config.gpu_memory_utilization}")
     print()
-    
+
     # Load requests
     print(f"📂 Loading requests from {input_file}...")
     with open(input_file) as f:
         requests = [json.loads(line) for line in f]
-    
+
     print(f"✅ Loaded {len(requests):,} requests")
     print()
-    
+
     # Extract prompts
     prompts = []
     for req in requests:
@@ -57,7 +59,7 @@ def main():
                 prompt += f"<|start_header_id|>user<|end_header_id|>\n\n{content}<|eot_id|>"
         prompt += "<|start_header_id|>assistant<|end_header_id|>\n\n"
         prompts.append(prompt)
-    
+
     # Initialize vLLM
     print("🚀 Initializing vLLM...")
     start_load = time.time()
@@ -158,13 +160,13 @@ def main():
     with open(output_file, 'w') as f:
         for result in results:
             f.write(json.dumps(result) + '\n')
-    
+
     # Calculate metrics
     total_tokens = prompt_tokens + completion_tokens
     throughput = total_tokens / total_time
     avg_prompt_tokens = prompt_tokens / len(requests)
     avg_completion_tokens = completion_tokens / len(requests)
-    
+
     # Print summary
     print()
     print("=" * 80)
@@ -192,7 +194,7 @@ def main():
     print(f"Requests/second: {len(requests)/total_time:.2f}")
     print()
     print("=" * 80)
-    
+
     # Save metadata
     metadata = {
         "model": model_id,
@@ -216,13 +218,13 @@ def main():
             "max_tokens": 2000
         }
     }
-    
+
     metadata_file = f"benchmarks/metadata/llama32-3b-5k-{datetime.utcnow().strftime('%Y-%m-%d')}.json"
     Path("benchmarks/metadata").mkdir(parents=True, exist_ok=True)
-    
+
     with open(metadata_file, 'w') as f:
         json.dump(metadata, f, indent=2)
-    
+
     print(f"✅ Metadata saved to {metadata_file}")
     print()
 

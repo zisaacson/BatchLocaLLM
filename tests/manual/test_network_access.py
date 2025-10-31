@@ -11,11 +11,11 @@ Tests:
 6. Batch creation endpoint
 """
 
-import sys
 import socket
+import sys
+from typing import Any
+
 import requests
-import json
-from typing import Dict, Any
 
 # Server configuration
 LOCALHOST_URL = "http://localhost:4080"
@@ -34,7 +34,7 @@ def get_local_ip() -> str:
         print(f"⚠️  Could not determine local IP: {e}")
         return None
 
-def test_endpoint(url: str, endpoint: str, method: str = "GET", **kwargs) -> Dict[str, Any]:
+def test_endpoint(url: str, endpoint: str, method: str = "GET", **kwargs) -> dict[str, Any]:
     """Test a specific endpoint"""
     full_url = f"{url}{endpoint}"
     try:
@@ -44,7 +44,7 @@ def test_endpoint(url: str, endpoint: str, method: str = "GET", **kwargs) -> Dic
             response = requests.post(full_url, timeout=5, **kwargs)
         else:
             return {"success": False, "error": f"Unsupported method: {method}"}
-        
+
         return {
             "success": response.status_code < 400,
             "status_code": response.status_code,
@@ -58,7 +58,7 @@ def test_endpoint(url: str, endpoint: str, method: str = "GET", **kwargs) -> Dic
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-def print_result(test_name: str, result: Dict[str, Any]) -> bool:
+def print_result(test_name: str, result: dict[str, Any]) -> bool:
     """Print test result"""
     if result.get("success"):
         print(f"✅ {test_name}")
@@ -74,7 +74,7 @@ def main():
     print("=" * 80)
     print("Ollama Batch Server - Network Access Test")
     print("=" * 80)
-    
+
     # Detect local IP
     global NETWORK_IP
     NETWORK_IP = get_local_ip()
@@ -83,38 +83,38 @@ def main():
         print(f"\n📍 Detected Local IP: {NETWORK_IP}")
     else:
         NETWORK_URL = None
-        print(f"\n⚠️  Could not detect local IP - skipping network tests")
-    
+        print("\n⚠️  Could not detect local IP - skipping network tests")
+
     print(f"📍 Localhost URL: {LOCALHOST_URL}")
     print()
-    
+
     all_passed = True
-    
+
     # Test 1: Localhost Health Check
     print("1️⃣  Testing Localhost Access...")
     result = test_endpoint(LOCALHOST_URL, "/health")
     all_passed &= print_result("Localhost health check", result)
     print()
-    
+
     # Test 2: Network Health Check
     if NETWORK_URL:
         print("2️⃣  Testing Network Access...")
         result = test_endpoint(NETWORK_URL, "/health")
         all_passed &= print_result(f"Network health check ({NETWORK_IP})", result)
         print()
-    
+
     # Test 3: API Docs
     print("3️⃣  Testing API Documentation...")
     result = test_endpoint(LOCALHOST_URL, "/docs")
     all_passed &= print_result("API docs endpoint", result)
     print()
-    
+
     # Test 4: OpenAPI Schema
     print("4️⃣  Testing OpenAPI Schema...")
     result = test_endpoint(LOCALHOST_URL, "/openapi.json")
     all_passed &= print_result("OpenAPI schema", result)
     print()
-    
+
     # Test 5: File Upload Endpoint (OPTIONS for CORS)
     print("5️⃣  Testing File Upload Endpoint...")
     result = test_endpoint(LOCALHOST_URL, "/v1/files", method="GET")
@@ -124,7 +124,7 @@ def main():
         result["error"] = None
     all_passed &= print_result("File upload endpoint exists", result)
     print()
-    
+
     # Test 6: Batch Endpoint
     print("6️⃣  Testing Batch Endpoint...")
     result = test_endpoint(LOCALHOST_URL, "/v1/batches", method="GET")
@@ -134,7 +134,7 @@ def main():
         result["error"] = None
     all_passed &= print_result("Batch endpoint exists", result)
     print()
-    
+
     # Test 7: Port Binding Check
     print("7️⃣  Testing Port Binding...")
     try:
@@ -142,7 +142,7 @@ def main():
         sock.settimeout(1)
         result = sock.connect_ex(('0.0.0.0', 4080))
         sock.close()
-        
+
         if result == 0:
             print("✅ Port 4080 is open and listening")
         else:
@@ -152,7 +152,7 @@ def main():
         print(f"❌ Port check failed: {e}")
         all_passed = False
     print()
-    
+
     # Summary
     print("=" * 80)
     if all_passed:

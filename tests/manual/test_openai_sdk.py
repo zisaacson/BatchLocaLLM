@@ -91,8 +91,8 @@ try:
             file=f,
             purpose="batch"
         )
-    
-    print(f"✅ File uploaded successfully!")
+
+    print("✅ File uploaded successfully!")
     print(f"   File ID: {file.id}")
     print(f"   Filename: {file.filename}")
     print(f"   Bytes: {file.bytes}")
@@ -112,8 +112,8 @@ try:
         endpoint="/v1/chat/completions",
         completion_window="24h"
     )
-    
-    print(f"✅ Batch created successfully!")
+
+    print("✅ Batch created successfully!")
     print(f"   Batch ID: {batch.id}")
     print(f"   Status: {batch.status}")
     print(f"   Endpoint: {batch.endpoint}")
@@ -138,16 +138,16 @@ last_status = None
 while time.time() - start_time < max_wait:
     try:
         batch = client.batches.retrieve(batch.id)
-        
+
         if batch.status != last_status:
             print(f"   Status: {batch.status}")
             if batch.request_counts:
                 print(f"   Progress: {batch.request_counts.completed}/{batch.request_counts.total}")
             last_status = batch.status
-        
+
         if batch.status in ["completed", "failed", "expired", "cancelled"]:
             break
-        
+
         time.sleep(5)
     except Exception as e:
         print(f"   ⚠️  Polling error: {e}")
@@ -158,21 +158,21 @@ elapsed = time.time() - start_time
 if batch.status == "completed":
     print(f"\n✅ Batch completed in {elapsed:.1f}s!")
     print(f"   Output file ID: {batch.output_file_id}")
-    print(f"   Request counts:")
+    print("   Request counts:")
     print(f"     Total: {batch.request_counts.total}")
     print(f"     Completed: {batch.request_counts.completed}")
     print(f"     Failed: {batch.request_counts.failed}")
-    
+
     # Step 4: Download results
     print("\n5️⃣  Downloading results...")
     try:
         content = client.files.content(batch.output_file_id)
-        
+
         results_file = Path("test_openai_sdk_results.jsonl")
         results_file.write_bytes(content.read())
-        
+
         print(f"✅ Results downloaded: {results_file}")
-        
+
         # Parse and display results
         print("\n📊 Results:")
         with open(results_file) as f:
@@ -182,19 +182,19 @@ if batch.status == "completed":
                 response = result.get("response", {})
                 body = response.get("body", {})
                 choices = body.get("choices", [])
-                
+
                 if choices:
                     message = choices[0].get("message", {})
                     content = message.get("content", "")
                     print(f"\n   Request {i} ({custom_id}):")
                     print(f"   {content[:200]}...")
-        
+
         print("\n" + "=" * 80)
         print("✅ OPENAI SDK COMPATIBILITY TEST PASSED!")
         print("=" * 80)
         print("\nThe OpenAI Python SDK works perfectly with our vLLM batch server!")
         print("You can now switch between local and Parasail by just changing base_url.")
-        
+
     except Exception as e:
         print(f"❌ Results download failed: {e}")
         import traceback
@@ -202,14 +202,14 @@ if batch.status == "completed":
         exit(1)
 
 elif batch.status == "failed":
-    print(f"\n❌ Batch failed!")
+    print("\n❌ Batch failed!")
     print(f"   Errors: {batch.errors}")
     exit(1)
 elif batch.status == "expired":
-    print(f"\n❌ Batch expired (took longer than 24h)")
+    print("\n❌ Batch expired (took longer than 24h)")
     exit(1)
 elif batch.status == "cancelled":
-    print(f"\n❌ Batch was cancelled")
+    print("\n❌ Batch was cancelled")
     exit(1)
 else:
     print(f"\n⏱️  Batch still processing after {elapsed:.1f}s")

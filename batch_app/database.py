@@ -8,12 +8,22 @@ Models:
 - WorkerHeartbeat: Worker health monitoring
 """
 
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Float, ForeignKey, Boolean
+import json
+from datetime import datetime
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    create_engine,
+)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime, timedelta
-import os
-import json
 
 from config import settings
 
