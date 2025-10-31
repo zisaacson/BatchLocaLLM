@@ -46,6 +46,11 @@ env/
 *.sqlite
 *.sqlite3
 
+# Duplicate/backup directories
+batch_data/
+benchmark_results/
+benchmark_results_backup_*/
+
 # Logs
 *.log
 logs/
