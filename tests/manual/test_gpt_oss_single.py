@@ -127,7 +127,7 @@ def main():
             print("\n✅ Valid JSON response!")
             print(f"Recommendation: {result.get('recommendation', 'N/A')}")
             print(f"Reasoning: {result.get('reasoning', 'N/A')[:200]}...")
-        except:
+        except Exception:
             print("\n⚠️  Response is not valid JSON (may need prompt tuning)")
 
         print("\n" + "=" * 80)

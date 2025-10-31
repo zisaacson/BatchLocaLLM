@@ -64,7 +64,7 @@ class LabelStudioClient:
             timeout=self.timeout
         )
         response.raise_for_status()
-        return response.json()
+        return response.json()  # type: ignore[no-any-return]
 
     def get_project(self, project_id: int) -> dict[str, Any]:
         """Get project details"""
@@ -73,7 +73,7 @@ class LabelStudioClient:
             timeout=self.timeout
         )
         response.raise_for_status()
-        return response.json()
+        return response.json()  # type: ignore[no-any-return]
 
     def create_task(
         self,
@@ -84,13 +84,13 @@ class LabelStudioClient:
     ) -> dict[str, Any]:
         """
         Create a task with optional LLM predictions
-        
+
         Args:
             project_id: Label Studio project ID
             data: Task data (candidate info, etc.)
             predictions: LLM predictions to pre-fill
             meta: Additional metadata
-        
+
         Returns:
             Created task object
         """
@@ -111,7 +111,7 @@ class LabelStudioClient:
             timeout=self.timeout
         )
         response.raise_for_status()
-        return response.json()
+        return response.json()  # type: ignore[no-any-return]
 
     def get_task(self, task_id: int) -> dict[str, Any]:
         """Get task by ID"""
@@ -120,7 +120,7 @@ class LabelStudioClient:
             timeout=self.timeout
         )
         response.raise_for_status()
-        return response.json()
+        return response.json()  # type: ignore[no-any-return]
 
     def get_tasks(
         self,
@@ -131,13 +131,13 @@ class LabelStudioClient:
     ) -> list[dict[str, Any]]:
         """
         Get tasks with optional filters
-        
+
         Args:
             project_id: Project ID
             filters: Filter criteria (e.g., {"agreement_score__gte": 0.8})
             page: Page number
             page_size: Results per page
-        
+
         Returns:
             List of tasks
         """
@@ -156,7 +156,7 @@ class LabelStudioClient:
             timeout=self.timeout
         )
         response.raise_for_status()
-        return response.json()
+        return response.json()  # type: ignore[no-any-return]
 
     def create_annotation(
         self,
@@ -167,13 +167,13 @@ class LabelStudioClient:
     ) -> dict[str, Any]:
         """
         Create an annotation (human's response)
-        
+
         Args:
             task_id: Task ID
             result: Annotation result
             completed_by: User ID who completed it
             lead_time: Time spent in seconds
-        
+
         Returns:
             Created annotation object
         """
@@ -195,7 +195,7 @@ class LabelStudioClient:
             timeout=self.timeout
         )
         response.raise_for_status()
-        return response.json()
+        return response.json()  # type: ignore[no-any-return]
 
     def get_annotations(self, task_id: int) -> list[dict[str, Any]]:
         """Get all annotations for a task"""
@@ -204,7 +204,7 @@ class LabelStudioClient:
             timeout=self.timeout
         )
         response.raise_for_status()
-        return response.json()
+        return response.json()  # type: ignore[no-any-return]
 
     def update_annotation(
         self,
@@ -218,7 +218,7 @@ class LabelStudioClient:
             timeout=self.timeout
         )
         response.raise_for_status()
-        return response.json()
+        return response.json()  # type: ignore[no-any-return]
 
     def update_task(
         self,
@@ -239,7 +239,7 @@ class LabelStudioClient:
             timeout=self.timeout
         )
         response.raise_for_status()
-        return response.json()
+        return response.json()  # type: ignore[no-any-return]
 
     def delete_task(self, task_id: int) -> None:
         """Delete a task"""
@@ -257,12 +257,12 @@ class LabelStudioClient:
     ) -> list[dict[str, Any]]:
         """
         Export tasks in various formats
-        
+
         Args:
             project_id: Project ID
             export_type: Export format (JSON, CSV, COCO, etc.)
             filters: Filter criteria
-        
+
         Returns:
             Exported data
         """
@@ -277,7 +277,7 @@ class LabelStudioClient:
             timeout=self.timeout
         )
         response.raise_for_status()
-        return response.json()
+        return response.json()  # type: ignore[no-any-return]
 
     def calculate_agreement(
         self,
@@ -287,7 +287,7 @@ class LabelStudioClient:
     ) -> float:
         """
         Calculate agreement score between LLM prediction and human annotation
-        
+
         Returns:
             Agreement score (0.0 to 1.0)
         """

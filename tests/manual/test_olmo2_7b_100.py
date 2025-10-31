@@ -97,7 +97,7 @@ def main():
     prompt_tokens = 0
     completion_tokens = 0
 
-    for i, (req, output) in enumerate(zip(requests, outputs)):
+    for i, (req, output) in enumerate(zip(requests, outputs, strict=False)):
         try:
             response_text = output.outputs[0].text
 

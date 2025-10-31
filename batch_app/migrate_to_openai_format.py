@@ -16,7 +16,7 @@ from datetime import datetime
 DATABASE_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'database', 'batch_jobs.db')
 
 
-def backup_database():
+def backup_database() -> None:
     """Create backup of database before migration."""
     if not os.path.exists(DATABASE_PATH):
         print("⚠️  No database found - will create new one")
@@ -27,7 +27,7 @@ def backup_database():
     print(f"✅ Database backed up to: {backup_path}")
 
 
-def migrate_database():
+def migrate_database() -> None:
     """Migrate database to OpenAI-compatible format."""
 
     # Backup first
@@ -121,7 +121,7 @@ def migrate_database():
 
         migrated = 0
         for job in old_jobs:
-            job_dict = dict(zip(old_columns, job))
+            job_dict = dict(zip(old_columns, job, strict=False))
 
             # Create file entry for input file
             input_file_id = f"file-{job_dict['batch_id'].replace('batch_', '')}"

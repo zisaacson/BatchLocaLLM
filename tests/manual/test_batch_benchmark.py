@@ -111,7 +111,7 @@ class OllamaBenchmark:
         """Unload model from memory"""
         try:
             self.chat(messages=[], keep_alive="0")
-        except:
+        except Exception:
             pass
 
     def run_baseline(self, num_requests: int) -> BenchmarkResult:

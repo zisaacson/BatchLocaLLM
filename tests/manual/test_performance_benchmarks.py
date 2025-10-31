@@ -269,7 +269,7 @@ def main():
         if response.status_code != 200:
             print("❌ Server not running! Start with: python -m uvicorn src.main:app --host 0.0.0.0 --port 4080")
             return
-    except:
+    except Exception:
         print("❌ Cannot connect to server!")
         return
 

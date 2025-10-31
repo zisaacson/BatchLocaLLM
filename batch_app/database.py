@@ -30,7 +30,7 @@ from config import settings
 Base = declarative_base()
 
 
-class File(Base):
+class File(Base):  # type: ignore[valid-type,misc]
     """File model - OpenAI Files API compatible."""
 
     __tablename__ = 'files'
@@ -49,7 +49,7 @@ class File(Base):
     file_path = Column(String(512), nullable=False)
     deleted = Column(Boolean, default=False)
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         """Convert to OpenAI Files API format."""
         return {
             'id': self.file_id,

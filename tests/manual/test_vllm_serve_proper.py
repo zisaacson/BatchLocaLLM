@@ -8,7 +8,7 @@ This is the CORRECT way to test vLLM Serve.
 Usage:
     # Terminal 1: Start server
     vllm serve google/gemma-3-4b-it --max-model-len 4096 --gpu-memory-utilization 0.90
-    
+
     # Terminal 2: Run test
     python test_vllm_serve_proper.py batch_100.jsonl results.jsonl
 """

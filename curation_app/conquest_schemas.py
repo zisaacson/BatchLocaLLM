@@ -98,7 +98,7 @@ class ConquestSchemaRegistry:
     def generate_label_studio_config(self, schema: ConquestSchema) -> str:
         """
         Generate Label Studio XML config from conquest schema
-        
+
         This is used internally by Label Studio but we don't use their UI.
         We generate it programmatically for API compatibility.
         """
@@ -168,7 +168,7 @@ class ConquestSchemaRegistry:
     def export_to_icl(self, tasks: list[dict[str, Any]], conquest_type: str) -> list[dict[str, Any]]:
         """
         Export tasks to In-Context Learning format
-        
+
         Returns list of {"messages": [...]} objects for ICL
         """
         schema = self.get_schema(conquest_type)
@@ -210,7 +210,7 @@ class ConquestSchemaRegistry:
     def export_to_finetuning(self, tasks: list[dict[str, Any]], conquest_type: str) -> list[dict[str, Any]]:
         """
         Export tasks to fine-tuning format
-        
+
         Returns list of {"input": {...}, "output": {...}} objects
         """
         schema = self.get_schema(conquest_type)

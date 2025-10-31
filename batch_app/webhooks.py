@@ -23,13 +23,13 @@ def send_webhook(
 ) -> bool:
     """
     Send webhook notification for batch job completion.
-    
+
     Args:
         batch_job: The completed batch job
         db: Database session
         max_retries: Maximum number of retry attempts
         timeout: Request timeout in seconds
-        
+
     Returns:
         True if webhook sent successfully, False otherwise
     """
@@ -103,7 +103,7 @@ def send_webhook(
 def send_webhook_async(batch_id: str, webhook_url: str):
     """
     Send webhook asynchronously (non-blocking).
-    
+
     This function can be called from the worker without blocking job processing.
     In production, you'd use Celery/RQ for this, but for now we'll use threading.
     """

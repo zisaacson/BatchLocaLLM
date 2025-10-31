@@ -16,7 +16,7 @@ def get_gpu_memory():
             capture_output=True, text=True, check=True
         )
         return int(result.stdout.strip())
-    except:
+    except Exception:
         return 0
 
 def main():

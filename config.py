@@ -218,7 +218,7 @@ class Settings(BaseSettings):
         case_sensitive = True
         extra = "ignore"  # Ignore extra fields from .env file
         
-    def create_directories(self):
+    def create_directories(self) -> None:
         """Create all required directories"""
         dirs = [
             self.DATA_DIR,
@@ -282,7 +282,7 @@ def get_settings() -> Settings:
     return settings
 
 
-def print_config():
+def print_config() -> None:
     """Print current configuration (for debugging)"""
     print("=" * 60)
     print(f"{settings.APP_NAME} v{settings.APP_VERSION}")

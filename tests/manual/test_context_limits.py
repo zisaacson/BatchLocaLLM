@@ -38,11 +38,11 @@ def get_vram_usage() -> float | None:
 def test_context_length(num_exchanges: int, system_prompt_tokens: int = 100):
     """
     Test a specific context length by building a conversation.
-    
+
     Args:
         num_exchanges: Number of user/assistant exchanges
         system_prompt_tokens: Approximate tokens in system prompt
-    
+
     Returns:
         dict with results or None if OOM
     """
@@ -139,7 +139,7 @@ def test_context_length(num_exchanges: int, system_prompt_tokens: int = 100):
 def find_max_context():
     """
     Binary search to find maximum context length before OOM.
-    
+
     Strategy:
     1. Start with small context (10 exchanges)
     2. Double until we hit OOM
@@ -172,7 +172,7 @@ def find_max_context():
 def test_vram_growth():
     """
     Measure VRAM growth rate with context length.
-    
+
     This tells us the KV cache size per token.
     """
     print("\n" + "="*80)
@@ -235,7 +235,7 @@ def generate_recommendations(results):
     print(f"   VRAM usage: {max_vram:.2f} GB")
 
     # Calculate safe limits (80% of max)
-    safe_exchanges = int(max_exchanges * 0.8)
+    int(max_exchanges * 0.8)
     safe_tokens = int(max_tokens * 0.8)
 
     print("\n💡 Recommended safe limits (80% of max):")
@@ -270,7 +270,7 @@ def main():
         if response.status_code != 200:
             print("❌ Ollama not running! Start with: ollama serve")
             return
-    except:
+    except Exception:
         print("❌ Cannot connect to Ollama! Start with: ollama serve")
         return
 

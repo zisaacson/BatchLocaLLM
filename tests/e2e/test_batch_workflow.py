@@ -222,17 +222,20 @@ class TestBatchWorkflow:
         assert response.status_code == 200
         batch_id = response.json()['id']
 
-        # Wait for batch to process
-        time.sleep(5)
-
-        response = requests.get(
-            f"{API_BASE_URL}/v1/batches/{batch_id}",
-            timeout=30
-        )
-        assert response.status_code == 200
+        # Wait for batch to process (with retries)
+        max_retries = 10
+        for _ in range(max_retries):
+            time.sleep(2)
+            response = requests.get(
+                f"{API_BASE_URL}/v1/batches/{batch_id}",
+                timeout=30
+            )
+            assert response.status_code == 200
+            batch_status = response.json()
+            if batch_status['status'] in ['failed', 'completed']:
+                break
 
         # Batch should either fail or have failed requests
-        batch_status = response.json()
         assert batch_status['status'] in ['failed', 'completed']
 
         if batch_status['status'] == 'completed':

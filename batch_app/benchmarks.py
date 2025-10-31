@@ -13,10 +13,10 @@ class BenchmarkManager:
 
     def __init__(self, benchmarks_dir: str = "benchmarks/metadata"):
         self.benchmarks_dir = Path(benchmarks_dir)
-        self.benchmarks_cache = {}
+        self.benchmarks_cache: dict[str, dict[str, Any]] = {}
         self._load_benchmarks()
 
-    def _load_benchmarks(self):
+    def _load_benchmarks(self) -> None:
         """Load all benchmark metadata files."""
         if not self.benchmarks_dir.exists():
             print(f"⚠️  Benchmark directory not found: {self.benchmarks_dir}")
@@ -40,7 +40,7 @@ class BenchmarkManager:
     def estimate_completion_time(self, model: str, num_requests: int) -> dict[str, Any] | None:
         """
         Estimate completion time based on benchmark data.
-        
+
         Returns:
             {
                 'estimated_seconds': int,
@@ -130,10 +130,10 @@ class BenchmarkManager:
             }
         }
 
-    def save_job_benchmark(self, job_data: dict[str, Any], output_dir: str = "benchmarks/metadata"):
+    def save_job_benchmark(self, job_data: dict[str, Any], output_dir: str = "benchmarks/metadata") -> None:
         """
         Save benchmark data from a completed job.
-        
+
         Args:
             job_data: Dictionary with job results
         """

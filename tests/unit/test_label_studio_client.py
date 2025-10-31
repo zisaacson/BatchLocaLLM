@@ -65,7 +65,8 @@ class TestLabelStudioClient:
                 "title": "Test Project",
                 "description": "Test Description",
                 "label_config": "<View></View>"
-            }
+            },
+            timeout=30
         )
 
     def test_get_project(self, client, mock_session):
@@ -77,7 +78,7 @@ class TestLabelStudioClient:
         result = client.get_project(project_id=1)
 
         assert result == {"id": 1, "title": "Test Project"}
-        mock_session.get.assert_called_once_with("http://localhost:8080/api/projects/1")
+        mock_session.get.assert_called_once_with("http://localhost:8080/api/projects/1", timeout=30)
 
     def test_create_task(self, client, mock_session):
         """Test creating a task"""
@@ -108,7 +109,7 @@ class TestLabelStudioClient:
         result = client.get_task(task_id=1)
 
         assert result == {"id": 1, "data": {"name": "John"}}
-        mock_session.get.assert_called_once_with("http://localhost:8080/api/tasks/1")
+        mock_session.get.assert_called_once_with("http://localhost:8080/api/tasks/1", timeout=30)
 
     def test_get_tasks_with_filters(self, client, mock_session):
         """Test getting tasks with filters"""
@@ -162,7 +163,8 @@ class TestLabelStudioClient:
 
         assert result == [{"id": 1}, {"id": 2}]
         mock_session.get.assert_called_once_with(
-            "http://localhost:8080/api/tasks/1/annotations"
+            "http://localhost:8080/api/tasks/1/annotations",
+            timeout=30
         )
 
     def test_update_annotation(self, client, mock_session):
@@ -179,7 +181,8 @@ class TestLabelStudioClient:
         assert result == {"id": 1, "result": [{"rating": "Weak"}]}
         mock_session.patch.assert_called_once_with(
             "http://localhost:8080/api/annotations/1",
-            json={"result": [{"rating": "Weak"}]}
+            json={"result": [{"rating": "Weak"}]},
+            timeout=30
         )
 
     def test_delete_task(self, client, mock_session):
@@ -189,7 +192,7 @@ class TestLabelStudioClient:
 
         client.delete_task(task_id=1)
 
-        mock_session.delete.assert_called_once_with("http://localhost:8080/api/tasks/1")
+        mock_session.delete.assert_called_once_with("http://localhost:8080/api/tasks/1", timeout=30)
 
     def test_export_tasks(self, client, mock_session):
         """Test exporting tasks"""

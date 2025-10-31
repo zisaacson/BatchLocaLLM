@@ -531,7 +531,7 @@ async def get_task(task_id: int) -> dict[str, Any]:
 async def submit_annotation(request: SubmitAnnotationRequest) -> dict[str, Any]:
     """
     Submit a human annotation
-    
+
     This is called when a human completes curation in the UI.
     """
     # Get task to determine conquest type
@@ -571,7 +571,7 @@ async def submit_annotation(request: SubmitAnnotationRequest) -> dict[str, Any]:
 async def export_dataset(request: ExportRequest) -> dict[str, Any]:
     """
     Export gold-star dataset for training
-    
+
     Returns high-quality examples where human agreed with LLM.
     """
     # Get project for this conquest type

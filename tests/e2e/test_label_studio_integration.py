@@ -291,7 +291,6 @@ class TestLabelStudioIntegration:
 
         # Upload and create batch
         with open(input_file, 'rb') as f:
-            files = {'file': ('large_batch.jsonl', f, 'application/jsonl')}
             response = requests.post(
                 f"{BATCH_API_URL}/v1/files",
                 files={'file': ('large_batch.jsonl', f, 'application/jsonl')},

@@ -103,7 +103,7 @@ def main():
     completion_tokens = 0
 
     with open(output_file, 'w') as f:
-        for i, (req, prompt) in enumerate(zip(requests, prompts)):
+        for i, (req, prompt) in enumerate(zip(requests, prompts, strict=False)):
             try:
                 # Generate single output
                 output = llm.generate([prompt], sampling_params)[0]
