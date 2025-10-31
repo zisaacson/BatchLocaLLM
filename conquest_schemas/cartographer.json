@@ -1,0 +1,146 @@
+{
+  "id": "cartographer",
+  "name": "Cartographer - Candidate Journey Mapping",
+  "description": "Map and analyze a candidate's career journey, identifying patterns, transitions, and trajectory",
+  "version": "1.0.0",
+  
+  "dataSources": [
+    {
+      "id": "name",
+      "name": "Candidate Name",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "current_role",
+      "name": "Current Role",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "work_history",
+      "name": "Work History",
+      "type": "structured",
+      "required": true,
+      "displayFormat": "timeline"
+    },
+    {
+      "id": "education",
+      "name": "Education",
+      "type": "structured",
+      "required": true,
+      "displayFormat": "list"
+    }
+  ],
+  
+  "questions": [
+    {
+      "id": "career_stage",
+      "text": "Career Stage",
+      "type": "choice",
+      "options": ["Early Career (0-3 years)", "Mid-Level (4-7 years)", "Senior (8-12 years)", "Staff+ (13+ years)"],
+      "required": true,
+      "helpText": "What stage is this candidate at in their career?"
+    },
+    {
+      "id": "trajectory_pattern",
+      "text": "Trajectory Pattern",
+      "type": "choice",
+      "options": ["Rapid Ascent", "Steady Growth", "Lateral Moves", "Stagnant", "Declining"],
+      "required": true,
+      "helpText": "What pattern does their career trajectory show?"
+    },
+    {
+      "id": "company_tier_progression",
+      "text": "Company Tier Progression",
+      "type": "choice",
+      "options": ["Trading Up", "Consistent Tier", "Trading Down", "Mixed"],
+      "required": true,
+      "helpText": "Are they moving to better companies, staying at same tier, or moving down?"
+    },
+    {
+      "id": "role_progression",
+      "text": "Role Progression",
+      "type": "choice",
+      "options": ["Consistent Promotions", "Some Promotions", "Lateral Only", "Demotions"],
+      "required": true,
+      "helpText": "How has their role/title progressed over time?"
+    },
+    {
+      "id": "tenure_pattern",
+      "text": "Tenure Pattern",
+      "type": "choice",
+      "options": ["Long Tenure (3+ years)", "Standard (2-3 years)", "Job Hopper (1-2 years)", "Very Short (<1 year)"],
+      "required": true,
+      "helpText": "How long do they typically stay at companies?"
+    },
+    {
+      "id": "specialization",
+      "text": "Specialization",
+      "type": "choice",
+      "options": ["Deep Specialist", "Generalist", "Transitioning", "Unclear"],
+      "required": true,
+      "helpText": "Are they specializing in one area or staying broad?"
+    },
+    {
+      "id": "key_transitions",
+      "text": "Key Career Transitions",
+      "type": "structured",
+      "required": false,
+      "helpText": "List major transitions (e.g., startup to big tech, IC to management)"
+    },
+    {
+      "id": "red_flags",
+      "text": "Red Flags",
+      "type": "structured",
+      "required": false,
+      "helpText": "Any concerning patterns (gaps, demotions, very short tenures)"
+    },
+    {
+      "id": "green_flags",
+      "text": "Green Flags",
+      "type": "structured",
+      "required": false,
+      "helpText": "Positive patterns (promotions, tier-1 companies, consistent growth)"
+    },
+    {
+      "id": "predicted_next_move",
+      "text": "Predicted Next Move",
+      "type": "text",
+      "required": false,
+      "helpText": "Based on their trajectory, what's their likely next career move?"
+    },
+    {
+      "id": "journey_summary",
+      "text": "Journey Summary",
+      "type": "text",
+      "required": true,
+      "helpText": "2-3 sentence summary of their career journey"
+    }
+  ],
+  
+  "rendering": {
+    "layout": "two-column",
+    "theme": "gradient",
+    "showLLMPrediction": true,
+    "showDataSources": true,
+    "showRubrics": true,
+    "customTemplate": "cartographer",
+    "customCSS": ".journey-timeline { position: relative; padding-left: 2rem; } .journey-timeline::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: linear-gradient(180deg, #3b82f6, #8b5cf6); } .journey-node { position: relative; margin-bottom: 1.5rem; padding-left: 1rem; } .journey-node::before { content: ''; position: absolute; left: -2.5rem; top: 0.5rem; width: 12px; height: 12px; border-radius: 50%; background: #3b82f6; border: 2px solid white; box-shadow: 0 0 0 2px #3b82f6; }"
+  },
+  
+  "export": {
+    "iclFormat": {
+      "systemPrompt": "You are an expert career analyst mapping candidate journeys and identifying patterns.",
+      "userPromptTemplate": "Analyze this candidate's career journey:\n\nName: {name}\nCurrent Role: {current_role}\nWork History: {work_history}\nEducation: {education}\n\nMap their journey and identify patterns.",
+      "assistantResponseTemplate": "Career Stage: {career_stage}\nTrajectory Pattern: {trajectory_pattern}\nCompany Tier Progression: {company_tier_progression}\nRole Progression: {role_progression}\nTenure Pattern: {tenure_pattern}\nSpecialization: {specialization}\nKey Transitions: {key_transitions}\nRed Flags: {red_flags}\nGreen Flags: {green_flags}\nPredicted Next Move: {predicted_next_move}\nJourney Summary: {journey_summary}"
+    },
+    "finetuningFormat": {
+      "inputFields": ["name", "current_role", "work_history", "education"],
+      "outputFields": ["career_stage", "trajectory_pattern", "company_tier_progression", "role_progression", "tenure_pattern", "specialization", "key_transitions", "red_flags", "green_flags", "predicted_next_move", "journey_summary"]
+    }
+  }
+}
+

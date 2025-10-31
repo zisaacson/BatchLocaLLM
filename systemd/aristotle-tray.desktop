@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Aristotle Inference Monitor
+Comment=System tray monitor for Aristotle Inference Endpoint
+Exec=/usr/bin/python3 /home/zack/Documents/augment-projects/Local/vllm-batch-server/monitoring/aristotle-tray.py
+Icon=nvidia-settings
+Terminal=false
+Categories=System;Monitor;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+

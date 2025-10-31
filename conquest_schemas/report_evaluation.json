@@ -1,0 +1,152 @@
+{
+  "id": "report_evaluation",
+  "name": "Report Evaluation",
+  "description": "Evaluate quality and insights from recruiting reports, market analysis, etc.",
+  "version": "1.0.0",
+  
+  "dataSources": [
+    {
+      "id": "title",
+      "name": "Report Title",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "author",
+      "name": "Author",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "date",
+      "name": "Date",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "report_type",
+      "name": "Report Type",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "executive_summary",
+      "name": "Executive Summary",
+      "type": "text",
+      "required": true,
+      "displayFormat": "default"
+    },
+    {
+      "id": "key_findings",
+      "name": "Key Findings",
+      "type": "structured",
+      "required": true,
+      "displayFormat": "list"
+    },
+    {
+      "id": "full_report",
+      "name": "Full Report",
+      "type": "text",
+      "required": false,
+      "displayFormat": "collapsible"
+    }
+  ],
+  
+  "questions": [
+    {
+      "id": "insight_quality",
+      "text": "Quality of Insights",
+      "type": "rating",
+      "options": ["Exceptional", "Strong", "Good", "Average", "Weak"],
+      "required": true,
+      "helpText": "How valuable and actionable are the insights?"
+    },
+    {
+      "id": "data_quality",
+      "text": "Data Quality",
+      "type": "rating",
+      "options": ["Exceptional", "Strong", "Good", "Average", "Weak"],
+      "required": true,
+      "helpText": "How robust and reliable is the data?"
+    },
+    {
+      "id": "analysis_depth",
+      "text": "Analysis Depth",
+      "type": "rating",
+      "options": ["Exceptional", "Strong", "Good", "Average", "Weak"],
+      "required": true,
+      "helpText": "How thorough and deep is the analysis?"
+    },
+    {
+      "id": "clarity",
+      "text": "Clarity & Readability",
+      "type": "rating",
+      "options": ["Exceptional", "Strong", "Good", "Average", "Weak"],
+      "required": true,
+      "helpText": "How clear and easy to understand is the report?"
+    },
+    {
+      "id": "actionability",
+      "text": "Actionability",
+      "type": "rating",
+      "options": ["Exceptional", "Strong", "Good", "Average", "Weak"],
+      "required": true,
+      "helpText": "How actionable are the recommendations?"
+    },
+    {
+      "id": "overall_rating",
+      "text": "Overall Rating",
+      "type": "choice",
+      "options": ["Excellent", "Good", "Fair", "Poor"],
+      "required": true,
+      "helpText": "Overall assessment of the report"
+    },
+    {
+      "id": "strengths",
+      "text": "Key Strengths",
+      "type": "text",
+      "required": false,
+      "helpText": "What are the report's main strengths?"
+    },
+    {
+      "id": "weaknesses",
+      "text": "Key Weaknesses",
+      "type": "text",
+      "required": false,
+      "helpText": "What could be improved?"
+    },
+    {
+      "id": "notes",
+      "text": "Additional Notes",
+      "type": "text",
+      "required": false,
+      "helpText": "Any other observations"
+    }
+  ],
+  
+  "rendering": {
+    "layout": "two-column",
+    "theme": "gradient",
+    "showLLMPrediction": true,
+    "showDataSources": true,
+    "showRubrics": true,
+    "customTemplate": "report_evaluation"
+  },
+  
+  "export": {
+    "iclFormat": {
+      "systemPrompt": "You are an expert analyst evaluating research reports and market analysis.",
+      "userPromptTemplate": "Evaluate this report:\n\nTitle: {title}\nAuthor: {author}\nType: {report_type}\n\nExecutive Summary:\n{executive_summary}\n\nKey Findings:\n{key_findings}\n\nProvide ratings for insight quality, data quality, analysis depth, clarity, and actionability.",
+      "assistantResponseTemplate": "Insight Quality: {insight_quality}\nData Quality: {data_quality}\nAnalysis Depth: {analysis_depth}\nClarity: {clarity}\nActionability: {actionability}\nOverall: {overall_rating}\n\nStrengths: {strengths}\nWeaknesses: {weaknesses}\nNotes: {notes}"
+    },
+    "finetuningFormat": {
+      "inputFields": ["title", "author", "report_type", "executive_summary", "key_findings"],
+      "outputFields": ["insight_quality", "data_quality", "analysis_depth", "clarity", "actionability", "overall_rating", "strengths", "weaknesses", "notes"]
+    }
+  }
+}
+

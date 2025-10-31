@@ -1,0 +1,121 @@
+# =============================================================================
+# Aristotle Inference Endpoint - Supporting Services
+# =============================================================================
+#
+# ARCHITECTURE:
+# - vLLM Batch API runs NATIVELY (systemd service) for direct GPU access
+# - These services run in Docker (no GPU needed):
+#   * Label Studio (4015) - Data labeling for model improvement
+#   * Grafana (4020) - Monitoring dashboards
+#   * Prometheus (4022) - Metrics collection
+#   * Loki (4021) - Log aggregation
+#
+# The vLLM API is managed by systemd:
+#   sudo systemctl start aristotle-batch-api
+#   sudo systemctl status aristotle-batch-api
+#   journalctl -u aristotle-batch-api -f
+#
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # DATA LABELING (4015-4018)
+  # ===========================================================================
+  
+  label-studio-db:
+    image: postgres:16
+    container_name: aristotle-label-studio-db
+    ports:
+      - "4018:5432"
+    environment:
+      - POSTGRES_DB=labelstudio
+      - POSTGRES_USER=labelstudio
+      - POSTGRES_PASSWORD=labelstudio
+    volumes:
+      - label-studio-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U labelstudio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  label-studio:
+    image: heartexlabs/label-studio:latest
+    container_name: aristotle-label-studio
+    ports:
+      - "4015:8080"
+    environment:
+      - DJANGO_DB=default
+      - POSTGRE_NAME=labelstudio
+      - POSTGRE_USER=labelstudio
+      - POSTGRE_PASSWORD=labelstudio
+      - POSTGRE_PORT=5432
+      - POSTGRE_HOST=label-studio-db
+    volumes:
+      - label-studio-data:/label-studio/data
+    depends_on:
+      label-studio-db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ===========================================================================
+  # MONITORING (4020-4022)
+  # ===========================================================================
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: aristotle-grafana
+    ports:
+      - "4020:3000"
+    environment:
+      - GF_SERVER_HTTP_PORT=3000
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    container_name: aristotle-loki
+    ports:
+      - "4021:3100"
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - loki-data:/loki
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: aristotle-prometheus
+    ports:
+      - "4022:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
+volumes:
+  label-studio-db-data:
+    name: aristotle-label-studio-db-data
+  label-studio-data:
+    name: aristotle-label-studio-data
+  grafana-data:
+    name: aristotle-grafana-data
+  loki-data:
+    name: aristotle-loki-data
+  prometheus-data:
+    name: aristotle-prometheus-data

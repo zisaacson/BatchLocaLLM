@@ -33,11 +33,11 @@ class BenchmarkManager:
             except Exception as e:
                 print(f"⚠️  Failed to load {file_path}: {e}")
     
-    def get_model_performance(self, model: str) -> Optional[Dict[str, Any]]:
+    def get_model_performance(self, model: str) -> (dict[str, Any]]:
         """Get performance metrics for a model."""
         return self.benchmarks_cache.get(model)
     
-    def estimate_completion_time(self, model: str, num_requests: int) -> Optional[Dict[str, Any]]:
+    def estimate_completion_time(self, model: str, num_requests: int) -> (dict[str, Any]]:
         """
         Estimate completion time based on benchmark data.
         
@@ -85,27 +85,52 @@ class BenchmarkManager:
         """Get list of models with benchmark data."""
         return list(self.benchmarks_cache.keys())
     
-    def get_model_info(self, model: str) -> Optional[Dict[str, Any]]:
-        """Get detailed model information."""
+    def get_model_info(self, model: str) -> (dict[str, Any]]:
+        """
+        Get detailed model information in OpenAI/Parasail format.
+
+        Returns model object matching OpenAI Models API format:
+        https://platform.openai.com/docs/api-reference/models/object
+        """
         benchmark = self.get_model_performance(model)
         if not benchmark:
             return None
-        
+
         results = benchmark.get('results', {})
         config = benchmark.get('config', {})
-        
+        timestamp = benchmark.get('timestamp', 'unknown')
+
+        # Convert timestamp to Unix epoch (OpenAI format)
+        import time
+        from datetime import datetime
+        try:
+            if isinstance(timestamp, str) and timestamp != 'unknown':
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                created = int(dt.timestamp())
+            else:
+                created = int(time.time())
+        except:
+            created = int(time.time())
+
+        # OpenAI/Parasail compatible model object
         return {
-            'model': model,
-            'platform': benchmark.get('platform', 'unknown'),
-            'throughput_tokens_per_sec': results.get('throughput_tokens_per_sec', 0),
-            'throughput_requests_per_sec': results.get('throughput_requests_per_sec', 0),
-            'max_model_len': config.get('max_model_len', 4096),
-            'gpu_memory_utilization': config.get('gpu_memory_utilization', 0.9),
-            'last_benchmark': benchmark.get('timestamp', 'unknown'),
-            'success_rate': round(results.get('success_count', 0) / max(results.get('success_count', 0) + results.get('failure_count', 0), 1) * 100, 2)
+            "id": model,  # OpenAI uses "id" not "model"
+            "object": "model",  # OpenAI standard
+            "created": created,  # Unix timestamp
+            "owned_by": "vllm-local",  # Indicates local vLLM instance
+            # Custom vLLM-specific metadata (not in OpenAI spec, but useful)
+            "vllm_metadata": {
+                "platform": benchmark.get('platform', 'unknown'),
+                "throughput_tokens_per_sec": results.get('throughput_tokens_per_sec', 0),
+                "throughput_requests_per_sec": results.get('throughput_requests_per_sec', 0),
+                "max_model_len": config.get('max_model_len', 4096),
+                "gpu_memory_utilization": config.get('gpu_memory_utilization', 0.9),
+                "last_benchmark": timestamp,
+                "success_rate": round(results.get('success_count', 0) / max(results.get('success_count', 0) + results.get('failure_count', 0), 1) * 100, 2)
+            }
         }
     
-    def save_job_benchmark(self, job_data: Dict[str, Any], output_dir: str = "benchmarks/metadata"):
+    def save_job_benchmark(self, job_data: dict[str, Any], output_dir: str = "benchmarks/metadata"):
         """
         Save benchmark data from a completed job.
         

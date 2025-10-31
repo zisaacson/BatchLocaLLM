@@ -1,0 +1,123 @@
+{
+  "id": "email_evaluation",
+  "name": "Email Evaluation",
+  "description": "Evaluate quality, tone, and effectiveness of email communications",
+  "version": "1.0.0",
+  
+  "dataSources": [
+    {
+      "id": "from",
+      "name": "From",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "to",
+      "name": "To",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "subject",
+      "name": "Subject",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "email_body",
+      "name": "Email Body",
+      "type": "text",
+      "required": true,
+      "displayFormat": "default"
+    },
+    {
+      "id": "context",
+      "name": "Context",
+      "type": "text",
+      "required": false,
+      "displayFormat": "collapsible"
+    }
+  ],
+  
+  "questions": [
+    {
+      "id": "tone",
+      "text": "Email Tone",
+      "type": "choice",
+      "options": ["Professional", "Friendly", "Formal", "Casual", "Aggressive", "Passive"],
+      "required": true,
+      "helpText": "What is the overall tone of the email?"
+    },
+    {
+      "id": "clarity",
+      "text": "Clarity",
+      "type": "rating",
+      "options": ["Exceptional", "Strong", "Good", "Average", "Weak"],
+      "required": true,
+      "helpText": "How clear and easy to understand is the message?"
+    },
+    {
+      "id": "professionalism",
+      "text": "Professionalism",
+      "type": "rating",
+      "options": ["Exceptional", "Strong", "Good", "Average", "Weak"],
+      "required": true,
+      "helpText": "How professional is the email?"
+    },
+    {
+      "id": "effectiveness",
+      "text": "Effectiveness",
+      "type": "rating",
+      "options": ["Exceptional", "Strong", "Good", "Average", "Weak"],
+      "required": true,
+      "helpText": "How effective is the email at achieving its purpose?"
+    },
+    {
+      "id": "has_call_to_action",
+      "text": "Has Clear Call to Action?",
+      "type": "boolean",
+      "options": ["Yes", "No"],
+      "required": true,
+      "helpText": "Does the email have a clear call to action?"
+    },
+    {
+      "id": "issues",
+      "text": "Issues or Concerns",
+      "type": "text",
+      "required": false,
+      "helpText": "Any grammar, spelling, or content issues?"
+    },
+    {
+      "id": "notes",
+      "text": "Additional Notes",
+      "type": "text",
+      "required": false,
+      "helpText": "Any other observations"
+    }
+  ],
+  
+  "rendering": {
+    "layout": "two-column",
+    "theme": "gradient",
+    "showLLMPrediction": true,
+    "showDataSources": true,
+    "showRubrics": true,
+    "customTemplate": "email_evaluation"
+  },
+  
+  "export": {
+    "iclFormat": {
+      "systemPrompt": "You are an expert email communication analyst.",
+      "userPromptTemplate": "Evaluate this email:\n\nFrom: {from}\nTo: {to}\nSubject: {subject}\n\n{email_body}\n\nProvide ratings for tone, clarity, professionalism, and effectiveness.",
+      "assistantResponseTemplate": "Tone: {tone}\nClarity: {clarity}\nProfessionalism: {professionalism}\nEffectiveness: {effectiveness}\nHas CTA: {has_call_to_action}\n\nIssues: {issues}\nNotes: {notes}"
+    },
+    "finetuningFormat": {
+      "inputFields": ["from", "to", "subject", "email_body"],
+      "outputFields": ["tone", "clarity", "professionalism", "effectiveness", "has_call_to_action", "issues", "notes"]
+    }
+  }
+}
+

@@ -1,0 +1,66 @@
+# =============================================================================
+# vLLM Batch API Server - OpenAI Compatible
+# =============================================================================
+# 
+# Lightweight FastAPI server for OpenAI-compatible batch processing
+# Works with vLLM worker for GPU inference
+#
+# Build: docker build -f Dockerfile.batch-api -t vllm-batch-api .
+# Run: docker run --gpus all -p 4080:4080 vllm-batch-api
+# =============================================================================
+
+FROM python:3.11-slim
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Copy requirements
+COPY pyproject.toml ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    fastapi>=0.115.0 \
+    uvicorn[standard]>=0.32.0 \
+    pydantic>=2.9.0 \
+    python-multipart>=0.0.12 \
+    sqlalchemy>=2.0.0 \
+    aiofiles>=24.1.0 \
+    pynvml>=11.5.0
+
+# Copy application code
+COPY batch_app/ ./batch_app/
+COPY benchmarks/ ./benchmarks/
+
+# Create data directories
+RUN mkdir -p /app/data/batches/input \
+    /app/data/batches/output \
+    /app/data/batches/logs \
+    /app/data/files \
+    /app/data/database
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    PORT=4080
+
+# Expose port
+EXPOSE 4080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:4080/health || exit 1
+
+# Run the API server
+CMD ["python", "-m", "uvicorn", "batch_app.api_server:app", "--host", "0.0.0.0", "--port", "4080"]
+

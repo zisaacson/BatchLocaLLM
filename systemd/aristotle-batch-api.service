@@ -1,0 +1,23 @@
+[Unit]
+Description=Aristotle vLLM Batch Inference API
+After=network.target
+
+[Service]
+Type=simple
+User=zack
+Group=zack
+WorkingDirectory=/home/zack/Documents/augment-projects/Local/vllm-batch-server
+Environment="PATH=/home/zack/Documents/augment-projects/Local/vllm-batch-server/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/home/zack/Documents/augment-projects/Local/vllm-batch-server/venv/bin/python -m uvicorn batch_app.api_server:app --host 0.0.0.0 --port 4080
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+

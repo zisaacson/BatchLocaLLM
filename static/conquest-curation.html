@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conquest Curation System</title>
+    <link rel="stylesheet" href="/static/css/conquest-ui.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <h1 class="logo">⚔️ Conquest Curation</h1>
+            <div class="header-stats">
+                <div class="stat">
+                    <span class="stat-label">Total</span>
+                    <span class="stat-value" id="stat-total">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Pending</span>
+                    <span class="stat-value" id="stat-pending">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Agreement</span>
+                    <span class="stat-value" id="stat-agreement">0%</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <h3>Conquest Type</h3>
+                <select id="conquest-type-selector" class="conquest-selector">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Tasks</h3>
+                <div class="task-list" id="task-list">
+                    <div class="loading">Loading tasks...</div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Actions</h3>
+                <button class="btn btn-primary" id="export-btn">
+                    📦 Export Dataset
+                </button>
+                <button class="btn btn-secondary" id="refresh-btn">
+                    🔄 Refresh
+                </button>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Keyboard Shortcuts</h3>
+                <div class="shortcuts">
+                    <div class="shortcut">
+                        <kbd>←</kbd> <kbd>→</kbd> Navigate tasks
+                    </div>
+                    <div class="shortcut">
+                        <kbd>Ctrl</kbd> + <kbd>S</kbd> Save annotation
+                    </div>
+                    <div class="shortcut">
+                        <kbd>Ctrl</kbd> + <kbd>E</kbd> Export
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div id="no-task-selected" class="empty-state">
+                <div class="empty-icon">📋</div>
+                <h2>No Task Selected</h2>
+                <p>Select a task from the sidebar to begin curation</p>
+            </div>
+
+            <div id="task-viewer" class="task-viewer" style="display: none;">
+                <!-- Task Header -->
+                <div class="task-header">
+                    <div class="task-title" id="task-title">Loading...</div>
+                    <div class="task-meta">
+                        <span class="task-id" id="task-id"></span>
+                        <span class="task-status" id="task-status"></span>
+                    </div>
+                </div>
+
+                <!-- Two-Column Layout -->
+                <div class="two-column-layout">
+                    <!-- Left Column: Data Sources -->
+                    <div class="column data-column">
+                        <h2 class="column-title">📊 Data Sources</h2>
+                        <div id="data-sources" class="data-sources">
+                            <!-- Dynamically rendered based on schema -->
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Questions & Answers -->
+                    <div class="column questions-column">
+                        <h2 class="column-title">❓ Evaluation</h2>
+                        
+                        <!-- LLM Prediction (if available) -->
+                        <div id="llm-prediction" class="prediction-section" style="display: none;">
+                            <h3 class="section-title">🤖 LLM Prediction</h3>
+                            <div id="llm-answers" class="answers-grid">
+                                <!-- Dynamically rendered -->
+                            </div>
+                        </div>
+
+                        <!-- Human Annotation -->
+                        <div class="annotation-section">
+                            <h3 class="section-title">👤 Your Evaluation</h3>
+                            <form id="annotation-form" class="annotation-form">
+                                <!-- Dynamically rendered based on schema -->
+                            </form>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="action-buttons">
+                            <button type="button" class="btn btn-secondary" id="copy-llm-btn">
+                                📋 Copy LLM Answers
+                            </button>
+                            <button type="submit" form="annotation-form" class="btn btn-primary">
+                                ✅ Submit Annotation
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="export-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📦 Export Dataset</h2>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Export Format</label>
+                    <select id="export-format" class="form-control">
+                        <option value="icl">In-Context Learning (ICL)</option>
+                        <option value="finetuning">Fine-tuning</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Minimum Agreement Score</label>
+                    <input type="number" id="export-min-agreement" class="form-control" 
+                           value="0.8" min="0" max="1" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label>Minimum Annotations</label>
+                    <input type="number" id="export-min-annotations" class="form-control" 
+                           value="1" min="1">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="export-cancel">Cancel</button>
+                <button class="btn btn-primary" id="export-confirm">Export</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="/static/js/conquest-templates.js"></script>
+    <script src="/static/js/conquest-renderer.js"></script>
+    <script src="/static/js/label-studio-api.js"></script>
+    <script src="/static/js/keyboard-shortcuts.js"></script>
+    
+    <script>
+        // Main application logic
+        let currentSchema = null;
+        let currentTask = null;
+        let currentConquestType = null;
+        let tasks = [];
+        let currentTaskIndex = -1;
+
+        // Initialize app
+        async function init() {
+            await loadSchemas();
+            await loadStats();
+            setupEventListeners();
+            setupKeyboardShortcuts();
+        }
+
+        // Load available conquest schemas
+        async function loadSchemas() {
+            try {
+                const schemas = await API.getSchemas();
+                const selector = document.getElementById('conquest-type-selector');
+                selector.innerHTML = schemas.map(s => 
+                    `<option value="${s.id}">${s.name} (${s.questionCount} questions)</option>`
+                ).join('');
+                
+                if (schemas.length > 0) {
+                    selector.value = schemas[0].id;
+                    await onConquestTypeChange();
+                }
+            } catch (error) {
+                showToast('Failed to load schemas', 'error');
+                console.error(error);
+            }
+        }
+
+        // Load tasks for selected conquest type
+        async function loadTasks() {
+            if (!currentConquestType) return;
+            
+            try {
+                const response = await API.getTasks(currentConquestType);
+                tasks = response.tasks || [];
+                renderTaskList();
+                
+                if (tasks.length > 0) {
+                    selectTask(0);
+                }
+            } catch (error) {
+                showToast('Failed to load tasks', 'error');
+                console.error(error);
+            }
+        }
+
+        // Load statistics
+        async function loadStats() {
+            if (!currentConquestType) return;
+            
+            try {
+                const stats = await API.getStats(currentConquestType);
+                document.getElementById('stat-total').textContent = stats.total_tasks;
+                document.getElementById('stat-pending').textContent = stats.pending_tasks;
+                document.getElementById('stat-agreement').textContent = 
+                    `${(stats.average_agreement * 100).toFixed(0)}%`;
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        // Render task list in sidebar
+        function renderTaskList() {
+            const taskList = document.getElementById('task-list');
+            
+            if (tasks.length === 0) {
+                taskList.innerHTML = '<div class="empty-state-small">No tasks available</div>';
+                return;
+            }
+            
+            taskList.innerHTML = tasks.map((task, index) => {
+                const isAnnotated = task.annotations && task.annotations.length > 0;
+                const statusClass = isAnnotated ? 'completed' : 'pending';
+                const statusIcon = isAnnotated ? '✅' : '⏳';
+                
+                return `
+                    <div class="task-item ${statusClass}" data-index="${index}">
+                        <div class="task-item-header">
+                            <span class="task-item-icon">${statusIcon}</span>
+                            <span class="task-item-title">${task.data.name || `Task ${task.id}`}</span>
+                        </div>
+                        <div class="task-item-meta">
+                            <span class="task-item-id">#${task.id}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Add click handlers
+            document.querySelectorAll('.task-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const index = parseInt(item.dataset.index);
+                    selectTask(index);
+                });
+            });
+        }
+
+        // Select and display a task
+        async function selectTask(index) {
+            if (index < 0 || index >= tasks.length) return;
+            
+            currentTaskIndex = index;
+            currentTask = tasks[index];
+            
+            // Highlight selected task
+            document.querySelectorAll('.task-item').forEach((item, i) => {
+                item.classList.toggle('active', i === index);
+            });
+            
+            // Load schema if not already loaded
+            if (!currentSchema) {
+                currentSchema = await API.getSchema(currentConquestType);
+            }
+            
+            // Render task
+            renderTask(currentTask, currentSchema);
+            
+            // Show task viewer
+            document.getElementById('no-task-selected').style.display = 'none';
+            document.getElementById('task-viewer').style.display = 'block';
+        }
+
+        // Event listeners
+        function setupEventListeners() {
+            document.getElementById('conquest-type-selector').addEventListener('change', onConquestTypeChange);
+            document.getElementById('refresh-btn').addEventListener('click', refresh);
+            document.getElementById('export-btn').addEventListener('click', showExportModal);
+            document.getElementById('annotation-form').addEventListener('submit', submitAnnotation);
+            document.getElementById('copy-llm-btn').addEventListener('click', copyLLMAnswers);
+        }
+
+        async function onConquestTypeChange() {
+            const selector = document.getElementById('conquest-type-selector');
+            currentConquestType = selector.value;
+            currentSchema = null;
+            await loadTasks();
+            await loadStats();
+        }
+
+        async function refresh() {
+            await loadTasks();
+            await loadStats();
+            showToast('Refreshed', 'success');
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
+

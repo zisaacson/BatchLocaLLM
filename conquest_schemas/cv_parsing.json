@@ -1,0 +1,126 @@
+{
+  "id": "cv_parsing",
+  "name": "CV Parsing",
+  "description": "Extract structured data from candidate resumes and CVs",
+  "version": "1.0.0",
+  
+  "dataSources": [
+    {
+      "id": "resume_text",
+      "name": "Resume Text",
+      "type": "text",
+      "required": true,
+      "displayFormat": "markdown"
+    },
+    {
+      "id": "linkedin_url",
+      "name": "LinkedIn URL",
+      "type": "text",
+      "required": false,
+      "displayFormat": "link"
+    }
+  ],
+  
+  "questions": [
+    {
+      "id": "name",
+      "text": "Candidate Name",
+      "type": "text",
+      "required": true,
+      "helpText": "Full name of the candidate"
+    },
+    {
+      "id": "email",
+      "text": "Email Address",
+      "type": "text",
+      "required": false,
+      "helpText": "Primary email address"
+    },
+    {
+      "id": "phone",
+      "text": "Phone Number",
+      "type": "text",
+      "required": false,
+      "helpText": "Contact phone number"
+    },
+    {
+      "id": "location",
+      "text": "Location",
+      "type": "text",
+      "required": false,
+      "helpText": "City, State, Country"
+    },
+    {
+      "id": "current_role",
+      "text": "Current Role",
+      "type": "text",
+      "required": true,
+      "helpText": "Most recent job title"
+    },
+    {
+      "id": "current_company",
+      "text": "Current Company",
+      "type": "text",
+      "required": true,
+      "helpText": "Most recent employer"
+    },
+    {
+      "id": "education",
+      "text": "Education History",
+      "type": "structured",
+      "required": true,
+      "helpText": "List of degrees with institution, degree type, major, and dates"
+    },
+    {
+      "id": "work_history",
+      "text": "Work History",
+      "type": "structured",
+      "required": true,
+      "helpText": "List of positions with company, title, dates, and responsibilities"
+    },
+    {
+      "id": "skills",
+      "text": "Technical Skills",
+      "type": "structured",
+      "required": false,
+      "helpText": "Programming languages, frameworks, tools, etc."
+    },
+    {
+      "id": "years_experience",
+      "text": "Years of Experience",
+      "type": "number",
+      "required": false,
+      "helpText": "Total years of professional experience"
+    },
+    {
+      "id": "summary",
+      "text": "Professional Summary",
+      "type": "text",
+      "required": false,
+      "helpText": "Brief summary of candidate's background"
+    }
+  ],
+  
+  "rendering": {
+    "layout": "single-column",
+    "theme": "gradient",
+    "showLLMPrediction": true,
+    "showDataSources": true,
+    "showRubrics": false,
+    "customTemplate": "cv_parsing",
+    "customCSS": ".cv-section { background: #f9fafb; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; } .cv-header { background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: white; padding: 1.5rem; border-radius: 0.75rem; margin-bottom: 1rem; }"
+  },
+  
+  "export": {
+    "iclFormat": {
+      "systemPrompt": "You are an expert at parsing resumes and extracting structured data.",
+      "userPromptTemplate": "Parse this resume:\n\n{resume_text}",
+      "assistantResponseTemplate": "Name: {name}\nEmail: {email}\nPhone: {phone}\nLocation: {location}\nCurrent Role: {current_role}\nCurrent Company: {current_company}\nEducation: {education}\nWork History: {work_history}\nSkills: {skills}\nYears Experience: {years_experience}\nSummary: {summary}"
+    },
+    "finetuningFormat": {
+      "inputFields": ["resume_text"],
+      "outputFields": ["name", "email", "phone", "location", "current_role", "current_company", "education", "work_history", "skills", "years_experience", "summary"]
+    }
+  }
+}
+

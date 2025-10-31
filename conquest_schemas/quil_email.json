@@ -1,0 +1,164 @@
+{
+  "id": "quil_email",
+  "name": "Quil Email Generation",
+  "description": "Generate personalized recruiting outreach emails based on candidate profile",
+  "version": "1.0.0",
+  
+  "dataSources": [
+    {
+      "id": "candidate_name",
+      "name": "Candidate Name",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "current_role",
+      "name": "Current Role",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "current_company",
+      "name": "Current Company",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "education",
+      "name": "Education",
+      "type": "structured",
+      "required": false,
+      "displayFormat": "list"
+    },
+    {
+      "id": "work_history",
+      "name": "Work History",
+      "type": "structured",
+      "required": false,
+      "displayFormat": "list"
+    },
+    {
+      "id": "target_role",
+      "name": "Target Role",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "company_name",
+      "name": "Our Company Name",
+      "type": "text",
+      "required": true,
+      "displayFormat": "header"
+    },
+    {
+      "id": "company_description",
+      "name": "Company Description",
+      "type": "text",
+      "required": false,
+      "displayFormat": "collapsible"
+    },
+    {
+      "id": "role_description",
+      "name": "Role Description",
+      "type": "text",
+      "required": false,
+      "displayFormat": "collapsible"
+    }
+  ],
+  
+  "questions": [
+    {
+      "id": "subject_line",
+      "text": "Email Subject Line",
+      "type": "text",
+      "required": true,
+      "helpText": "Compelling subject line that will get opened"
+    },
+    {
+      "id": "opening_hook",
+      "text": "Opening Hook",
+      "type": "text",
+      "required": true,
+      "helpText": "First 1-2 sentences that grab attention and show personalization"
+    },
+    {
+      "id": "personalization_points",
+      "text": "Personalization Points",
+      "type": "structured",
+      "required": true,
+      "helpText": "Specific details from their background (education, companies, projects)"
+    },
+    {
+      "id": "value_proposition",
+      "text": "Value Proposition",
+      "type": "text",
+      "required": true,
+      "helpText": "Why this opportunity is compelling for them specifically"
+    },
+    {
+      "id": "call_to_action",
+      "text": "Call to Action",
+      "type": "choice",
+      "options": ["Schedule Call", "Reply with Interest", "Review Job Description", "Connect on LinkedIn"],
+      "required": true,
+      "helpText": "What action do you want them to take?"
+    },
+    {
+      "id": "tone",
+      "text": "Email Tone",
+      "type": "choice",
+      "options": ["Professional", "Casual", "Enthusiastic", "Direct"],
+      "required": true,
+      "helpText": "What tone matches this candidate and role?"
+    },
+    {
+      "id": "full_email_body",
+      "text": "Full Email Body",
+      "type": "text",
+      "required": true,
+      "helpText": "Complete email text (without subject line)"
+    },
+    {
+      "id": "quality_score",
+      "text": "Email Quality Score",
+      "type": "rating",
+      "options": ["Excellent", "Good", "Average", "Poor"],
+      "required": true,
+      "helpText": "How good is this email? Is it personalized, compelling, clear?"
+    },
+    {
+      "id": "improvements",
+      "text": "Suggested Improvements",
+      "type": "text",
+      "required": false,
+      "helpText": "How could this email be better?"
+    }
+  ],
+  
+  "rendering": {
+    "layout": "two-column",
+    "theme": "gradient",
+    "showLLMPrediction": true,
+    "showDataSources": true,
+    "showRubrics": true,
+    "customTemplate": "quil_email",
+    "customCSS": ".email-preview { background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; } .email-subject { font-weight: 600; font-size: 1.125rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb; } .email-body { line-height: 1.6; white-space: pre-wrap; } .personalization-tag { background: #dbeafe; color: #1e40af; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 500; }"
+  },
+  
+  "export": {
+    "iclFormat": {
+      "systemPrompt": "You are an expert recruiting copywriter who writes personalized, compelling outreach emails.",
+      "userPromptTemplate": "Write a recruiting email for:\n\nCandidate: {candidate_name}\nCurrent Role: {current_role} at {current_company}\nEducation: {education}\nWork History: {work_history}\n\nTarget Role: {target_role}\nOur Company: {company_name}\nCompany Description: {company_description}\nRole Description: {role_description}\n\nWrite a personalized, compelling email.",
+      "assistantResponseTemplate": "Subject: {subject_line}\n\nOpening Hook: {opening_hook}\n\nPersonalization Points: {personalization_points}\n\nValue Proposition: {value_proposition}\n\nCall to Action: {call_to_action}\n\nTone: {tone}\n\nFull Email:\n{full_email_body}\n\nQuality Score: {quality_score}\nImprovements: {improvements}"
+    },
+    "finetuningFormat": {
+      "inputFields": ["candidate_name", "current_role", "current_company", "education", "work_history", "target_role", "company_name", "company_description", "role_description"],
+      "outputFields": ["subject_line", "opening_hook", "personalization_points", "value_proposition", "call_to_action", "tone", "full_email_body", "quality_score", "improvements"]
+    }
+  }
+}
+

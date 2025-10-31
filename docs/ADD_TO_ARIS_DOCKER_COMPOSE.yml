@@ -1,0 +1,91 @@
+# =============================================================================
+# ADD THIS TO /home/zack/Documents/augment-projects/Local/aris/docker-compose.yml
+# =============================================================================
+# 
+# INSERT THIS SECTION UNDER "ML SERVICES (4010-4017)" AFTER THE "ollama:" SERVICE
+# 
+# This adds the vLLM Batch API server to your Aris infrastructure
+# =============================================================================
+
+  # vLLM Batch API - OpenAI Compatible Batch Processing
+  vllm-batch-api:
+    build:
+      context: ../vllm-batch-server
+      dockerfile: Dockerfile.batch-api
+    image: vllm-batch-api:latest
+    container_name: aristotle-vllm-batch-api
+    ports:
+      - "4080:4080"
+    
+    # GPU access (CRITICAL!)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    environment:
+      - PORT=4080
+      - LOG_LEVEL=INFO
+      - MAX_REQUESTS_PER_JOB=50000
+      - MAX_QUEUE_DEPTH=10
+      - MAX_TOTAL_QUEUED_REQUESTS=100000
+    
+    volumes:
+      # Persistent storage for batch jobs and database
+      - vllm-batch-data:/app/data
+      
+      # Mount benchmark metadata (read-only)
+      - ../vllm-batch-server/benchmarks:/app/benchmarks:ro
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# =============================================================================
+# ALSO ADD THIS VOLUME AT THE BOTTOM OF THE FILE (under "volumes:")
+# =============================================================================
+
+  vllm-batch-data:
+    driver: local
+
+# =============================================================================
+# USAGE FROM ARIS APP:
+# =============================================================================
+# 
+# The vLLM Batch API will be available at:
+# - From host: http://localhost:4080
+# - From other Docker containers: http://vllm-batch-api:4080
+# 
+# Endpoints:
+# - GET  /v1/models                    - List available models
+# - POST /v1/files                     - Upload batch input file
+# - POST /v1/batches                   - Create batch job
+# - GET  /v1/batches/{batch_id}        - Get batch status
+# - GET  /v1/batches                   - List all batches
+# - GET  /v1/files/{file_id}/content   - Download results
+# - GET  /metrics                      - Prometheus metrics
+# - GET  /health                       - Health check
+# 
+# Example from Aris TypeScript:
+# 
+# const response = await fetch('http://localhost:4080/v1/models');
+# const { data } = await response.json();
+# console.log('Available models:', data);
+# 
+# =============================================================================
+

@@ -1,0 +1,16 @@
+[Unit]
+Description=Aristotle Static Server (Documentation + Integration)
+After=network.target
+
+[Service]
+Type=simple
+User=zack
+WorkingDirectory=/home/zack/Documents/augment-projects/Local/vllm-batch-server
+Environment="PATH=/home/zack/Documents/augment-projects/Local/vllm-batch-server/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/zack/Documents/augment-projects/Local/vllm-batch-server/venv/bin/python -m batch_app.static_server
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+

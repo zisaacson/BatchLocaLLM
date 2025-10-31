@@ -55,7 +55,7 @@ class CreateBatchRequest(BaseModel):
     input_file_id: str = Field(..., description="ID of uploaded input file")
     endpoint: str = Field("/v1/chat/completions", description="API endpoint")
     completion_window: str = Field("24h", description="Completion window")
-    metadata: Optional[dict] = Field(None, description="Custom metadata")
+    metadata: (dict] = Field(None, description="Custom metadata")
 
 
 class CancelBatchRequest(BaseModel):
@@ -280,7 +280,7 @@ async def delete_file(file_id: str, db: Session = Depends(get_db)):
 
 @app.get("/v1/files")
 async def list_files(
-    purpose: Optional[str] = None,
+    purpose: (str) | None = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -385,19 +385,141 @@ async def health_check(db: Session = Depends(get_db)):
 
 @app.get("/v1/models")
 async def list_models():
-    """List available models with benchmark data."""
+    """
+    List available models (OpenAI/Parasail compatible).
+
+    Returns model list matching OpenAI Models API format:
+    https://platform.openai.com/docs/api-reference/models/list
+    """
     benchmark_mgr = get_benchmark_manager()
-    models = []
+    data = []
 
     for model_name in benchmark_mgr.get_available_models():
         model_info = benchmark_mgr.get_model_info(model_name)
         if model_info:
-            models.append(model_info)
+            data.append(model_info)
 
+    # OpenAI/Parasail compatible response format
     return {
-        "models": models,
-        "count": len(models)
+        "object": "list",  # OpenAI standard
+        "data": data  # OpenAI uses "data" not "models"
     }
+
+
+@app.get("/metrics")
+async def prometheus_metrics(db: Session = Depends(get_db)):
+    """
+    Prometheus metrics endpoint.
+
+    Exposes metrics in Prometheus text format for scraping.
+    Includes batch job metrics, GPU metrics, and system health.
+    """
+    from fastapi.responses import PlainTextResponse
+
+    # Collect metrics
+    metrics = []
+
+    # Batch job metrics
+    total_batches = db.query(BatchJob).count()
+    pending_batches = db.query(BatchJob).filter(BatchJob.status == 'validating').count()
+    running_batches = db.query(BatchJob).filter(BatchJob.status == 'in_progress').count()
+    completed_batches = db.query(BatchJob).filter(BatchJob.status == 'completed').count()
+    failed_batches = db.query(BatchJob).filter(BatchJob.status == 'failed').count()
+    cancelled_batches = db.query(BatchJob).filter(BatchJob.status == 'cancelled').count()
+
+    metrics.append(f"# HELP vllm_batch_total Total number of batch jobs")
+    metrics.append(f"# TYPE vllm_batch_total counter")
+    metrics.append(f"vllm_batch_total {total_batches}")
+
+    metrics.append(f"# HELP vllm_batch_status Number of batches by status")
+    metrics.append(f"# TYPE vllm_batch_status gauge")
+    metrics.append(f'vllm_batch_status{{status="validating"}} {pending_batches}')
+    metrics.append(f'vllm_batch_status{{status="in_progress"}} {running_batches}')
+    metrics.append(f'vllm_batch_status{{status="completed"}} {completed_batches}')
+    metrics.append(f'vllm_batch_status{{status="failed"}} {failed_batches}')
+    metrics.append(f'vllm_batch_status{{status="cancelled"}} {cancelled_batches}')
+
+    # Request metrics
+    total_requests = db.query(BatchJob).with_entities(
+        db.func.sum(BatchJob.total_requests)
+    ).scalar() or 0
+    completed_requests = db.query(BatchJob).with_entities(
+        db.func.sum(BatchJob.completed_requests)
+    ).scalar() or 0
+    failed_requests_count = db.query(FailedRequest).count()
+
+    metrics.append(f"# HELP vllm_requests_total Total number of requests processed")
+    metrics.append(f"# TYPE vllm_requests_total counter")
+    metrics.append(f"vllm_requests_total {total_requests}")
+
+    metrics.append(f"# HELP vllm_requests_completed Number of completed requests")
+    metrics.append(f"# TYPE vllm_requests_completed counter")
+    metrics.append(f"vllm_requests_completed {completed_requests}")
+
+    metrics.append(f"# HELP vllm_requests_failed Number of failed requests")
+    metrics.append(f"# TYPE vllm_requests_failed counter")
+    metrics.append(f"vllm_requests_failed {failed_requests_count}")
+
+    # Queue metrics
+    pending_jobs = db.query(BatchJob).filter(
+        BatchJob.status.in_(['validating', 'in_progress'])
+    ).all()
+
+    queue_depth = len(pending_jobs)
+    total_queued_requests = sum(
+        j.total_requests - j.completed_requests
+        for j in pending_jobs
+    )
+
+    metrics.append(f"# HELP vllm_queue_depth Number of jobs in queue")
+    metrics.append(f"# TYPE vllm_queue_depth gauge")
+    metrics.append(f"vllm_queue_depth {queue_depth}")
+
+    metrics.append(f"# HELP vllm_queue_requests Number of requests in queue")
+    metrics.append(f"# TYPE vllm_queue_requests gauge")
+    metrics.append(f"vllm_queue_requests {total_queued_requests}")
+
+    # Worker health
+    heartbeat = db.query(WorkerHeartbeat).filter(WorkerHeartbeat.id == 1).first()
+    worker_healthy = 0
+    if heartbeat:
+        age = (datetime.utcnow() - heartbeat.last_seen).total_seconds()
+        worker_healthy = 1 if age < 60 else 0
+
+    metrics.append(f"# HELP vllm_worker_healthy Worker health status (1=healthy, 0=unhealthy)")
+    metrics.append(f"# TYPE vllm_worker_healthy gauge")
+    metrics.append(f"vllm_worker_healthy {worker_healthy}")
+
+    # GPU metrics (if available)
+    gpu_status = check_gpu_health()
+    if 'memory_percent' in gpu_status and gpu_status['memory_percent'] > 0:
+        metrics.append(f"# HELP vllm_gpu_memory_percent GPU memory utilization percentage")
+        metrics.append(f"# TYPE vllm_gpu_memory_percent gauge")
+        metrics.append(f"vllm_gpu_memory_percent {gpu_status['memory_percent']}")
+
+        metrics.append(f"# HELP vllm_gpu_temperature_celsius GPU temperature in Celsius")
+        metrics.append(f"# TYPE vllm_gpu_temperature_celsius gauge")
+        metrics.append(f"vllm_gpu_temperature_celsius {gpu_status['temperature_c']}")
+
+        metrics.append(f"# HELP vllm_gpu_healthy GPU health status (1=healthy, 0=unhealthy)")
+        metrics.append(f"# TYPE vllm_gpu_healthy gauge")
+        metrics.append(f"vllm_gpu_healthy {1 if gpu_status['healthy'] else 0}")
+
+    # File metrics
+    total_files = db.query(File).filter(File.deleted == False).count()
+    total_bytes = db.query(File).filter(File.deleted == False).with_entities(
+        db.func.sum(File.bytes)
+    ).scalar() or 0
+
+    metrics.append(f"# HELP vllm_files_total Total number of uploaded files")
+    metrics.append(f"# TYPE vllm_files_total gauge")
+    metrics.append(f"vllm_files_total {total_files}")
+
+    metrics.append(f"# HELP vllm_files_bytes Total bytes of uploaded files")
+    metrics.append(f"# TYPE vllm_files_bytes gauge")
+    metrics.append(f"vllm_files_bytes {total_bytes}")
+
+    return PlainTextResponse("\n".join(metrics) + "\n")
 
 
 @app.post("/v1/batches")
@@ -579,7 +701,7 @@ async def get_batch(batch_id: str, db: Session = Depends(get_db)):
 @app.get("/v1/batches")
 async def list_batches(
     limit: int = 20,
-    after: Optional[str] = None,
+    after: (str) | None = None,
     db: Session = Depends(get_db)
 ):
     """

@@ -22,6 +22,7 @@ from .database import SessionLocal, BatchJob, WorkerHeartbeat, File
 from .benchmarks import get_benchmark_manager
 from .webhooks import send_webhook_async
 import uuid
+import requests
 
 # Configuration
 CHUNK_SIZE = 5000  # Process 5K requests at a time (proven safe from benchmarks)
@@ -79,7 +80,7 @@ class BatchWorker:
         self.current_model = None
         self.benchmark_mgr = get_benchmark_manager()
 
-    def update_heartbeat(self, db: Session, status: str = 'idle', job_id: Optional[str] = None):
+    def update_heartbeat(self, db: Session, status: str = 'idle', job_id: (str) | None = None):
         """Update worker heartbeat for health monitoring."""
         try:
             gpu_status = check_gpu_health()
@@ -100,7 +101,7 @@ class BatchWorker:
             # Don't fail the worker if heartbeat update fails
             print(f"⚠️  Heartbeat update failed: {e}")
 
-    def get_next_pending_job(self, db: Session) -> Optional[BatchJob]:
+    def get_next_pending_job(self, db: Session) -> (BatchJob]:
         """Get the next pending job from the queue (OpenAI status: validating)."""
         return db.query(BatchJob).filter(
             BatchJob.status == 'validating'
@@ -141,14 +142,18 @@ class BatchWorker:
                     prompt_tok = len(output.prompt_token_ids)
                     completion_tok = len(output.outputs[0].token_ids)
 
-                    # Format result
+                    # Format result (OpenAI Batch API compatible)
+                    # Generate unique batch result ID
+                    batch_result_id = f'batch_req_{uuid.uuid4().hex[:24]}'
+
                     result = {
-                        'id': req.get('custom_id', f'request-{start_idx + i}'),
+                        'id': batch_result_id,  # Unique batch result ID
                         'custom_id': req.get('custom_id', f'request-{start_idx + i}'),
                         'response': {
                             'status_code': 200,
+                            'request_id': f'req-{uuid.uuid4().hex[:12]}',
                             'body': {
-                                'id': f'chatcmpl-{start_idx + i}',
+                                'id': f'chatcmpl-{uuid.uuid4().hex[:12]}',
                                 'object': 'chat.completion',
                                 'created': int(time.time()),
                                 'model': self.current_model,
@@ -409,6 +414,9 @@ class BatchWorker:
             # Save benchmark data
             self.save_benchmark(job, total_inference_time)
 
+            # Auto-import to curation system (if enabled)
+            self.auto_import_to_curation(job, db, log_file)
+
             # Send webhook notification (async, non-blocking)
             if job.webhook_url:
                 self.log(log_file, f"📡 Sending webhook to {job.webhook_url}...")
@@ -432,6 +440,71 @@ class BatchWorker:
                 self.log(log_file, f"📡 Sending failure webhook to {job.webhook_url}...")
                 send_webhook_async(job.batch_id, job.webhook_url)
     
+    def auto_import_to_curation(self, job: BatchJob, db: Session, log_file: str):
+        """
+        Automatically import batch results to curation system.
+
+        This enables viewing all batch results in the beautiful curation UI
+        and marking gold-star examples for training datasets.
+        """
+        try:
+            # Check if auto-import is enabled
+            curation_url = os.getenv("CURATION_API_URL", "http://localhost:8001")
+            auto_import = os.getenv("AUTO_IMPORT_TO_CURATION", "true").lower() == "true"
+
+            if not auto_import:
+                self.log(log_file, "⏭️  Auto-import to curation disabled (set AUTO_IMPORT_TO_CURATION=true to enable)")
+                return
+
+            self.log(log_file, f"\n📥 Auto-importing to curation system at {curation_url}...")
+
+            # Get conquest type from metadata
+            metadata = json.loads(job.metadata_json) if job.metadata_json else {}
+            conquest_type = metadata.get('conquest_type', 'candidate_evaluation')
+
+            # Read output file
+            output_file = db.query(File).filter(File.file_id == job.output_file_id).first()
+            if not output_file:
+                self.log(log_file, "⚠️  No output file found, skipping auto-import")
+                return
+
+            output_path = Path(output_file.file_path)
+            if not output_path.exists():
+                self.log(log_file, "⚠️  Output file not found on disk, skipping auto-import")
+                return
+
+            # Parse results
+            results = []
+            with open(output_path, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        results.append(json.loads(line))
+
+            self.log(log_file, f"📊 Found {len(results)} results to import")
+
+            # Import to curation system
+            response = requests.post(
+                f"{curation_url}/api/tasks/bulk-import",
+                json={
+                    "batch_id": job.batch_id,
+                    "conquest_type": conquest_type,
+                    "results": results,
+                    "model_version": job.model
+                },
+                timeout=60
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                self.log(log_file, f"✅ Imported {result.get('created_count', 0)} tasks to curation system")
+                self.log(log_file, f"🌐 View at: {curation_url}?conquest_type={conquest_type}")
+            else:
+                self.log(log_file, f"⚠️  Curation import failed: {response.status_code} {response.text[:200]}")
+
+        except Exception as e:
+            self.log(log_file, f"⚠️  Auto-import error (non-fatal): {e}")
+            # Don't fail the job if curation import fails
+
     def save_benchmark(self, job: BatchJob, processing_time: float):
         """Save benchmark data from completed job."""
         try:

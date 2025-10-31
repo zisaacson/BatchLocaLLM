@@ -1,0 +1,228 @@
+# =============================================================================
+# Aristotle Inference Endpoint - Docker Compose
+# =============================================================================
+#
+# WHAT THIS IS:
+# - OpenAI-compatible batch inference API (vLLM backend) on port 4080
+# - Data labeling (Label Studio) for improving model quality
+# - Monitoring (Grafana + Prometheus + Loki) for GPU/API health
+# - Web UI for batch job management (built into API server)
+#
+# WHAT THIS IS NOT:
+# - Aris application (that's done, runs on different machine)
+# - Full ML platform (just inference + labeling + monitoring)
+#
+# ARCHITECTURE:
+# - Aris app (remote) → calls → http://<this-machine>:4080/v1/batches
+# - This machine runs vLLM inference + monitoring + data labeling
+#
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # INFERENCE API (4080)
+  # ===========================================================================
+  
+  vllm-batch-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.batch-api
+    image: aristotle-inference-api:latest
+    container_name: aristotle-inference-api
+    ports:
+      - "4080:4080"
+    
+    # GPU access (CRITICAL for vLLM inference)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    environment:
+      - PORT=4080
+      - LOG_LEVEL=INFO
+      - MAX_REQUESTS_PER_JOB=50000
+      - MAX_QUEUE_DEPTH=10
+      - MAX_TOTAL_QUEUED_REQUESTS=100000
+    
+    volumes:
+      # Persistent storage for batch jobs and database
+      - inference-data:/app/data
+      
+      # Mount benchmark metadata (read-only)
+      - ./benchmarks:/app/benchmarks:ro
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================================================
+  # DATA LABELING (4015-4018)
+  # ===========================================================================
+  
+  label-studio-db:
+    image: postgres:16
+    container_name: aristotle-label-studio-db
+    ports:
+      - "4018:5432"
+    environment:
+      - POSTGRES_DB=label_studio
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - label-studio-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  label-studio:
+    image: heartexlabs/label-studio:latest
+    container_name: aristotle-label-studio
+    ports:
+      - "4015:4015"
+    environment:
+      - LABEL_STUDIO_PORT=4015
+      - LABEL_STUDIO_HOST=0.0.0.0
+      - DJANGO_DB=default
+      - POSTGRE_NAME=label_studio
+      - POSTGRE_USER=postgres
+      - POSTGRE_PASSWORD=postgres
+      - POSTGRE_PORT=5432
+      - POSTGRE_HOST=label-studio-db
+      - LABEL_STUDIO_USERNAME=admin@test.com
+      - LABEL_STUDIO_PASSWORD=testpassword123
+      - LABEL_STUDIO_DISABLE_SIGNUP_WITHOUT_LINK=false
+    command: >
+      bash -c "
+        label-studio init --username admin@test.com --password testpassword123 &&
+        label-studio start
+      "
+    volumes:
+      - label-studio-data:/label-studio/data
+    depends_on:
+      - label-studio-db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4015/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ===========================================================================
+  # MONITORING (4020-4023)
+  # ===========================================================================
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: aristotle-grafana
+    ports:
+      - "4020:4020"
+    environment:
+      - GF_SERVER_HTTP_PORT=4020
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    container_name: aristotle-loki
+    ports:
+      - "4021:4021"
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - loki-data:/loki
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: aristotle-prometheus
+    ports:
+      - "4022:4022"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.listen-address=0.0.0.0:4022'
+      - '--web.enable-lifecycle'
+      - '--web.enable-remote-write-receiver'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
+
+
+volumes:
+  inference-data:
+    driver: local
+  label-studio-db-data:
+    driver: local
+  label-studio-data:
+    driver: local
+  grafana-data:
+    driver: local
+  loki-data:
+    driver: local
+  prometheus-data:
+    driver: local
+
+# =============================================================================
+# USAGE
+# =============================================================================
+#
+# Start all services:
+#   docker compose -f inference-endpoint-compose.yml up -d
+#
+# Start only inference API:
+#   docker compose -f inference-endpoint-compose.yml up -d vllm-batch-api
+#
+# View logs:
+#   docker compose -f inference-endpoint-compose.yml logs -f vllm-batch-api
+#
+# Stop all:
+#   docker compose -f inference-endpoint-compose.yml down
+#
+# =============================================================================
+# ENDPOINTS
+# =============================================================================
+#
+# Inference API:     http://localhost:4080
+#   - GET  /v1/models                    - List available models
+#   - POST /v1/files                     - Upload batch input file
+#   - POST /v1/batches                   - Create batch job
+#   - GET  /v1/batches/{batch_id}        - Get batch status
+#   - GET  /v1/batches                   - List all batches
+#   - GET  /v1/files/{file_id}/content   - Download results
+#   - GET  /metrics                      - Prometheus metrics
+#   - GET  /health                       - Health check
+#
+# Label Studio:      http://localhost:4015
+#   - Username: admin@test.com
+#   - Password: testpassword123
+#
+# Grafana:           http://localhost:4020
+#   - Username: admin
+#   - Password: admin
+#
+# Prometheus:        http://localhost:4022
+# Loki:              http://localhost:4021
+#
+# =============================================================================
+
