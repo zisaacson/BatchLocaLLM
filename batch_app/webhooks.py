@@ -42,8 +42,8 @@ def send_webhook(
         "object": "batch",
         "endpoint": "/v1/chat/completions",
         "status": batch_job.status,
-        "created_at": int(batch_job.created_at.timestamp()) if batch_job.created_at else None,
-        "completed_at": int(batch_job.completed_at.timestamp()) if batch_job.completed_at else None,
+        "created_at": batch_job.created_at,  # Already Unix timestamp (int)
+        "completed_at": batch_job.completed_at,  # Already Unix timestamp (int)
         "request_counts": {
             "total": batch_job.total_requests,
             "completed": batch_job.completed_requests,

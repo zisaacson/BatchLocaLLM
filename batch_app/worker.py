@@ -14,6 +14,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import requests
 from sqlalchemy.orm import Session
@@ -77,8 +78,8 @@ class BatchWorker:
             poll_interval: Seconds to wait between polling for new jobs
         """
         self.poll_interval = poll_interval
-        self.current_llm = None
-        self.current_model = None
+        self.current_llm: Optional[LLM] = None
+        self.current_model: Optional[str] = None
         self.benchmark_mgr = get_benchmark_manager()
 
     def update_heartbeat(self, db: Session, status: str = 'idle', job_id: str | None = None):
@@ -119,7 +120,7 @@ class BatchWorker:
         except Exception:
             return 0
 
-    def save_chunk_results(self, outputs, requests, output_file: str, start_idx: int, log_file: str):
+    def save_chunk_results(self, outputs, requests, output_file: str, start_idx: int, log_file: Optional[str]):
         """
         Save chunk results incrementally in append mode.
 
@@ -128,7 +129,7 @@ class BatchWorker:
             requests: Original requests for this chunk
             output_file: Path to output file
             start_idx: Starting index in original request list
-            log_file: Path to log file
+            log_file: Path to log file (optional)
         """
         saved_count = 0
 
@@ -186,7 +187,7 @@ class BatchWorker:
 
         return saved_count
 
-    def load_model(self, model: str, log_file: str):
+    def load_model(self, model: str, log_file: Optional[str]):
         """Load vLLM model if not already loaded."""
         if self.current_model == model and self.current_llm is not None:
             self.log(log_file, f"✅ Model {model} already loaded, reusing")
@@ -252,6 +253,10 @@ class BatchWorker:
             self.log(log_file, f"Chunk size: {CHUNK_SIZE}")
             self.log(log_file, "=" * 80)
 
+            # Validate model is specified
+            if not job.model:
+                raise Exception("Model not specified in batch job")
+
             # Load model
             self.load_model(job.model, log_file)
 
@@ -283,7 +288,7 @@ class BatchWorker:
             )
 
             # Process in chunks
-            total_inference_time = 0
+            total_inference_time = 0.0
             total_prompt_tokens = 0
             total_completion_tokens = 0
             total_tokens = 0
@@ -313,6 +318,8 @@ class BatchWorker:
                 chunk_start_time = time.time()
 
                 try:
+                    # Assert model is loaded (should be guaranteed by load_model above)
+                    assert self.current_llm is not None, "Model not loaded"
                     outputs = self.current_llm.generate(chunk_prompts, sampling_params)
                     chunk_inference_time = time.time() - chunk_start_time
                     total_inference_time += chunk_inference_time
@@ -320,7 +327,7 @@ class BatchWorker:
                     self.log(log_file, f"✅ Chunk inference complete in {chunk_inference_time:.1f}s ({chunk_inference_time/60:.1f} min)")
 
                     # Calculate chunk tokens
-                    chunk_prompt_tokens = sum(len(o.prompt_token_ids) for o in outputs)
+                    chunk_prompt_tokens = sum(len(o.prompt_token_ids) if o.prompt_token_ids else 0 for o in outputs)
                     chunk_completion_tokens = sum(len(o.outputs[0].token_ids) for o in outputs)
                     chunk_total_tokens = chunk_prompt_tokens + chunk_completion_tokens
 
@@ -441,7 +448,7 @@ class BatchWorker:
                 self.log(log_file, f"📡 Sending failure webhook to {job.webhook_url}...")
                 send_webhook_async(job.batch_id, job.webhook_url)
 
-    def auto_import_to_curation(self, job: BatchJob, db: Session, log_file: str):
+    def auto_import_to_curation(self, job: BatchJob, db: Session, log_file: Optional[str]):
         """
         Automatically import batch results to curation system.
 
@@ -515,15 +522,15 @@ class BatchWorker:
                 'total_tokens': job.total_tokens,
                 'throughput_tokens_per_sec': job.throughput_tokens_per_sec,
                 'processing_time_seconds': processing_time,
-                'input_file': job.input_file,
-                'output_file': job.output_file
+                'input_file_id': job.input_file_id,
+                'output_file_id': job.output_file_id
             }
 
             self.benchmark_mgr.save_job_benchmark(job_data)
         except Exception as e:
             print(f"⚠️  Failed to save benchmark: {e}")
 
-    def log(self, log_file: str, message: str):
+    def log(self, log_file: Optional[str], message: str):
         """Write to log file and stdout."""
         timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         log_message = f"[{timestamp}] {message}"

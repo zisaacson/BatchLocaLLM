@@ -227,7 +227,8 @@ async def get_schema_prompt(conquest_type: str) -> dict[str, Any]:
         prompt_parts.append("\n")
 
     # Build example response
-    example = {}
+    from typing import Any
+    example: dict[str, Any] = {}
     for question in schema.questions:
         if question.type == "choice" and question.options:
             example[question.id] = question.options[0]

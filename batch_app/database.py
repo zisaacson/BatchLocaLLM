@@ -6,15 +6,15 @@ Models:
 - BatchJob: Main batch job tracking (OpenAI Batch API compatible)
 - FailedRequest: Dead letter queue for failed requests
 - WorkerHeartbeat: Worker health monitoring
+
+SQLAlchemy 2.0 with full type safety using Mapped[T] pattern.
 """
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy import (
-    Boolean,
-    Column,
     DateTime,
     Float,
     ForeignKey,
@@ -23,32 +23,37 @@ from sqlalchemy import (
     Text,
     create_engine,
 )
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from config import settings
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    """Base class for all ORM models with SQLAlchemy 2.0 type safety."""
+    pass
 
 
-class File(Base):  # type: ignore[valid-type,misc]
-    """File model - OpenAI Files API compatible."""
+class File(Base):
+    """File model - OpenAI Files API compatible.
+
+    SQLAlchemy 2.0 with Mapped[T] for full type safety.
+    """
 
     __tablename__ = 'files'
 
     # Primary key
-    file_id = Column(String(64), primary_key=True)
+    file_id: Mapped[str] = mapped_column(String(64), primary_key=True)
 
     # OpenAI standard fields
-    object = Column(String(32), default='file', nullable=False)
-    bytes = Column(Integer, nullable=False)
-    created_at = Column(Integer, nullable=False)  # Unix timestamp
-    filename = Column(String(512), nullable=False)
-    purpose = Column(String(32), nullable=False)  # "batch", "assistants", etc
+    object: Mapped[str] = mapped_column(String(32), default='file')
+    bytes: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[int] = mapped_column(Integer)  # Unix timestamp
+    filename: Mapped[str] = mapped_column(String(512))
+    purpose: Mapped[str] = mapped_column(String(32))  # "batch", "assistants", etc
 
     # Internal fields
-    file_path = Column(String(512), nullable=False)
-    deleted = Column(Boolean, default=False)
+    file_path: Mapped[str] = mapped_column(String(512))
+    deleted: Mapped[bool] = mapped_column(default=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to OpenAI Files API format."""
@@ -63,59 +68,62 @@ class File(Base):  # type: ignore[valid-type,misc]
 
 
 class BatchJob(Base):
-    """Batch job model - OpenAI Batch API compatible."""
+    """Batch job model - OpenAI Batch API compatible.
+
+    SQLAlchemy 2.0 with Mapped[T] for full type safety.
+    """
 
     __tablename__ = 'batch_jobs'
 
     # Primary key
-    batch_id = Column(String(64), primary_key=True)
+    batch_id: Mapped[str] = mapped_column(String(64), primary_key=True)
 
     # OpenAI standard fields
-    object = Column(String(32), default='batch', nullable=False)
-    endpoint = Column(String(128), default='/v1/chat/completions', nullable=False)
-    input_file_id = Column(String(64), ForeignKey('files.file_id'), nullable=False)
-    completion_window = Column(String(16), default='24h', nullable=False)
-    status = Column(String(32), nullable=False, default='validating')
+    object: Mapped[str] = mapped_column(String(32), default='batch')
+    endpoint: Mapped[str] = mapped_column(String(128), default='/v1/chat/completions')
+    input_file_id: Mapped[str] = mapped_column(String(64), ForeignKey('files.file_id'))
+    completion_window: Mapped[str] = mapped_column(String(16), default='24h')
+    status: Mapped[str] = mapped_column(String(32), default='validating')
     # Status values: validating, failed, in_progress, finalizing, completed, expired, cancelling, cancelled
 
-    # OpenAI file references
-    output_file_id = Column(String(64), ForeignKey('files.file_id'), nullable=True)
-    error_file_id = Column(String(64), ForeignKey('files.file_id'), nullable=True)
+    # OpenAI file references (nullable)
+    output_file_id: Mapped[Optional[str]] = mapped_column(String(64), ForeignKey('files.file_id'), nullable=True)
+    error_file_id: Mapped[Optional[str]] = mapped_column(String(64), ForeignKey('files.file_id'), nullable=True)
 
     # OpenAI timestamps (Unix timestamps)
-    created_at = Column(Integer, nullable=False)
-    in_progress_at = Column(Integer, nullable=True)
-    expires_at = Column(Integer, nullable=False)
-    finalizing_at = Column(Integer, nullable=True)
-    completed_at = Column(Integer, nullable=True)
-    failed_at = Column(Integer, nullable=True)
-    expired_at = Column(Integer, nullable=True)
-    cancelling_at = Column(Integer, nullable=True)
-    cancelled_at = Column(Integer, nullable=True)
+    created_at: Mapped[int] = mapped_column(Integer)
+    in_progress_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    expires_at: Mapped[int] = mapped_column(Integer)
+    finalizing_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    completed_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    failed_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    expired_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cancelling_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cancelled_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # OpenAI request counts
-    total_requests = Column(Integer, default=0)
-    completed_requests = Column(Integer, default=0)
-    failed_requests = Column(Integer, default=0)
+    total_requests: Mapped[int] = mapped_column(Integer, default=0)
+    completed_requests: Mapped[int] = mapped_column(Integer, default=0)
+    failed_requests: Mapped[int] = mapped_column(Integer, default=0)
 
-    # OpenAI errors field
-    errors = Column(Text, nullable=True)  # JSON string
+    # OpenAI errors field (JSON string)
+    errors: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # OpenAI metadata
-    metadata_json = Column(Text, nullable=True)  # JSON string
+    # OpenAI metadata (JSON string)
+    metadata_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Internal fields (not in OpenAI response)
-    model = Column(String(256), nullable=True)  # Extracted from input file
-    log_file = Column(String(512), nullable=True)
-    throughput_tokens_per_sec = Column(Float, nullable=True)
-    total_tokens = Column(Integer, nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    log_file: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    throughput_tokens_per_sec: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    total_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Webhook support (custom extension)
-    webhook_url = Column(String(512), nullable=True)
-    webhook_status = Column(String(32), nullable=True)
-    webhook_attempts = Column(Integer, default=0)
-    webhook_last_attempt = Column(DateTime, nullable=True)
-    webhook_error = Column(Text, nullable=True)
+    webhook_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    webhook_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    webhook_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    webhook_last_attempt: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    webhook_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     def to_dict(self):
         """Convert to OpenAI Batch API format."""
@@ -164,30 +172,33 @@ class BatchJob(Base):
 
 
 class FailedRequest(Base):
-    """Dead letter queue for failed requests."""
+    """Dead letter queue for failed requests.
+
+    SQLAlchemy 2.0 with Mapped[T] for full type safety.
+    """
 
     __tablename__ = 'failed_requests'
 
     # Primary key
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Foreign key to batch job
-    batch_id = Column(String(64), ForeignKey('batch_jobs.batch_id'), nullable=False)
+    batch_id: Mapped[str] = mapped_column(String(64), ForeignKey('batch_jobs.batch_id'))
 
     # Request identification
-    custom_id = Column(String(256), nullable=False)
-    request_index = Column(Integer, nullable=False)
+    custom_id: Mapped[str] = mapped_column(String(256))
+    request_index: Mapped[int] = mapped_column(Integer)
 
     # Error details
-    error_message = Column(Text, nullable=False)
-    error_type = Column(String(64), nullable=False)
+    error_message: Mapped[str] = mapped_column(Text)
+    error_type: Mapped[str] = mapped_column(String(64))
 
     # Retry tracking
-    retry_count = Column(Integer, default=0)
-    last_retry_at = Column(DateTime, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         """Convert to dictionary for API responses."""
@@ -205,23 +216,26 @@ class FailedRequest(Base):
 
 
 class WorkerHeartbeat(Base):
-    """Worker health monitoring."""
+    """Worker health monitoring.
+
+    SQLAlchemy 2.0 with Mapped[T] for full type safety.
+    """
 
     __tablename__ = 'worker_heartbeat'
 
     # Primary key (singleton table - only one row)
-    id = Column(Integer, primary_key=True, default=1)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
 
     # Worker status
-    status = Column(String(32), default='idle')  # idle, processing, error
-    current_job_id = Column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default='idle')  # idle, processing, error
+    current_job_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     # GPU metrics
-    gpu_memory_percent = Column(Float, nullable=True)
-    gpu_temperature = Column(Float, nullable=True)
+    gpu_memory_percent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gpu_temperature: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Timestamp
-    last_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         """Convert to dictionary for API responses."""
@@ -235,9 +249,16 @@ class WorkerHeartbeat(Base):
         }
 
 
-# Database setup
+# Database setup with PostgreSQL connection pooling
 DATABASE_URL = settings.DATABASE_URL
-engine = create_engine(DATABASE_URL, echo=settings.DATABASE_ECHO)
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=settings.DATABASE_POOL_SIZE,
+    max_overflow=settings.DATABASE_MAX_OVERFLOW,
+    pool_timeout=settings.DATABASE_POOL_TIMEOUT,
+    pool_recycle=settings.DATABASE_POOL_RECYCLE,
+    echo=settings.DATABASE_ECHO,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

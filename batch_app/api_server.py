@@ -177,7 +177,8 @@ async def ready(db: Session = Depends(get_db)):
     """Readiness check - verifies database connection and dependencies"""
     try:
         # Check database connection
-        db.execute("SELECT 1")
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
 
         # Check if data directories exist
         dirs_ok = all([
@@ -265,7 +266,7 @@ async def get_file(file_id: str, db: Session = Depends(get_db)):
     Returns:
         File metadata in OpenAI format
     """
-    db_file = db.query(File).filter(File.file_id == file_id, not File.deleted).first()
+    db_file = db.query(File).filter(File.file_id == file_id, File.deleted == False).first()
     if not db_file:
         raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
 
@@ -283,7 +284,7 @@ async def get_file_content(file_id: str, db: Session = Depends(get_db)):
     Returns:
         File content as JSONL
     """
-    db_file = db.query(File).filter(File.file_id == file_id, not File.deleted).first()
+    db_file = db.query(File).filter(File.file_id == file_id, File.deleted == False).first()
     if not db_file:
         raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
 
@@ -309,7 +310,7 @@ async def delete_file(file_id: str, db: Session = Depends(get_db)):
     Returns:
         Deletion confirmation
     """
-    db_file = db.query(File).filter(File.file_id == file_id, not File.deleted).first()
+    db_file = db.query(File).filter(File.file_id == file_id, File.deleted == False).first()
     if not db_file:
         raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
 
@@ -346,7 +347,7 @@ async def list_files(
     Returns:
         List of files in OpenAI format
     """
-    query = db.query(File).filter(not File.deleted)
+    query = db.query(File).filter(File.deleted == False)
 
     if purpose:
         query = query.filter(File.purpose == purpose)
@@ -494,11 +495,12 @@ async def prometheus_metrics(db: Session = Depends(get_db)):
     metrics.append(f'vllm_batch_status{{status="cancelled"}} {cancelled_batches}')
 
     # Request metrics
+    from sqlalchemy import func
     total_requests = db.query(BatchJob).with_entities(
-        db.func.sum(BatchJob.total_requests)
+        func.sum(BatchJob.total_requests)
     ).scalar() or 0
     completed_requests = db.query(BatchJob).with_entities(
-        db.func.sum(BatchJob.completed_requests)
+        func.sum(BatchJob.completed_requests)
     ).scalar() or 0
     failed_requests_count = db.query(FailedRequest).count()
 
@@ -560,9 +562,9 @@ async def prometheus_metrics(db: Session = Depends(get_db)):
         metrics.append(f"vllm_gpu_healthy {1 if gpu_status['healthy'] else 0}")
 
     # File metrics
-    total_files = db.query(File).filter(not File.deleted).count()
-    total_bytes = db.query(File).filter(not File.deleted).with_entities(
-        db.func.sum(File.bytes)
+    total_files = db.query(File).filter(File.deleted == False).count()
+    total_bytes = db.query(File).filter(File.deleted == False).with_entities(
+        func.sum(File.bytes)
     ).scalar() or 0
 
     metrics.append("# HELP vllm_files_total Total number of uploaded files")
@@ -621,7 +623,7 @@ async def create_batch(
     # Get input file
     input_file = db.query(File).filter(
         File.file_id == request.input_file_id,
-        not File.deleted
+        File.deleted == False
     ).first()
 
     if not input_file:
