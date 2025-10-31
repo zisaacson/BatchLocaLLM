@@ -22,6 +22,7 @@ from vllm import LLM, SamplingParams
 from core.config import settings
 from core.batch_app.logging_config import get_logger, set_request_context, clear_request_context
 from core.batch_app import metrics
+from core.batch_app.sentry_config import init_sentry, set_batch_context, capture_exception
 
 from .benchmarks import get_benchmark_manager
 from .database import BatchJob, File, SessionLocal, WorkerHeartbeat
@@ -240,6 +241,13 @@ class BatchWorker:
             metrics.track_batch_job(status='in_progress', model=job.model)
             metrics.batch_jobs_active.labels(status='validating').dec()
             metrics.batch_jobs_active.labels(status='in_progress').inc()
+
+            # Set Sentry context for this batch
+            set_batch_context(
+                batch_id=job.batch_id,
+                model=job.model,
+                requests=job.total_requests
+            )
 
             # Get input file
             input_file = db.query(File).filter(File.file_id == job.input_file_id).first()
@@ -646,6 +654,10 @@ class BatchWorker:
 
 
 if __name__ == "__main__":
+    # Initialize Sentry error tracking
+    init_sentry()
+
+    # Start worker
     worker = BatchWorker(poll_interval=10)
     worker.run()
 

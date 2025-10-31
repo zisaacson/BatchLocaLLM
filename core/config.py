@@ -149,10 +149,16 @@ class Settings(BaseSettings):
     PROMETHEUS_URL: str = "http://localhost:4022"
     GRAFANA_PORT: int = 3000
     GRAFANA_URL: str = "http://localhost:3000"
-    
+
     # Enable/disable monitoring features
     ENABLE_PROMETHEUS: bool = True
     ENABLE_GPU_MONITORING: bool = True
+
+    # Sentry Error Tracking
+    SENTRY_DSN: Optional[str] = None  # Set to enable Sentry error tracking
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions for performance monitoring
+    SENTRY_PROFILES_SAMPLE_RATE: float = 0.1  # 10% of transactions for profiling
+    ENABLE_SENTRY: bool = False  # Auto-enabled if SENTRY_DSN is set
     
     # ========================================================================
     # Logging

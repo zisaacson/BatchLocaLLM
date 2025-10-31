@@ -1,0 +1,305 @@
+{
+  "dashboard": {
+    "title": "vLLM GPU & Inference",
+    "tags": ["vllm", "gpu", "inference", "performance"],
+    "timezone": "browser",
+    "editable": true,
+    "refresh": "5s",
+    "time": {
+      "from": "now-30m",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "🎮 GPU Temperature",
+        "type": "gauge",
+        "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "vllm_gpu_temperature_celsius",
+            "legendFormat": "GPU {{gpu_id}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "celsius",
+          "minValue": 0,
+          "maxValue": 100,
+          "thresholds": [
+            {"value": 0, "color": "green"},
+            {"value": 70, "color": "yellow"},
+            {"value": 85, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 2,
+        "title": "💾 GPU Memory Usage",
+        "type": "gauge",
+        "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0},
+        "targets": [
+          {
+            "expr": "vllm_gpu_memory_used_bytes{gpu_id=\"0\"} / vllm_gpu_memory_total_bytes{gpu_id=\"0\"} * 100",
+            "legendFormat": "GPU {{gpu_id}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "percent",
+          "minValue": 0,
+          "maxValue": 100,
+          "thresholds": [
+            {"value": 0, "color": "green"},
+            {"value": 80, "color": "yellow"},
+            {"value": 95, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "title": "⚡ GPU Utilization",
+        "type": "gauge",
+        "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "vllm_gpu_utilization_percent",
+            "legendFormat": "GPU {{gpu_id}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "percent",
+          "minValue": 0,
+          "maxValue": 100,
+          "thresholds": [
+            {"value": 0, "color": "red"},
+            {"value": 50, "color": "yellow"},
+            {"value": 80, "color": "green"}
+          ]
+        }
+      },
+      {
+        "id": 4,
+        "title": "🔢 Model Loaded Status",
+        "type": "stat",
+        "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0},
+        "targets": [
+          {
+            "expr": "vllm_model_loaded",
+            "legendFormat": "{{model}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "textMode": "value_and_name",
+          "thresholds": [
+            {"value": 0, "color": "red"},
+            {"value": 1, "color": "green"}
+          ]
+        }
+      },
+      {
+        "id": 5,
+        "title": "📈 GPU Memory Over Time",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+        "targets": [
+          {
+            "expr": "vllm_gpu_memory_used_bytes / 1024 / 1024 / 1024",
+            "legendFormat": "GPU {{gpu_id}} Used",
+            "refId": "A"
+          },
+          {
+            "expr": "vllm_gpu_memory_total_bytes / 1024 / 1024 / 1024",
+            "legendFormat": "GPU {{gpu_id}} Total",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "decgbytes",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "🌡️ GPU Temperature Over Time",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+        "targets": [
+          {
+            "expr": "vllm_gpu_temperature_celsius",
+            "legendFormat": "GPU {{gpu_id}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "celsius",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 70, "color": "yellow"},
+                {"value": 85, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "🚀 Inference Throughput (tokens/sec)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+        "targets": [
+          {
+            "expr": "vllm_throughput_tokens_per_second",
+            "legendFormat": "{{model}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "tps",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 20
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "🔢 Total Tokens Generated",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+        "targets": [
+          {
+            "expr": "vllm_tokens_generated_total",
+            "legendFormat": "{{model}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            }
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "⏱️ Inference Duration (P95)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 22},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(vllm_inference_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{model}} (P95)",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(vllm_inference_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{model}} (P50)",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth"
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "📊 Model Load Duration",
+        "type": "bargauge",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 22},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(vllm_model_load_duration_seconds_bucket[1h]))",
+            "legendFormat": "{{model}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "s",
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        }
+      },
+      {
+        "id": 11,
+        "title": "📦 Chunks Processed",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 30},
+        "targets": [
+          {
+            "expr": "rate(vllm_chunks_processed_total{status=\"completed\"}[5m])",
+            "legendFormat": "{{model}} (Completed)",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(vllm_chunks_processed_total{status=\"failed\"}[5m])",
+            "legendFormat": "{{model}} (Failed)",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "chunks/s",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10,
+              "stacking": {
+                "mode": "normal"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": 12,
+        "title": "⚡ Token Generation Rate",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 30},
+        "targets": [
+          {
+            "expr": "rate(vllm_tokens_generated_total[5m])",
+            "legendFormat": "{{model}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "tps",
+          "colorMode": "value",
+          "graphMode": "area",
+          "textMode": "value_and_name"
+        }
+      }
+    ]
+  }
+}
+

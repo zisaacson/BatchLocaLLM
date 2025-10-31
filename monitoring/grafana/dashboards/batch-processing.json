@@ -1,0 +1,246 @@
+{
+  "dashboard": {
+    "title": "vLLM Batch Processing",
+    "tags": ["vllm", "batch", "processing"],
+    "timezone": "browser",
+    "editable": true,
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "📊 Batch Jobs by Status",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "vllm_batch_jobs_active{status=\"validating\"}",
+            "legendFormat": "Validating",
+            "refId": "A"
+          },
+          {
+            "expr": "vllm_batch_jobs_active{status=\"in_progress\"}",
+            "legendFormat": "In Progress",
+            "refId": "B"
+          },
+          {
+            "expr": "vllm_batch_jobs_active{status=\"completed\"}",
+            "legendFormat": "Completed",
+            "refId": "C"
+          },
+          {
+            "expr": "vllm_batch_jobs_active{status=\"failed\"}",
+            "legendFormat": "Failed",
+            "refId": "D"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10,
+              "stacking": {
+                "mode": "normal"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "🎯 Queue Depth",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "vllm_queue_depth",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "minValue": 0,
+          "maxValue": 10,
+          "thresholds": [
+            {"value": 0, "color": "green"},
+            {"value": 5, "color": "yellow"},
+            {"value": 8, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "title": "✅ Success Rate (Last Hour)",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(increase(vllm_batch_jobs_total{status=\"completed\"}[1h])) / sum(increase(vllm_batch_jobs_total[1h])) * 100",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "percent",
+          "colorMode": "value",
+          "graphMode": "area",
+          "thresholds": [
+            {"value": 0, "color": "red"},
+            {"value": 90, "color": "yellow"},
+            {"value": 95, "color": "green"}
+          ]
+        }
+      },
+      {
+        "id": 4,
+        "title": "📈 Total Batches Processed",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 4},
+        "targets": [
+          {
+            "expr": "sum(vllm_batch_jobs_total)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "id": 5,
+        "title": "⚡ Request Throughput (req/sec)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(vllm_batch_requests_processed_total{status=\"completed\"}[5m])",
+            "legendFormat": "{{model}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth"
+            },
+            "unit": "reqps"
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "⏱️ Batch Processing Duration (P95)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(vllm_batch_processing_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{model}} (P95)",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(vllm_batch_processing_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{model}} (P50)",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "📦 Chunk Processing Duration",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(vllm_chunk_processing_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{model}} (P95)",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(vllm_chunk_processing_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{model}} (P50)",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "📊 Chunk Size Distribution",
+        "type": "heatmap",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "rate(vllm_chunk_size_bucket[5m])",
+            "legendFormat": "{{le}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "🔢 Total Requests Processed",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(vllm_batch_requests_processed_total{status=\"completed\"})",
+            "legendFormat": "Completed",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(vllm_batch_requests_processed_total{status=\"failed\"})",
+            "legendFormat": "Failed",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10,
+              "stacking": {
+                "mode": "normal"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "⏳ Queue Wait Time (P95)",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(vllm_queue_wait_time_seconds_bucket[5m]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "s",
+          "thresholds": [
+            {"value": 0, "color": "green"},
+            {"value": 60, "color": "yellow"},
+            {"value": 300, "color": "red"}
+          ]
+        }
+      }
+    ]
+  }
+}
+

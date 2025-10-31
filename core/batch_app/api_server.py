@@ -26,6 +26,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from core.config import settings
 from core.batch_app.logging_config import get_logger, set_request_context, clear_request_context
 from core.batch_app import metrics
+from core.batch_app.sentry_config import init_sentry, set_batch_context
 
 from .benchmarks import get_benchmark_manager
 from .database import BatchJob, FailedRequest, File, WorkerHeartbeat, get_db, init_db
@@ -237,13 +238,19 @@ def check_gpu_health() -> dict:
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database on startup."""
+    """Initialize database and monitoring on startup."""
+    # Initialize Sentry error tracking
+    init_sentry()
+
+    # Initialize database
     init_db()
+
     logger.info("Batch API Server started", extra={
         "host": settings.BATCH_API_HOST,
         "port": settings.BATCH_API_PORT,
         "environment": settings.ENVIRONMENT,
-        "version": settings.APP_VERSION
+        "version": settings.APP_VERSION,
+        "sentry_enabled": bool(settings.SENTRY_DSN)
     })
     logger.info(f"Server ready at http://{settings.BATCH_API_HOST}:{settings.BATCH_API_PORT}")
 

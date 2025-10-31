@@ -6,65 +6,80 @@ positions:
   filename: /tmp/positions.yaml
 
 clients:
-  - url: http://localhost:4021/loki/api/v1/push
+  - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  # vLLM Server logs
-  - job_name: vllm-server
+  # vLLM Batch API Server logs (JSON structured)
+  - job_name: vllm-batch-api
     static_configs:
       - targets:
           - localhost
         labels:
-          job: vllm-server
-          __path__: /home/zack/Documents/augment-projects/Local/vllm-batch-server/vllm*.log
+          job: vllm-batch-api
+          service: vllm-batch-server
+          __path__: /var/log/vllm/api_server.log
     pipeline_stages:
-      - regex:
-          expression: '^(?P<timestamp>\S+\s+\S+)\s+(?P<level>\w+)\s+(?P<message>.*)$'
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            logger: logger
+            message: message
+            request_id: request_id
+            batch_id: batch_id
+      - labels:
+          level:
+          logger:
+          request_id:
+          batch_id:
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+
+  # vLLM Batch Worker logs (JSON structured)
+  - job_name: vllm-batch-worker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: vllm-batch-worker
+          service: vllm-batch-server
+          __path__: /var/log/vllm/worker.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            logger: logger
+            message: message
+            request_id: request_id
+            batch_id: batch_id
+      - labels:
+          level:
+          logger:
+          batch_id:
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+
+  # Integration/Static Server logs
+  - job_name: vllm-integration
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: vllm-integration
+          service: vllm-batch-server
+          __path__: /var/log/vllm/integration_server.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            message: message
       - labels:
           level:
       - timestamp:
           source: timestamp
-          format: '2006-01-02 15:04:05'
-
-  # Benchmark logs
-  - job_name: vllm-benchmarks
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: vllm-benchmarks
-          __path__: /home/zack/Documents/augment-projects/Local/vllm-batch-server/benchmark*.log
-    pipeline_stages:
-      - regex:
-          expression: '^(?P<timestamp>\S+\s+\S+)\s+(?P<level>\w+)\s+(?P<message>.*)$'
-      - labels:
-          level:
-
-  # Batch processing logs
-  - job_name: vllm-batch
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: vllm-batch
-          __path__: /home/zack/Documents/augment-projects/Local/vllm-batch-server/batch*.log
-    pipeline_stages:
-      - regex:
-          expression: '^(?P<timestamp>\S+\s+\S+)\s+(?P<level>\w+)\s+(?P<message>.*)$'
-      - labels:
-          level:
-
-  # API Server logs
-  - job_name: vllm-api
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: vllm-api
-          __path__: /home/zack/Documents/augment-projects/Local/vllm-batch-server/server.log
-    pipeline_stages:
-      - regex:
-          expression: '^(?P<timestamp>\S+\s+\S+)\s+(?P<level>\w+)\s+(?P<message>.*)$'
-      - labels:
-          level:
+          format: RFC3339
 

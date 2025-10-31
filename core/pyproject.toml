@@ -45,6 +45,7 @@ dependencies = [
     "aiosqlite>=0.20.0",  # Legacy SQLite support (for migration only)
     "python-json-logger>=3.2.0",
     "prometheus-client>=0.21.0",
+    "sentry-sdk[fastapi]>=2.0.0",  # Error tracking and monitoring
 ]
 
 [project.optional-dependencies]

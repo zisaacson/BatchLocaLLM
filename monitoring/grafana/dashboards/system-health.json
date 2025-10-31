@@ -1,0 +1,261 @@
+{
+  "dashboard": {
+    "title": "vLLM System Health",
+    "tags": ["vllm", "health", "api", "monitoring"],
+    "timezone": "browser",
+    "editable": true,
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "🌐 API Request Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(vllm_request_total[5m])",
+            "legendFormat": "{{endpoint}} ({{method}})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth"
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "⚡ API Response Time (Percentiles)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, rate(vllm_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "P99",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(vllm_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "P95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(vllm_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "P50 (Median)",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth"
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "❌ Error Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(vllm_request_errors_total[5m])",
+            "legendFormat": "{{error_type}} ({{endpoint}})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "errors/s",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth"
+            },
+            "color": {
+              "mode": "palette-classic",
+              "fixedColor": "red"
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "📊 HTTP Status Codes",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "sum by (status_code) (increase(vllm_request_total[1h]))",
+            "legendFormat": "{{status_code}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "🔧 Worker Status",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "vllm_worker_status{status=\"processing\"}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "textMode": "value_and_name",
+          "thresholds": [
+            {"value": 0, "color": "red"},
+            {"value": 1, "color": "green"}
+          ]
+        }
+      },
+      {
+        "id": 6,
+        "title": "💓 Worker Heartbeat Age",
+        "type": "gauge",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16},
+        "targets": [
+          {
+            "expr": "time() - vllm_worker_heartbeat_timestamp",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "s",
+          "thresholds": [
+            {"value": 0, "color": "green"},
+            {"value": 30, "color": "yellow"},
+            {"value": 60, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 7,
+        "title": "📁 Files Uploaded",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "sum(increase(vllm_files_uploaded_total[1h]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "id": 8,
+        "title": "💾 Files Storage (MB)",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 16},
+        "targets": [
+          {
+            "expr": "sum(vllm_files_bytes_uploaded_total) / 1024 / 1024",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "decmbytes",
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "id": 9,
+        "title": "🐛 Errors by Type",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+        "targets": [
+          {
+            "expr": "rate(vllm_errors_total[5m])",
+            "legendFormat": "{{error_type}} ({{component}})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "errors/s",
+            "custom": {
+              "drawStyle": "bars",
+              "lineInterpolation": "linear"
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "🔍 Request Latency Heatmap",
+        "type": "heatmap",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+        "targets": [
+          {
+            "expr": "rate(vllm_request_duration_seconds_bucket[5m])",
+            "legendFormat": "{{le}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "calculate": true,
+          "cellGap": 2,
+          "color": {
+            "mode": "scheme",
+            "scheme": "Spectral"
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "📊 Requests by Endpoint",
+        "type": "bargauge",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+        "targets": [
+          {
+            "expr": "sum by (endpoint) (increase(vllm_request_total[1h]))",
+            "legendFormat": "{{endpoint}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        }
+      },
+      {
+        "id": 12,
+        "title": "⏱️ Average Request Duration by Endpoint",
+        "type": "bargauge",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+        "targets": [
+          {
+            "expr": "sum by (endpoint) (rate(vllm_request_duration_seconds_sum[5m])) / sum by (endpoint) (rate(vllm_request_duration_seconds_count[5m]))",
+            "legendFormat": "{{endpoint}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "s",
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        }
+      }
+    ]
+  }
+}
+
