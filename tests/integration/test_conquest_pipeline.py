@@ -51,6 +51,37 @@ def mock_label_studio_http():
 class TestConquestPipeline:
     """Test the complete conquest data pipeline with REAL integrations"""
 
+    def test_all_conquest_types_have_schemas(self, client):
+        """
+        Test: All conquest types have valid schemas loaded
+
+        This ensures the schema registry loaded all conquest types correctly.
+        """
+        from curation_app.conquest_schemas import get_registry
+
+        registry = get_registry()
+        schemas = registry.list_schemas()
+
+        # Verify we have all expected conquest types
+        expected_types = {
+            "candidate_evaluation",
+            "cartographer",
+            "cv_parsing",
+            "email_evaluation",
+            "quil_email",
+            "report_evaluation"
+        }
+
+        loaded_types = {schema.id for schema in schemas}
+        assert loaded_types == expected_types, f"Missing schemas: {expected_types - loaded_types}"
+
+        # Verify each schema has required fields
+        for schema in schemas:
+            assert schema.id, f"Schema missing id: {schema}"
+            assert schema.name, f"Schema {schema.id} missing name"
+            assert schema.dataSources, f"Schema {schema.id} missing dataSources"
+            assert schema.questions, f"Schema {schema.id} missing questions"
+
     def test_bulk_import_creates_tasks_with_real_schema(self, client, mock_label_studio_http):
         """
         Test: Batch results → Bulk import → Label Studio tasks
@@ -261,6 +292,288 @@ class TestConquestPipeline:
         assert data["format"] == "icl"
         assert "examples" in data
         assert "count" in data
+
+
+class TestAllConquestTypes:
+    """Test all conquest types with their specific schemas"""
+
+    def test_candidate_evaluation_schema_validation(self, client, mock_label_studio_http):
+        """Test candidate_evaluation with all required fields"""
+        mock_label_studio_http.create_task.return_value = {"id": 1}
+        mock_label_studio_http.get_project.return_value = {"id": 1}
+
+        response = client.post("/api/tasks", json={
+            "conquest_type": "candidate_evaluation",
+            "data": {
+                "name": "Alice Johnson",
+                "role": "Senior Software Engineer",
+                "education": "MS Computer Science, MIT",
+                "work_history": "Google (2020-2024), Amazon (2018-2020)"
+            },
+            "llm_prediction": {
+                "recommendation": "strong_yes",
+                "trajectory_rating": "exceptional",
+                "company_pedigree": "exceptional",
+                "educational_pedigree": "exceptional",
+                "is_software_engineer": True
+            },
+            "model_version": "gemma-3-4b"
+        })
+
+        assert response.status_code == 200
+
+    def test_cartographer_schema_validation(self, client, mock_label_studio_http):
+        """Test cartographer with all required fields"""
+        mock_label_studio_http.create_task.return_value = {"id": 2}
+        mock_label_studio_http.get_project.return_value = {"id": 2}
+
+        response = client.post("/api/tasks", json={
+            "conquest_type": "cartographer",
+            "data": {
+                "name": "Bob Smith",
+                "current_role": "Engineering Manager",
+                "work_history": "Meta (2019-2024), Google (2015-2019)",
+                "education": "BS Computer Science, Stanford"
+            },
+            "llm_prediction": {
+                "career_trajectory": "upward",
+                "leadership_potential": "high"
+            },
+            "model_version": "gemma-3-4b"
+        })
+
+        assert response.status_code == 200
+
+    def test_cv_parsing_schema_validation(self, client, mock_label_studio_http):
+        """Test cv_parsing with all required fields"""
+        mock_label_studio_http.create_task.return_value = {"id": 3}
+        mock_label_studio_http.get_project.return_value = {"id": 3}
+
+        response = client.post("/api/tasks", json={
+            "conquest_type": "cv_parsing",
+            "data": {
+                "resume_text": "John Doe\nSoftware Engineer\nGoogle, 2020-2024\nBS CS, MIT"
+            },
+            "llm_prediction": {
+                "name": "John Doe",
+                "current_role": "Software Engineer",
+                "companies": ["Google"],
+                "education": "BS CS, MIT"
+            },
+            "model_version": "gemma-3-4b"
+        })
+
+        assert response.status_code == 200
+
+    def test_email_evaluation_schema_validation(self, client, mock_label_studio_http):
+        """Test email_evaluation with all required fields"""
+        mock_label_studio_http.create_task.return_value = {"id": 4}
+        mock_label_studio_http.get_project.return_value = {"id": 4}
+
+        response = client.post("/api/tasks", json={
+            "conquest_type": "email_evaluation",
+            "data": {
+                "from": "recruiter@company.com",
+                "to": "candidate@email.com",
+                "subject": "Exciting opportunity at TechCorp",
+                "email_body": "Hi, we have an exciting role..."
+            },
+            "llm_prediction": {
+                "quality": "high",
+                "personalization": "medium",
+                "relevance": "high"
+            },
+            "model_version": "gemma-3-4b"
+        })
+
+        assert response.status_code == 200
+
+    def test_quil_email_schema_validation(self, client, mock_label_studio_http):
+        """Test quil_email with all required fields"""
+        mock_label_studio_http.create_task.return_value = {"id": 5}
+        mock_label_studio_http.get_project.return_value = {"id": 5}
+
+        response = client.post("/api/tasks", json={
+            "conquest_type": "quil_email",
+            "data": {
+                "candidate_name": "Sarah Chen",
+                "current_role": "Senior Engineer",
+                "current_company": "Google",
+                "target_role": "Staff Engineer",
+                "company_name": "Meta"
+            },
+            "llm_prediction": {
+                "email_subject": "Exciting Staff Engineer opportunity at Meta",
+                "email_body": "Hi Sarah, I noticed your work at Google..."
+            },
+            "model_version": "gemma-3-4b"
+        })
+
+        assert response.status_code == 200
+
+    def test_report_evaluation_schema_validation(self, client, mock_label_studio_http):
+        """Test report_evaluation with all required fields"""
+        mock_label_studio_http.create_task.return_value = {"id": 6}
+        mock_label_studio_http.get_project.return_value = {"id": 6}
+
+        response = client.post("/api/tasks", json={
+            "conquest_type": "report_evaluation",
+            "data": {
+                "title": "Q4 2024 Engineering Report",
+                "author": "Engineering Team",
+                "date": "2024-12-31",
+                "report_type": "quarterly",
+                "executive_summary": "Strong performance across all metrics...",
+                "key_findings": "1. Velocity increased 20%\n2. Quality improved..."
+            },
+            "llm_prediction": {
+                "quality": "high",
+                "completeness": "complete",
+                "actionability": "high"
+            },
+            "model_version": "gemma-3-4b"
+        })
+
+        assert response.status_code == 200
+
+
+class TestErrorHandling:
+    """Test error cases and validation"""
+
+    def test_missing_required_field_rejected(self, client, mock_label_studio_http):
+        """Test that missing required fields are rejected"""
+        response = client.post("/api/tasks", json={
+            "conquest_type": "candidate_evaluation",
+            "data": {
+                "name": "John Doe"
+                # Missing: role, education, work_history
+            },
+            "llm_prediction": {},
+            "model_version": "gemma-3-4b"
+        })
+
+        assert response.status_code == 400
+
+    def test_invalid_conquest_type_rejected(self, client):
+        """Test that invalid conquest types are rejected"""
+        response = client.post("/api/tasks", json={
+            "conquest_type": "nonexistent_conquest",
+            "data": {"name": "John Doe"},
+            "llm_prediction": {},
+            "model_version": "gemma-3-4b"
+        })
+
+        assert response.status_code == 404
+        assert "unknown conquest type" in response.json()["detail"].lower()
+
+    def test_bulk_import_handles_malformed_json_gracefully(self, client, mock_label_studio_http):
+        """Test that bulk import handles malformed JSON without failing entire batch"""
+        mock_label_studio_http.create_task.return_value = {"id": 1}
+        mock_label_studio_http.get_project.return_value = {"id": 1}
+
+        response = client.post("/api/tasks/bulk-import", json={
+            "batch_id": "batch_error_test",
+            "conquest_type": "candidate_evaluation",
+            "model_version": "gemma-3-4b",
+            "results": [
+                # Valid JSON result
+                {
+                    "custom_id": "valid-001",
+                    "response": {
+                        "body": {
+                            "choices": [{
+                                "message": {
+                                    "content": json.dumps({
+                                        "recommendation": "yes",
+                                        "trajectory_rating": "strong"
+                                    })
+                                }
+                            }]
+                        }
+                    },
+                    "request": {
+                        "body": {
+                            "messages": [{"role": "user", "content": "test"}]
+                        }
+                    }
+                },
+                # Non-JSON text result (should be handled gracefully)
+                {
+                    "custom_id": "text-001",
+                    "response": {
+                        "body": {
+                            "choices": [{
+                                "message": {
+                                    "content": "This is plain text, not JSON"
+                                }
+                            }]
+                        }
+                    },
+                    "request": {
+                        "body": {
+                            "messages": [{"role": "user", "content": "test"}]
+                        }
+                    }
+                }
+            ]
+        })
+
+        assert response.status_code == 200
+        data = response.json()
+        # Both should be created (non-JSON is stored as {"response": text})
+        assert data["created_count"] == 2
+        assert data["skipped_count"] == 0
+
+    def test_bulk_import_skips_results_with_no_choices(self, client, mock_label_studio_http):
+        """Test that bulk import skips results with missing choices"""
+        mock_label_studio_http.create_task.return_value = {"id": 1}
+        mock_label_studio_http.get_project.return_value = {"id": 1}
+
+        response = client.post("/api/tasks/bulk-import", json={
+            "batch_id": "batch_skip_test",
+            "conquest_type": "candidate_evaluation",
+            "model_version": "gemma-3-4b",
+            "results": [
+                # Valid result
+                {
+                    "custom_id": "valid-001",
+                    "response": {
+                        "body": {
+                            "choices": [{
+                                "message": {
+                                    "content": json.dumps({"recommendation": "yes"})
+                                }
+                            }]
+                        }
+                    },
+                    "request": {
+                        "body": {
+                            "messages": [{"role": "user", "content": "test"}]
+                        }
+                    }
+                },
+                # Invalid result (no choices)
+                {
+                    "custom_id": "invalid-001",
+                    "response": {
+                        "body": {
+                            "choices": []  # Empty choices array
+                        }
+                    },
+                    "request": {
+                        "body": {
+                            "messages": [{"role": "user", "content": "test"}]
+                        }
+                    }
+                }
+            ]
+        })
+
+        assert response.status_code == 200
+        data = response.json()
+        # Should have created 1 and skipped 1
+        assert data["created_count"] == 1
+        assert data["skipped_count"] == 1
 
 
 if __name__ == "__main__":
