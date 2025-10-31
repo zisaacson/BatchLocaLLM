@@ -109,7 +109,7 @@ class BenchmarkManager:
                 created = int(dt.timestamp())
             else:
                 created = int(time.time())
-        except:
+        except (ValueError, AttributeError):
             created = int(time.time())
 
         # OpenAI/Parasail compatible model object

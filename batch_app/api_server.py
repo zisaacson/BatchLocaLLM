@@ -198,7 +198,7 @@ async def ready(db: Session = Depends(get_db)):
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Service not ready: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"Service not ready: {str(e)}") from e
 
 
 # ============================================================================
@@ -265,7 +265,7 @@ async def get_file(file_id: str, db: Session = Depends(get_db)):
     Returns:
         File metadata in OpenAI format
     """
-    db_file = db.query(File).filter(File.file_id == file_id, File.deleted == False).first()
+    db_file = db.query(File).filter(File.file_id == file_id, not File.deleted).first()
     if not db_file:
         raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
 
@@ -283,7 +283,7 @@ async def get_file_content(file_id: str, db: Session = Depends(get_db)):
     Returns:
         File content as JSONL
     """
-    db_file = db.query(File).filter(File.file_id == file_id, File.deleted == False).first()
+    db_file = db.query(File).filter(File.file_id == file_id, not File.deleted).first()
     if not db_file:
         raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
 
@@ -309,7 +309,7 @@ async def delete_file(file_id: str, db: Session = Depends(get_db)):
     Returns:
         Deletion confirmation
     """
-    db_file = db.query(File).filter(File.file_id == file_id, File.deleted == False).first()
+    db_file = db.query(File).filter(File.file_id == file_id, not File.deleted).first()
     if not db_file:
         raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
 
@@ -346,7 +346,7 @@ async def list_files(
     Returns:
         List of files in OpenAI format
     """
-    query = db.query(File).filter(File.deleted == False)
+    query = db.query(File).filter(not File.deleted)
 
     if purpose:
         query = query.filter(File.purpose == purpose)
@@ -560,8 +560,8 @@ async def prometheus_metrics(db: Session = Depends(get_db)):
         metrics.append(f"vllm_gpu_healthy {1 if gpu_status['healthy'] else 0}")
 
     # File metrics
-    total_files = db.query(File).filter(File.deleted == False).count()
-    total_bytes = db.query(File).filter(File.deleted == False).with_entities(
+    total_files = db.query(File).filter(not File.deleted).count()
+    total_bytes = db.query(File).filter(not File.deleted).with_entities(
         db.func.sum(File.bytes)
     ).scalar() or 0
 
@@ -621,7 +621,7 @@ async def create_batch(
     # Get input file
     input_file = db.query(File).filter(
         File.file_id == request.input_file_id,
-        File.deleted == False
+        not File.deleted
     ).first()
 
     if not input_file:
@@ -669,7 +669,7 @@ async def create_batch(
                     raise HTTPException(
                         status_code=400,
                         detail=f"Invalid JSON on line {i+1}: {e}"
-                    )
+                    ) from e
 
         if num_requests == 0:
             raise HTTPException(status_code=400, detail="No valid requests found in file")
@@ -687,7 +687,7 @@ async def create_batch(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to validate file: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to validate file: {str(e)}") from e
 
     # Generate batch ID
     batch_id = f"batch_{uuid.uuid4().hex[:16]}"
@@ -872,38 +872,6 @@ async def get_logs(batch_id: str, db: Session = Depends(get_db)):
         logs = f.read()
 
     return {"logs": logs}
-
-
-@app.delete("/v1/batches/{batch_id}")
-async def cancel_batch(batch_id: str, db: Session = Depends(get_db)):
-    """
-    Cancel a pending batch job.
-    Note: Cannot cancel jobs that are already running.
-    """
-    batch_job = db.query(BatchJob).filter(BatchJob.batch_id == batch_id).first()
-
-    if not batch_job:
-        raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found")
-
-    if batch_job.status == 'running':
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot cancel a running job. Please contact administrator."
-        )
-
-    if batch_job.status in ['completed', 'failed']:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Job already {batch_job.status}"
-        )
-
-    # Mark as failed with cancellation message
-    batch_job.status = 'failed'
-    batch_job.error_message = 'Cancelled by user'
-    batch_job.completed_at = datetime.utcnow()
-    db.commit()
-
-    return {"message": f"Batch job '{batch_id}' cancelled", "batch": batch_job.to_dict()}
 
 
 @app.get("/v1/batches/{batch_id}/failed")

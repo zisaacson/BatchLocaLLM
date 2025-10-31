@@ -94,7 +94,7 @@ async def ready():
         raise HTTPException(
             status_code=503,
             detail=f"Service not ready: {str(e)}"
-        )
+        ) from e
 
 
 # ============================================================================
@@ -663,7 +663,7 @@ async def mark_gold_star(task_id: int, request: GoldStarRequest) -> dict[str, An
         current_meta['gold_star_updated_at'] = datetime.now(UTC).isoformat()
 
         # Update task in Label Studio
-        updated_task = label_studio.update_task(
+        label_studio.update_task(
             task_id=task_id,
             meta=current_meta
         )
@@ -678,7 +678,7 @@ async def mark_gold_star(task_id: int, request: GoldStarRequest) -> dict[str, An
 
     except Exception as e:
         logger.error(f"Failed to update gold-star for task {task_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update gold-star: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update gold-star: {str(e)}") from e
 
 
 @app.post("/api/tasks/bulk-gold-star")

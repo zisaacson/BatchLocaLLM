@@ -167,7 +167,7 @@ def migrate_database():
                 # Parse ISO format string
                 try:
                     created_at = int(datetime.fromisoformat(created_at.replace('Z', '+00:00')).timestamp())
-                except:
+                except (ValueError, AttributeError):
                     created_at = int(datetime.now().timestamp())
             elif created_at is None:
                 created_at = int(datetime.now().timestamp())
@@ -181,7 +181,7 @@ def migrate_database():
             elif isinstance(started_at, str):
                 try:
                     in_progress_at = int(datetime.fromisoformat(started_at.replace('Z', '+00:00')).timestamp())
-                except:
+                except (ValueError, AttributeError):
                     pass
 
             completed_at_dt = job_dict.get('completed_at')
@@ -191,7 +191,7 @@ def migrate_database():
             elif isinstance(completed_at_dt, str):
                 try:
                     completed_at = int(datetime.fromisoformat(completed_at_dt.replace('Z', '+00:00')).timestamp())
-                except:
+                except (ValueError, AttributeError):
                     pass
 
             expires_at = int(created_at) + 86400  # 24 hours

@@ -123,7 +123,7 @@ class BatchJob(Base):
         if self.metadata_json:
             try:
                 metadata = json.loads(self.metadata_json)
-            except:
+            except (json.JSONDecodeError, TypeError):
                 pass
 
         # Parse errors
@@ -131,7 +131,7 @@ class BatchJob(Base):
         if self.errors:
             try:
                 errors = json.loads(self.errors)
-            except:
+            except (json.JSONDecodeError, TypeError):
                 errors = {"message": self.errors}
 
         return {
