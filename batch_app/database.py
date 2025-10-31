@@ -12,7 +12,7 @@ SQLAlchemy 2.0 with full type safety using Mapped[T] pattern.
 
 import json
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import (
     DateTime,
@@ -87,19 +87,19 @@ class BatchJob(Base):
     # Status values: validating, failed, in_progress, finalizing, completed, expired, cancelling, cancelled
 
     # OpenAI file references (nullable)
-    output_file_id: Mapped[Optional[str]] = mapped_column(String(64), ForeignKey('files.file_id'), nullable=True)
-    error_file_id: Mapped[Optional[str]] = mapped_column(String(64), ForeignKey('files.file_id'), nullable=True)
+    output_file_id: Mapped[str | None] = mapped_column(String(64), ForeignKey('files.file_id'), nullable=True)
+    error_file_id: Mapped[str | None] = mapped_column(String(64), ForeignKey('files.file_id'), nullable=True)
 
     # OpenAI timestamps (Unix timestamps)
     created_at: Mapped[int] = mapped_column(Integer)
-    in_progress_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    in_progress_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
     expires_at: Mapped[int] = mapped_column(Integer)
-    finalizing_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    completed_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    failed_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    expired_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    cancelling_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    cancelled_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    finalizing_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completed_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    failed_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    expired_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cancelling_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cancelled_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # OpenAI request counts
     total_requests: Mapped[int] = mapped_column(Integer, default=0)
@@ -107,23 +107,23 @@ class BatchJob(Base):
     failed_requests: Mapped[int] = mapped_column(Integer, default=0)
 
     # OpenAI errors field (JSON string)
-    errors: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    errors: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # OpenAI metadata (JSON string)
-    metadata_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Internal fields (not in OpenAI response)
-    model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    log_file: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-    throughput_tokens_per_sec: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    total_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    model: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    log_file: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    throughput_tokens_per_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Webhook support (custom extension)
-    webhook_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-    webhook_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    webhook_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    webhook_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     webhook_attempts: Mapped[int] = mapped_column(Integer, default=0)
-    webhook_last_attempt: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    webhook_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    webhook_last_attempt: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    webhook_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def to_dict(self):
         """Convert to OpenAI Batch API format."""
@@ -195,7 +195,7 @@ class FailedRequest(Base):
 
     # Retry tracking
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_retry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -228,11 +228,11 @@ class WorkerHeartbeat(Base):
 
     # Worker status
     status: Mapped[str] = mapped_column(String(32), default='idle')  # idle, processing, error
-    current_job_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    current_job_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # GPU metrics
-    gpu_memory_percent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    gpu_temperature: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gpu_memory_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gpu_temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Timestamp
     last_seen: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

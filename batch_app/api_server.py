@@ -266,7 +266,7 @@ async def get_file(file_id: str, db: Session = Depends(get_db)):
     Returns:
         File metadata in OpenAI format
     """
-    db_file = db.query(File).filter(File.file_id == file_id, File.deleted == False).first()
+    db_file = db.query(File).filter(File.file_id == file_id, ~File.deleted).first()
     if not db_file:
         raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
 
@@ -284,7 +284,7 @@ async def get_file_content(file_id: str, db: Session = Depends(get_db)):
     Returns:
         File content as JSONL
     """
-    db_file = db.query(File).filter(File.file_id == file_id, File.deleted == False).first()
+    db_file = db.query(File).filter(File.file_id == file_id, ~File.deleted).first()
     if not db_file:
         raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
 
@@ -310,7 +310,7 @@ async def delete_file(file_id: str, db: Session = Depends(get_db)):
     Returns:
         Deletion confirmation
     """
-    db_file = db.query(File).filter(File.file_id == file_id, File.deleted == False).first()
+    db_file = db.query(File).filter(File.file_id == file_id, ~File.deleted).first()
     if not db_file:
         raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
 
@@ -347,7 +347,7 @@ async def list_files(
     Returns:
         List of files in OpenAI format
     """
-    query = db.query(File).filter(File.deleted == False)
+    query = db.query(File).filter(~File.deleted)
 
     if purpose:
         query = query.filter(File.purpose == purpose)
@@ -562,8 +562,8 @@ async def prometheus_metrics(db: Session = Depends(get_db)):
         metrics.append(f"vllm_gpu_healthy {1 if gpu_status['healthy'] else 0}")
 
     # File metrics
-    total_files = db.query(File).filter(File.deleted == False).count()
-    total_bytes = db.query(File).filter(File.deleted == False).with_entities(
+    total_files = db.query(File).filter(~File.deleted).count()
+    total_bytes = db.query(File).filter(~File.deleted).with_entities(
         func.sum(File.bytes)
     ).scalar() or 0
 
@@ -623,7 +623,7 @@ async def create_batch(
     # Get input file
     input_file = db.query(File).filter(
         File.file_id == request.input_file_id,
-        File.deleted == False
+        ~File.deleted
     ).first()
 
     if not input_file:

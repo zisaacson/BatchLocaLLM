@@ -14,7 +14,6 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import requests
 from sqlalchemy.orm import Session
@@ -78,8 +77,8 @@ class BatchWorker:
             poll_interval: Seconds to wait between polling for new jobs
         """
         self.poll_interval = poll_interval
-        self.current_llm: Optional[LLM] = None
-        self.current_model: Optional[str] = None
+        self.current_llm: LLM | None = None
+        self.current_model: str | None = None
         self.benchmark_mgr = get_benchmark_manager()
 
     def update_heartbeat(self, db: Session, status: str = 'idle', job_id: str | None = None):
@@ -120,7 +119,7 @@ class BatchWorker:
         except Exception:
             return 0
 
-    def save_chunk_results(self, outputs, requests, output_file: str, start_idx: int, log_file: Optional[str]):
+    def save_chunk_results(self, outputs, requests, output_file: str, start_idx: int, log_file: str | None):
         """
         Save chunk results incrementally in append mode.
 
@@ -187,7 +186,7 @@ class BatchWorker:
 
         return saved_count
 
-    def load_model(self, model: str, log_file: Optional[str]):
+    def load_model(self, model: str, log_file: str | None):
         """Load vLLM model if not already loaded."""
         if self.current_model == model and self.current_llm is not None:
             self.log(log_file, f"✅ Model {model} already loaded, reusing")
@@ -448,7 +447,7 @@ class BatchWorker:
                 self.log(log_file, f"📡 Sending failure webhook to {job.webhook_url}...")
                 send_webhook_async(job.batch_id, job.webhook_url)
 
-    def auto_import_to_curation(self, job: BatchJob, db: Session, log_file: Optional[str]):
+    def auto_import_to_curation(self, job: BatchJob, db: Session, log_file: str | None):
         """
         Automatically import batch results to curation system.
 
@@ -530,7 +529,7 @@ class BatchWorker:
         except Exception as e:
             print(f"⚠️  Failed to save benchmark: {e}")
 
-    def log(self, log_file: Optional[str], message: str):
+    def log(self, log_file: str | None, message: str):
         """Write to log file and stdout."""
         timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         log_message = f"[{timestamp}] {message}"
