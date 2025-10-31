@@ -66,6 +66,9 @@
                         <kbd>Ctrl</kbd> + <kbd>S</kbd> Save annotation
                     </div>
                     <div class="shortcut">
+                        <kbd>Ctrl</kbd> + <kbd>G</kbd> Gold star
+                    </div>
+                    <div class="shortcut">
                         <kbd>Ctrl</kbd> + <kbd>E</kbd> Export
                     </div>
                 </div>
@@ -124,6 +127,9 @@
                         <div class="action-buttons">
                             <button type="button" class="btn btn-secondary" id="copy-llm-btn">
                                 📋 Copy LLM Answers
+                            </button>
+                            <button type="button" class="btn btn-gold-star" id="gold-star-btn" title="Mark as gold-star for training dataset">
+                                ⭐ Gold Star
                             </button>
                             <button type="submit" form="annotation-form" class="btn btn-primary">
                                 ✅ Submit Annotation
@@ -300,7 +306,10 @@
             
             // Render task
             renderTask(currentTask, currentSchema);
-            
+
+            // Update gold-star button state
+            updateGoldStarButton(currentTask.meta?.gold_star === true);
+
             // Show task viewer
             document.getElementById('no-task-selected').style.display = 'none';
             document.getElementById('task-viewer').style.display = 'block';
@@ -313,6 +322,62 @@
             document.getElementById('export-btn').addEventListener('click', showExportModal);
             document.getElementById('annotation-form').addEventListener('submit', submitAnnotation);
             document.getElementById('copy-llm-btn').addEventListener('click', copyLLMAnswers);
+            document.getElementById('gold-star-btn').addEventListener('click', toggleGoldStar);
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'g') {
+                    e.preventDefault();
+                    toggleGoldStar();
+                }
+            });
+        }
+
+        async function toggleGoldStar() {
+            if (!currentTask) {
+                showToast('No task selected', 'error');
+                return;
+            }
+
+            const isGoldStar = currentTask.meta?.gold_star === true;
+            const newGoldStar = !isGoldStar;
+
+            try {
+                const response = await fetch(`/api/tasks/${currentTask.id}/gold-star`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({is_gold_star: newGoldStar})
+                });
+
+                if (!response.ok) throw new Error('Failed to update gold-star');
+
+                // Update current task
+                currentTask.meta = currentTask.meta || {};
+                currentTask.meta.gold_star = newGoldStar;
+
+                // Update button appearance
+                updateGoldStarButton(newGoldStar);
+
+                showToast(newGoldStar ? '⭐ Marked as gold-star!' : 'Unmarked gold-star', 'success');
+            } catch (error) {
+                console.error('Gold-star error:', error);
+                showToast('Failed to update gold-star', 'error');
+            }
+        }
+
+        function updateGoldStarButton(isGoldStar) {
+            const btn = document.getElementById('gold-star-btn');
+            if (isGoldStar) {
+                btn.classList.add('active');
+                btn.innerHTML = '⭐ Gold Star (Active)';
+                btn.style.backgroundColor = '#fbbf24';
+                btn.style.color = '#000';
+            } else {
+                btn.classList.remove('active');
+                btn.innerHTML = '⭐ Gold Star';
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
+            }
         }
 
         async function onConquestTypeChange() {

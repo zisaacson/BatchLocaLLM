@@ -310,16 +310,135 @@ class TestCurationAPI:
             }
         ]
         mock_label_studio.calculate_agreement.return_value = 1.0
-        
+
         with patch('curation_app.api.get_or_create_project', return_value=1):
             response = client.get("/api/stats?conquest_type=test_conquest")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["total_tasks"] == 2
         assert data["annotated_tasks"] == 1
         assert data["pending_tasks"] == 1
         assert data["gold_star_tasks"] == 1
+
+    def test_mark_gold_star(self, client, mock_label_studio):
+        """Test marking a task as gold-star"""
+        mock_label_studio.get_task.return_value = {
+            "id": 1,
+            "data": {"name": "John Doe"},
+            "meta": {}
+        }
+        mock_label_studio.update_task.return_value = {
+            "id": 1,
+            "meta": {"gold_star": True}
+        }
+
+        response = client.post("/api/tasks/1/gold-star", json={"is_gold_star": True})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task_id"] == 1
+        assert data["gold_star"] is True
+        assert "updated_at" in data
+        mock_label_studio.update_task.assert_called_once()
+
+    def test_unmark_gold_star(self, client, mock_label_studio):
+        """Test unmarking a task as gold-star"""
+        mock_label_studio.get_task.return_value = {
+            "id": 1,
+            "data": {"name": "John Doe"},
+            "meta": {"gold_star": True}
+        }
+        mock_label_studio.update_task.return_value = {
+            "id": 1,
+            "meta": {"gold_star": False}
+        }
+
+        response = client.post("/api/tasks/1/gold-star", json={"is_gold_star": False})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["gold_star"] is False
+
+    def test_bulk_mark_gold_star(self, client, mock_label_studio):
+        """Test bulk marking tasks as gold-star"""
+        mock_label_studio.get_task.side_effect = [
+            {"id": 1, "meta": {}},
+            {"id": 2, "meta": {}},
+            {"id": 3, "meta": {}}
+        ]
+        mock_label_studio.update_task.return_value = {"id": 1}
+
+        response = client.post(
+            "/api/tasks/bulk-gold-star",
+            json={"task_ids": [1, 2, 3], "is_gold_star": True}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_tasks"] == 3
+        assert data["updated_count"] == 3
+        assert data["failed_count"] == 0
+        assert data["gold_star"] is True
+        assert mock_label_studio.update_task.call_count == 3
+
+    def test_bulk_mark_gold_star_partial_failure(self, client, mock_label_studio):
+        """Test bulk gold-star with some failures"""
+        def get_task_side_effect(task_id):
+            if task_id == 2:
+                raise Exception("Task not found")
+            return {"id": task_id, "meta": {}}
+
+        mock_label_studio.get_task.side_effect = get_task_side_effect
+        mock_label_studio.update_task.return_value = {"id": 1}
+
+        response = client.post(
+            "/api/tasks/bulk-gold-star",
+            json={"task_ids": [1, 2, 3], "is_gold_star": True}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_tasks"] == 3
+        assert data["updated_count"] == 2
+        assert data["failed_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_bulk_import_tasks(self, client, mock_label_studio, mock_schema_registry):
+        """Test bulk importing batch results"""
+        mock_label_studio.create_task.return_value = {"id": 1}
+
+        with patch('curation_app.api.get_or_create_project', return_value=1):
+            response = client.post("/api/tasks/bulk-import", json={
+                "batch_id": "batch_123",
+                "conquest_type": "test_conquest",
+                "model_version": "gemma-3-4b",
+                "results": [
+                    {
+                        "custom_id": "req-1",
+                        "response": {
+                            "body": {
+                                "choices": [
+                                    {"message": {"content": '{"rating": "Strong"}'}}
+                                ]
+                            }
+                        },
+                        "request": {
+                            "body": {
+                                "messages": [
+                                    {"role": "user", "content": "Test"}
+                                ]
+                            }
+                        }
+                    }
+                ]
+            })
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["batch_id"] == "batch_123"
+        assert data["created_count"] == 1
+        assert data["skipped_count"] == 0
 
 
 if __name__ == "__main__":

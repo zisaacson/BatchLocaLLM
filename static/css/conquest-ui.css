@@ -267,6 +267,23 @@ body {
     opacity: 0.8;
 }
 
+.btn-gold-star {
+    background: #fef3c7;
+    color: #92400e;
+    border: 2px solid #fbbf24;
+}
+
+.btn-gold-star:hover {
+    background: #fde68a;
+    transform: translateY(-2px);
+}
+
+.btn-gold-star.active {
+    background: #fbbf24;
+    color: #000;
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.5);
+}
+
 /* ============================================================================
    Keyboard Shortcuts
    ============================================================================ */

@@ -220,6 +220,27 @@ class LabelStudioClient:
         response.raise_for_status()
         return response.json()
 
+    def update_task(
+        self,
+        task_id: int,
+        data: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Update a task's data or metadata"""
+        update_payload = {}
+        if data is not None:
+            update_payload['data'] = data
+        if meta is not None:
+            update_payload['meta'] = meta
+
+        response = self.session.patch(
+            f"{self.base_url}/api/tasks/{task_id}",
+            json=update_payload,
+            timeout=self.timeout
+        )
+        response.raise_for_status()
+        return response.json()
+
     def delete_task(self, task_id: int) -> None:
         """Delete a task"""
         response = self.session.delete(
@@ -290,41 +311,56 @@ class LabelStudioClient:
     ) -> list[dict[str, Any]]:
         """
         Get high-quality tasks for training data
-        
+
+        Returns tasks that are either:
+        1. Manually marked as gold-star (meta.gold_star = True), OR
+        2. Have high agreement between LLM prediction and human annotation
+
         Args:
             project_id: Project ID
-            min_agreement: Minimum agreement score
+            min_agreement: Minimum agreement score (for automatic gold-star)
             min_annotations: Minimum number of annotations
-        
+
         Returns:
-            List of gold-star tasks
+            List of gold-star tasks with agreement_score field
         """
         all_tasks = self.get_tasks(project_id, page_size=1000)
         gold_star = []
-        
+
         for task in all_tasks:
+            # Check for manual gold-star flag
+            meta = task.get('meta', {})
+            if meta.get('gold_star') is True:
+                # Manually marked as gold-star
+                task['agreement_score'] = 1.0  # Perfect score for manual gold-star
+                task['gold_star_type'] = 'manual'
+                gold_star.append(task)
+                continue
+
+            # Check for automatic gold-star (high agreement)
             annotations = task.get('annotations', [])
             predictions = task.get('predictions', [])
-            
+
             if len(annotations) < min_annotations:
                 continue
-            
+
             if not predictions:
                 continue
-            
+
             # Calculate agreement between first prediction and first annotation
             prediction_result = predictions[0].get('result', {})
             annotation_result = annotations[0].get('result', {})
-            
+
             agreement = self.calculate_agreement(
                 task['id'],
                 prediction_result,
                 annotation_result
             )
-            
+
             if agreement >= min_agreement:
                 task['agreement_score'] = agreement
+                task['gold_star_type'] = 'automatic'
                 gold_star.append(task)
-        
+
         return gold_star
 

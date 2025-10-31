@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+from typing import Any
 import logging
 from pathlib import Path
 import json
@@ -102,15 +103,15 @@ async def ready():
 class CreateTaskRequest(BaseModel):
     """Request to create a new curation task"""
     conquest_type: str
-    data: dict[str, any]
-    llm_prediction: dict[str, any] | None = None
+    data: dict[str, Any]
+    llm_prediction: dict[str, Any] | None = None
     model_version: str | None = None
 
 
 class SubmitAnnotationRequest(BaseModel):
     """Request to submit an annotation"""
     task_id: int
-    result: dict[str, any]
+    result: dict[str, Any]
     time_spent_seconds: float | None = None
 
 
@@ -126,8 +127,19 @@ class BulkImportRequest(BaseModel):
     """Request to bulk import vLLM batch results"""
     batch_id: str
     conquest_type: str
-    results: list[dict[str, any]]
+    results: list[dict[str, Any]]
     model_version: str | None = None
+
+
+class GoldStarRequest(BaseModel):
+    """Request to mark task as gold-star"""
+    is_gold_star: bool
+
+
+class BulkGoldStarRequest(BaseModel):
+    """Request to mark multiple tasks as gold-star"""
+    task_ids: list[int]
+    is_gold_star: bool
 
 
 # ============================================================================
@@ -141,7 +153,7 @@ async def root():
 
 
 @app.get("/api/schemas")
-async def list_schemas() -> list[dict[str, any]]:
+async def list_schemas() -> list[dict[str, Any]]:
     """List all available conquest schemas"""
     schemas = schema_registry.list_schemas()
     return [
@@ -623,6 +635,93 @@ async def get_stats(conquest_type: (str) | None = None) -> dict[str, Any]:
         "pending_tasks": pending_tasks,
         "average_agreement": avg_agreement,
         "gold_star_tasks": len([a for a in agreements if a >= settings.MIN_AGREEMENT_SCORE])
+    }
+
+
+@app.post("/api/tasks/{task_id}/gold-star")
+async def mark_gold_star(task_id: int, request: GoldStarRequest) -> dict[str, Any]:
+    """
+    Mark a task as gold-star (or unmark it).
+
+    Gold-star tasks are high-quality examples suitable for training datasets.
+    This allows manual curation beyond automatic agreement-based filtering.
+
+    Args:
+        task_id: Label Studio task ID
+        request: Gold-star status (true/false)
+
+    Returns:
+        Updated task metadata
+    """
+    try:
+        # Get current task
+        task = label_studio.get_task(task_id)
+
+        # Update metadata
+        current_meta = task.get('meta', {})
+        current_meta['gold_star'] = request.is_gold_star
+        current_meta['gold_star_updated_at'] = datetime.utcnow().isoformat()
+
+        # Update task in Label Studio
+        updated_task = label_studio.update_task(
+            task_id=task_id,
+            meta=current_meta
+        )
+
+        logger.info(f"Task {task_id} gold-star set to {request.is_gold_star}")
+
+        return {
+            "task_id": task_id,
+            "gold_star": request.is_gold_star,
+            "updated_at": current_meta['gold_star_updated_at']
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to update gold-star for task {task_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update gold-star: {str(e)}")
+
+
+@app.post("/api/tasks/bulk-gold-star")
+async def bulk_mark_gold_star(request: BulkGoldStarRequest) -> dict[str, Any]:
+    """
+    Mark multiple tasks as gold-star (or unmark them).
+
+    Useful for batch operations like "mark all high-agreement tasks as gold-star".
+
+    Args:
+        request: List of task IDs and gold-star status
+
+    Returns:
+        Update statistics
+    """
+    updated_count = 0
+    failed_count = 0
+
+    for task_id in request.task_ids:
+        try:
+            # Get current task
+            task = label_studio.get_task(task_id)
+
+            # Update metadata
+            current_meta = task.get('meta', {})
+            current_meta['gold_star'] = request.is_gold_star
+            current_meta['gold_star_updated_at'] = datetime.utcnow().isoformat()
+
+            # Update task
+            label_studio.update_task(task_id=task_id, meta=current_meta)
+            updated_count += 1
+
+        except Exception as e:
+            logger.warning(f"Failed to update task {task_id}: {e}")
+            failed_count += 1
+
+    logger.info(f"Bulk gold-star update: {updated_count} updated, {failed_count} failed")
+
+    return {
+        "total_tasks": len(request.task_ids),
+        "updated_count": updated_count,
+        "failed_count": failed_count,
+        "gold_star": request.is_gold_star
     }
 
 
