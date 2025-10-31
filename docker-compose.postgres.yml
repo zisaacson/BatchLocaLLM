@@ -29,29 +29,8 @@ services:
     networks:
       - vllm-batch-network
 
-  # PgAdmin - Web UI for PostgreSQL management (optional)
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: vllm-batch-pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@vllm-batch.local
-      PGADMIN_DEFAULT_PASSWORD: admin
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
-      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      - postgres
-    networks:
-      - vllm-batch-network
-
 volumes:
   postgres_data:
-    driver: local
-  pgadmin_data:
     driver: local
 
 networks:
