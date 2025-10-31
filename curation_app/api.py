@@ -72,7 +72,7 @@ async def ready():
         # This will raise an exception if Label Studio is not available
         response = label_studio.session.get(
             f"{label_studio.base_url}/api/health",
-            timeout=5
+            timeout=settings.LABEL_STUDIO_HEALTH_TIMEOUT
         )
 
         if response.status_code != 200:
@@ -118,7 +118,7 @@ class ExportRequest(BaseModel):
     """Request to export gold-star dataset"""
     conquest_type: str
     format: str = "icl"  # "icl" or "finetuning"
-    min_agreement: float = 0.8
+    min_agreement: float = settings.MIN_AGREEMENT_SCORE
     min_annotations: int = 1
 
 
@@ -485,7 +485,7 @@ async def bulk_import_tasks(request: BulkImportRequest) -> dict[str, Any]:
 async def list_tasks(
     conquest_type: (str) | None = None,
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100)
+    page_size: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE)
 ) -> dict[str, Any]:
     """List tasks with optional filtering"""
     if conquest_type:
@@ -622,7 +622,7 @@ async def get_stats(conquest_type: (str) | None = None) -> dict[str, Any]:
         "annotated_tasks": annotated_tasks,
         "pending_tasks": pending_tasks,
         "average_agreement": avg_agreement,
-        "gold_star_tasks": len([a for a in agreements if a >= 0.8])
+        "gold_star_tasks": len([a for a in agreements if a >= settings.MIN_AGREEMENT_SCORE])
     }
 
 

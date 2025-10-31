@@ -47,10 +47,10 @@ OUTPUT_DIR = Path(settings.OUTPUT_DIR)
 LOGS_DIR = Path(settings.LOGS_DIR)
 FILES_DIR = Path(settings.FILES_DIR)
 
-# Queue limits (match OpenAI Batch API)
-MAX_REQUESTS_PER_JOB = 50000  # Max requests per batch job
-MAX_QUEUE_DEPTH = 20  # Max concurrent jobs in queue (supports up to 1M queued requests)
-MAX_TOTAL_QUEUED_REQUESTS = 1000000  # Max total requests across all queued jobs (1M = 20 jobs × 50K)
+# Queue limits (from config - match OpenAI Batch API)
+MAX_REQUESTS_PER_JOB = settings.MAX_REQUESTS_PER_JOB
+MAX_QUEUE_DEPTH = settings.MAX_QUEUE_DEPTH
+MAX_TOTAL_QUEUED_REQUESTS = settings.MAX_TOTAL_QUEUED_REQUESTS
 
 
 # ============================================================================
@@ -62,7 +62,7 @@ class CreateBatchRequest(BaseModel):
     input_file_id: str = Field(..., description="ID of uploaded input file")
     endpoint: str = Field("/v1/chat/completions", description="API endpoint")
     completion_window: str = Field("24h", description="Completion window")
-    metadata: dict[str, any] | None = Field(None, description="Custom metadata")
+    metadata: dict[str, str] | None = Field(None, description="Custom metadata")
 
 
 class CancelBatchRequest(BaseModel):
@@ -81,7 +81,7 @@ def check_gpu_health() -> dict:
     try:
         import requests
 
-        prom_url = "http://localhost:4022/api/v1/query"
+        prom_url = f"{settings.PROMETHEUS_URL}/api/v1/query"
 
         # Query GPU temperature from Prometheus
         temp_resp = requests.get(prom_url, params={"query": "nvidia_gpu_temperature_celsius"}, timeout=2)
@@ -692,7 +692,7 @@ async def create_batch(
 
     # Create timestamps
     created_at = int(time.time())
-    expires_at = created_at + 86400  # 24 hours
+    expires_at = created_at + (settings.BATCH_EXPIRY_HOURS * 3600)  # Convert hours to seconds
 
     # Create log file path
     log_file_path = LOGS_DIR / f"{batch_id}.log"

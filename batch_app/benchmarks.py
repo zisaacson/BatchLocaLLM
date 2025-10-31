@@ -33,11 +33,11 @@ class BenchmarkManager:
             except Exception as e:
                 print(f"⚠️  Failed to load {file_path}: {e}")
     
-    def get_model_performance(self, model: str) -> (dict[str, Any]]:
+    def get_model_performance(self, model: str) -> dict[str, Any] | None:
         """Get performance metrics for a model."""
         return self.benchmarks_cache.get(model)
     
-    def estimate_completion_time(self, model: str, num_requests: int) -> (dict[str, Any]]:
+    def estimate_completion_time(self, model: str, num_requests: int) -> dict[str, Any] | None:
         """
         Estimate completion time based on benchmark data.
         
@@ -85,7 +85,7 @@ class BenchmarkManager:
         """Get list of models with benchmark data."""
         return list(self.benchmarks_cache.keys())
     
-    def get_model_info(self, model: str) -> (dict[str, Any]]:
+    def get_model_info(self, model: str) -> dict[str, Any] | None:
         """
         Get detailed model information in OpenAI/Parasail format.
 

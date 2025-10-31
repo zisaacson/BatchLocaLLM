@@ -25,8 +25,8 @@ from .webhooks import send_webhook_async
 import uuid
 import requests
 
-# Configuration
-CHUNK_SIZE = 5000  # Process 5K requests at a time (proven safe from benchmarks)
+# Configuration (all from settings)
+CHUNK_SIZE = settings.CHUNK_SIZE
 GPU_MEMORY_UTILIZATION = settings.GPU_MEMORY_UTILIZATION
 
 
@@ -44,7 +44,7 @@ def check_gpu_health() -> dict:
         pynvml.nvmlShutdown()
 
         return {
-            'healthy': mem_percent < 95 and temp < 85,
+            'healthy': mem_percent < settings.GPU_MEMORY_THRESHOLD and temp < settings.GPU_TEMP_THRESHOLD,
             'memory_percent': mem_percent,
             'temperature_c': temp
         }
@@ -102,7 +102,7 @@ class BatchWorker:
             # Don't fail the worker if heartbeat update fails
             print(f"⚠️  Heartbeat update failed: {e}")
 
-    def get_next_pending_job(self, db: Session) -> (BatchJob]:
+    def get_next_pending_job(self, db: Session) -> BatchJob | None:
         """Get the next pending job from the queue (OpenAI status: validating)."""
         return db.query(BatchJob).filter(
             BatchJob.status == 'validating'
@@ -207,8 +207,8 @@ class BatchWorker:
             start_time = time.time()
             self.current_llm = LLM(
                 model=model,
-                max_model_len=4096,
-                gpu_memory_utilization=GPU_MEMORY_UTILIZATION,  # 0.85 for safety
+                max_model_len=settings.DEFAULT_MAX_MODEL_LEN,
+                gpu_memory_utilization=GPU_MEMORY_UTILIZATION,
                 disable_log_stats=True,
             )
             load_time = time.time() - start_time
@@ -279,7 +279,7 @@ class BatchWorker:
             sampling_params = SamplingParams(
                 temperature=0.7,
                 top_p=0.9,
-                max_tokens=2000,
+                max_tokens=settings.DEFAULT_MAX_TOKENS,
             )
 
             # Process in chunks

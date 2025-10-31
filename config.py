@@ -100,8 +100,19 @@ class Settings(BaseSettings):
     # ========================================================================
     MAX_REQUESTS_PER_JOB: int = 50000  # OpenAI limit
     MAX_QUEUE_DEPTH: int = 20  # Max concurrent jobs
+    MAX_TOTAL_QUEUED_REQUESTS: int = 1000000  # Max total requests across all queued jobs
+    BATCH_EXPIRY_HOURS: int = 24  # Batch expiry time in hours
     WORKER_POLL_INTERVAL: int = 5  # Seconds between job checks
     WORKER_HEARTBEAT_INTERVAL: int = 30  # Seconds between heartbeats
+    CHUNK_SIZE: int = 5000  # Process N requests at a time (proven safe from benchmarks)
+
+    # GPU Health Thresholds
+    GPU_MEMORY_THRESHOLD: float = 95.0  # Max GPU memory % before rejecting jobs
+    GPU_TEMP_THRESHOLD: float = 85.0  # Max GPU temp (C) before rejecting jobs
+
+    # vLLM Default Parameters
+    DEFAULT_MAX_MODEL_LEN: int = 4096  # Default context window
+    DEFAULT_MAX_TOKENS: int = 2000  # Default max output tokens
     
     # ========================================================================
     # Auto-Import to Curation
@@ -143,7 +154,15 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     LOG_FILE: Optional[str] = None  # If set, log to file
-    
+
+    # ========================================================================
+    # Curation UI Defaults
+    # ========================================================================
+    DEFAULT_PAGE_SIZE: int = 50  # Default items per page
+    MAX_PAGE_SIZE: int = 100  # Maximum items per page
+    MIN_AGREEMENT_SCORE: float = 0.8  # Minimum agreement for gold-star export
+    LABEL_STUDIO_HEALTH_TIMEOUT: int = 5  # Timeout for health checks
+
     # ========================================================================
     # Security
     # ========================================================================
