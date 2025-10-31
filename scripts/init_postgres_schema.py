@@ -4,7 +4,7 @@ Initialize PostgreSQL schema with SQLAlchemy 2.0 models.
 """
 
 import sys
-from batch_app.database import Base, engine, init_db
+from core.batch_app.database import Base, engine, init_db
 
 def main():
     """Create all tables in PostgreSQL."""

@@ -9,5 +9,5 @@ echo "=================================="
 source venv/bin/activate
 
 # Start worker
-python -m batch_app.worker
+python -m core.batch_app.worker
 

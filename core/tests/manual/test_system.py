@@ -22,7 +22,7 @@ def test_database_schema():
     """Test database schema creation."""
     print("\nTesting database schema...")
     try:
-        from batch_app.database import Base, BatchJob, SessionLocal, engine
+        from core.batch_app.database import Base, BatchJob, SessionLocal, engine
 
         # Create tables
         Base.metadata.create_all(bind=engine)
@@ -42,7 +42,7 @@ def test_benchmark_manager():
     """Test benchmark manager."""
     print("\nTesting benchmark manager...")
     try:
-        from batch_app.benchmarks import get_benchmark_manager
+        from core.batch_app.benchmarks import get_benchmark_manager
 
         bm = get_benchmark_manager()
 

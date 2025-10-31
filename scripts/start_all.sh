@@ -57,19 +57,19 @@ main() {
     # 1. Start Integration Server (port 4081)
     start_component \
         "Integration Server" \
-        "python -m batch_app.static_server" \
+        "python -m core.batch_app.static_server" \
         "logs/integration_server.log"
-    
+
     # 2. Start API Server (port 4080)
     start_component \
         "API Server" \
-        "python -m batch_app.api_server" \
+        "python -m core.batch_app.api_server" \
         "logs/api_server.log"
-    
+
     # 3. Start Worker
     start_component \
         "Worker" \
-        "python -m batch_app.worker" \
+        "python -m core.batch_app.worker" \
         "logs/worker.log"
 
     # 4. Start Results Viewer (port 8001)

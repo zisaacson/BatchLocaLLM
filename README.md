@@ -8,6 +8,36 @@
 
 Production-ready batch inference system for local LLMs running on consumer GPUs (RTX 4080 16GB). Includes beautiful web UI for curating training datasets from batch results.
 
+---
+
+## 📦 Repository Structure
+
+This is a **monorepo** with public and private code:
+
+```
+vllm-batch-server/
+├── core/                      ← OPEN SOURCE (Apache 2.0)
+│   ├── batch_app/             # Batch processing server
+│   ├── result_handlers/       # Plugin system
+│   ├── config.py              # Configuration
+│   ├── tests/                 # Test suite
+│   └── README.md              # Public documentation
+│
+├── integrations/              ← PRIVATE (gitignored)
+│   ├── aris/                  # Aris-specific code (private)
+│   └── examples/              # Example integrations (public)
+│
+├── benchmarks/                # Benchmark results
+├── scripts/                   # Utility scripts
+└── README.md                  # This file
+```
+
+**📚 For open source documentation, see [`core/README.md`](core/README.md)**
+
+**🔌 For integration examples, see [`integrations/examples/README.md`](integrations/examples/README.md)**
+
+---
+
 ## ✨ Features
 
 ### 🚀 Batch Processing

@@ -5,7 +5,7 @@ Test PostgreSQL connection and verify database setup.
 
 import sys
 from sqlalchemy import create_engine, text
-from config import settings
+from core.config import settings
 
 def test_connection():
     """Test PostgreSQL connection"""

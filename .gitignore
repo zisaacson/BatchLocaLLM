@@ -88,3 +88,7 @@ dmypy.json
 .ruff_cache/
 
 batch_50k.jsonl
+
+# Aris-specific integrations (private)
+integrations/aris/
+!integrations/examples/

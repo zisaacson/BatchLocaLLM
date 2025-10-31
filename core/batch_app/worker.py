@@ -19,7 +19,7 @@ import requests
 from sqlalchemy.orm import Session
 from vllm import LLM, SamplingParams
 
-from config import settings
+from core.config import settings
 
 from .benchmarks import get_benchmark_manager
 from .database import BatchJob, File, SessionLocal, WorkerHeartbeat

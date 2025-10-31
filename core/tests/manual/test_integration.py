@@ -96,7 +96,7 @@ def test_database_connection():
     """Test database connection and queries."""
     print("\nTesting database connection...")
     try:
-        from batch_app.database import BatchJob, SessionLocal, WorkerHeartbeat
+        from core.batch_app.database import BatchJob, SessionLocal, WorkerHeartbeat
 
         db = SessionLocal()
         try:

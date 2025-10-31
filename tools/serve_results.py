@@ -464,7 +464,7 @@ class ResultsHandler(SimpleHTTPRequestHandler):
                         processes.append(line)
 
                 # Get real-time job progress from database
-                from batch_app.database import SessionLocal, BatchJob
+                from core.batch_app.database import SessionLocal, BatchJob
 
                 db = SessionLocal()
                 try:
@@ -503,7 +503,7 @@ class ResultsHandler(SimpleHTTPRequestHandler):
         # API endpoint to get running jobs from database
         elif parsed_path.path == '/api/running-jobs':
             try:
-                from batch_app.database import SessionLocal, BatchJob
+                from core.batch_app.database import SessionLocal, BatchJob
 
                 db = SessionLocal()
                 try:

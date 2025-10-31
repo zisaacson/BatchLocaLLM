@@ -38,7 +38,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pynvml>=11.5.0
 
 # Copy application code
-COPY batch_app/ ./batch_app/
+COPY core/ ./core/
 COPY benchmarks/ ./benchmarks/
 
 # Create data directories
@@ -62,5 +62,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:4080/health || exit 1
 
 # Run the API server
-CMD ["python", "-m", "uvicorn", "batch_app.api_server:app", "--host", "0.0.0.0", "--port", "4080"]
+CMD ["python", "-m", "uvicorn", "core.batch_app.api_server:app", "--host", "0.0.0.0", "--port", "4080"]
 

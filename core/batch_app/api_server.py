@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from config import settings
+from core.config import settings
 
 from .benchmarks import get_benchmark_manager
 from .database import BatchJob, FailedRequest, File, WorkerHeartbeat, get_db, init_db

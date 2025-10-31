@@ -63,5 +63,5 @@ echo ""
 
 # Activate venv and start server
 source venv/bin/activate
-python -m batch_app.static_server
+python -m core.batch_app.static_server
 
