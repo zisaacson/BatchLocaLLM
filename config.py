@@ -70,17 +70,23 @@ class Settings(BaseSettings):
     LABEL_STUDIO_POOL_MAXSIZE: int = 20  # Max connections in pool
     
     # ========================================================================
-    # Database
+    # Database - PostgreSQL (Production-grade)
     # ========================================================================
+    DATABASE_URL: str = "postgresql://vllm_batch_user:vllm_batch_password_dev@localhost:5432/vllm_batch"
+    DATABASE_ECHO: bool = False  # Log SQL queries (dev only)
+    DATABASE_POOL_SIZE: int = 5  # Connection pool size
+    DATABASE_MAX_OVERFLOW: int = 10  # Max connections beyond pool_size
+    DATABASE_POOL_TIMEOUT: int = 30  # Timeout for getting connection from pool
+    DATABASE_POOL_RECYCLE: int = 3600  # Recycle connections after 1 hour
+
+    # Legacy SQLite support (deprecated - will be removed)
     DATABASE_DIR: str = "data/database"
     DATABASE_NAME: str = "batch_jobs.db"
-    DATABASE_ECHO: bool = False  # Log SQL queries (dev only)
-    
+
     @property
-    def DATABASE_URL(self) -> str:
-        """Construct SQLite database URL"""
+    def LEGACY_SQLITE_URL(self) -> str:
+        """Legacy SQLite database URL (for migration only)"""
         db_path = Path(self.DATABASE_DIR) / self.DATABASE_NAME
-        db_path.parent.mkdir(parents=True, exist_ok=True)
         return f"sqlite:///{db_path}"
     
     # ========================================================================
