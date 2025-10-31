@@ -14,7 +14,9 @@ import logging
 from pathlib import Path
 import json
 import re
+from datetime import datetime
 
+from config import settings
 from .label_studio_client import LabelStudioClient
 from .conquest_schemas import get_registry, ConquestSchema
 
@@ -26,28 +28,71 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Conquest Curation API",
     description="Beautiful web interface for curating all conquest types",
-    version="1.0.0"
+    version=settings.APP_VERSION
 )
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
+    allow_methods=settings.cors_methods_list,
+    allow_headers=settings.cors_headers_list,
 )
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Initialize clients
-label_studio = LabelStudioClient(
-    base_url="http://localhost:8080",
-    api_key=None  # Will be set from env or config
-)
+# Initialize clients (uses settings from config)
+label_studio = LabelStudioClient()
 
 schema_registry = get_registry()
+
+
+# ============================================================================
+# Health Check Endpoints
+# ============================================================================
+
+@app.get("/health")
+async def health():
+    """Basic health check - returns 200 if service is running"""
+    return {
+        "status": "healthy",
+        "service": "curation-api",
+        "version": settings.APP_VERSION,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@app.get("/ready")
+async def ready():
+    """Readiness check - verifies Label Studio connection"""
+    try:
+        # Try to connect to Label Studio
+        # This will raise an exception if Label Studio is not available
+        response = label_studio.session.get(
+            f"{label_studio.base_url}/api/health",
+            timeout=5
+        )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Label Studio not ready: {response.status_code}"
+            )
+
+        return {
+            "status": "ready",
+            "service": "curation-api",
+            "label_studio": "connected",
+            "schemas_loaded": len(schema_registry.list_schemas()),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Service not ready: {str(e)}"
+        )
 
 
 # ============================================================================

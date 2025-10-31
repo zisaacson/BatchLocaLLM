@@ -15,6 +15,8 @@ from datetime import datetime, timedelta
 import os
 import json
 
+from config import settings
+
 Base = declarative_base()
 
 
@@ -223,11 +225,8 @@ class WorkerHeartbeat(Base):
 
 
 # Database setup
-DATABASE_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'database')
-os.makedirs(DATABASE_DIR, exist_ok=True)
-
-DATABASE_URL = f"sqlite:///{os.path.join(DATABASE_DIR, 'batch_jobs.db')}"
-engine = create_engine(DATABASE_URL, echo=False)
+DATABASE_URL = settings.DATABASE_URL
+engine = create_engine(DATABASE_URL, echo=settings.DATABASE_ECHO)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

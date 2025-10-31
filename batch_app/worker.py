@@ -18,6 +18,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from vllm import LLM, SamplingParams
 
+from config import settings
 from .database import SessionLocal, BatchJob, WorkerHeartbeat, File
 from .benchmarks import get_benchmark_manager
 from .webhooks import send_webhook_async
@@ -26,7 +27,7 @@ import requests
 
 # Configuration
 CHUNK_SIZE = 5000  # Process 5K requests at a time (proven safe from benchmarks)
-GPU_MEMORY_UTILIZATION = 0.85  # Conservative (was 0.90)
+GPU_MEMORY_UTILIZATION = settings.GPU_MEMORY_UTILIZATION
 
 
 def check_gpu_health() -> dict:
@@ -449,14 +450,11 @@ class BatchWorker:
         """
         try:
             # Check if auto-import is enabled
-            curation_url = os.getenv("CURATION_API_URL", "http://localhost:8001")
-            auto_import = os.getenv("AUTO_IMPORT_TO_CURATION", "true").lower() == "true"
-
-            if not auto_import:
+            if not settings.AUTO_IMPORT_TO_CURATION:
                 self.log(log_file, "⏭️  Auto-import to curation disabled (set AUTO_IMPORT_TO_CURATION=true to enable)")
                 return
 
-            self.log(log_file, f"\n📥 Auto-importing to curation system at {curation_url}...")
+            self.log(log_file, f"\n📥 Auto-importing to curation system at {settings.CURATION_API_URL}...")
 
             # Get conquest type from metadata
             metadata = json.loads(job.metadata_json) if job.metadata_json else {}
@@ -484,7 +482,7 @@ class BatchWorker:
 
             # Import to curation system
             response = requests.post(
-                f"{curation_url}/api/tasks/bulk-import",
+                f"{settings.CURATION_API_URL}/api/tasks/bulk-import",
                 json={
                     "batch_id": job.batch_id,
                     "conquest_type": conquest_type,
@@ -497,7 +495,7 @@ class BatchWorker:
             if response.status_code == 200:
                 result = response.json()
                 self.log(log_file, f"✅ Imported {result.get('created_count', 0)} tasks to curation system")
-                self.log(log_file, f"🌐 View at: {curation_url}?conquest_type={conquest_type}")
+                self.log(log_file, f"🌐 View at: {settings.CURATION_API_URL}?conquest_type={conquest_type}")
             else:
                 self.log(log_file, f"⚠️  Curation import failed: {response.status_code} {response.text[:200]}")
 

@@ -8,21 +8,48 @@ import requests
 from typing import Any
 from datetime import datetime
 import logging
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class LabelStudioClient:
-    """Client for Label Studio API"""
-    
-    def __init__(self, base_url: str = "http://localhost:8080", api_key: (str) | None = None):
-        self.base_url = base_url.rstrip('/')
-        self.api_key = api_key
+    """Client for Label Studio API with connection pooling and retry logic"""
+
+    def __init__(self, base_url: str | None = None, api_key: str | None = None):
+        self.base_url = (base_url or settings.LABEL_STUDIO_URL).rstrip('/')
+        self.api_key = api_key or settings.LABEL_STUDIO_API_KEY
+
+        # Create session with connection pooling
         self.session = requests.Session()
-        
-        if api_key:
+
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=settings.LABEL_STUDIO_MAX_RETRIES,
+            backoff_factor=settings.LABEL_STUDIO_RETRY_BACKOFF,
+            status_forcelist=[429, 500, 502, 503, 504],  # Retry on these HTTP codes
+            allowed_methods=["HEAD", "GET", "PUT", "DELETE", "OPTIONS", "TRACE", "POST"]
+        )
+
+        # Mount adapter with retry strategy
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=settings.LABEL_STUDIO_POOL_CONNECTIONS,
+            pool_maxsize=settings.LABEL_STUDIO_POOL_MAXSIZE
+        )
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+
+        # Set default timeout
+        self.timeout = settings.LABEL_STUDIO_TIMEOUT
+
+        # Set authorization header
+        if self.api_key:
             self.session.headers.update({
-                'Authorization': f'Token {api_key}'
+                'Authorization': f'Token {self.api_key}'
             })
     
     def create_project(self, title: str, description: str = "", label_config: str = "") -> dict[str, Any]:
@@ -33,14 +60,18 @@ class LabelStudioClient:
                 "title": title,
                 "description": description,
                 "label_config": label_config
-            }
+            },
+            timeout=self.timeout
         )
         response.raise_for_status()
         return response.json()
-    
+
     def get_project(self, project_id: int) -> dict[str, Any]:
         """Get project details"""
-        response = self.session.get(f"{self.base_url}/api/projects/{project_id}")
+        response = self.session.get(
+            f"{self.base_url}/api/projects/{project_id}",
+            timeout=self.timeout
+        )
         response.raise_for_status()
         return response.json()
     
@@ -76,14 +107,18 @@ class LabelStudioClient:
         
         response = self.session.post(
             f"{self.base_url}/api/tasks",
-            json=task_data
+            json=task_data,
+            timeout=self.timeout
         )
         response.raise_for_status()
         return response.json()
-    
+
     def get_task(self, task_id: int) -> dict[str, Any]:
         """Get task by ID"""
-        response = self.session.get(f"{self.base_url}/api/tasks/{task_id}")
+        response = self.session.get(
+            f"{self.base_url}/api/tasks/{task_id}",
+            timeout=self.timeout
+        )
         response.raise_for_status()
         return response.json()
     
@@ -117,7 +152,8 @@ class LabelStudioClient:
         
         response = self.session.get(
             f"{self.base_url}/api/tasks",
-            params=params
+            params=params,
+            timeout=self.timeout
         )
         response.raise_for_status()
         return response.json()
@@ -155,19 +191,21 @@ class LabelStudioClient:
         
         response = self.session.post(
             f"{self.base_url}/api/annotations",
-            json=annotation_data
+            json=annotation_data,
+            timeout=self.timeout
         )
         response.raise_for_status()
         return response.json()
-    
+
     def get_annotations(self, task_id: int) -> list[dict[str, Any]]:
         """Get all annotations for a task"""
         response = self.session.get(
-            f"{self.base_url}/api/tasks/{task_id}/annotations"
+            f"{self.base_url}/api/tasks/{task_id}/annotations",
+            timeout=self.timeout
         )
         response.raise_for_status()
         return response.json()
-    
+
     def update_annotation(
         self,
         annotation_id: int,
@@ -176,14 +214,18 @@ class LabelStudioClient:
         """Update an existing annotation"""
         response = self.session.patch(
             f"{self.base_url}/api/annotations/{annotation_id}",
-            json={"result": result}
+            json={"result": result},
+            timeout=self.timeout
         )
         response.raise_for_status()
         return response.json()
-    
+
     def delete_task(self, task_id: int) -> None:
         """Delete a task"""
-        response = self.session.delete(f"{self.base_url}/api/tasks/{task_id}")
+        response = self.session.delete(
+            f"{self.base_url}/api/tasks/{task_id}",
+            timeout=self.timeout
+        )
         response.raise_for_status()
     
     def export_tasks(
@@ -210,7 +252,8 @@ class LabelStudioClient:
         
         response = self.session.get(
             f"{self.base_url}/api/projects/{project_id}/export",
-            params=params
+            params=params,
+            timeout=self.timeout
         )
         response.raise_for_status()
         return response.json()

@@ -9,6 +9,7 @@ Features:
 
 from fastapi import FastAPI, UploadFile, File as FastAPIFile, Form, Depends, HTTPException, Body
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel, Field
@@ -19,26 +20,32 @@ from datetime import datetime
 from pathlib import Path
 import time
 
+from config import settings
 from .database import get_db, init_db, BatchJob, FailedRequest, WorkerHeartbeat, File
 from .benchmarks import get_benchmark_manager
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="vLLM Batch Processing API",
+    title=settings.APP_NAME,
     description="Submit and manage large-scale LLM inference batch jobs",
-    version="1.0.0"
+    version=settings.APP_VERSION
 )
 
-# Data directories
-DATA_DIR = Path("data/batches")
-INPUT_DIR = DATA_DIR / "input"
-OUTPUT_DIR = DATA_DIR / "output"
-LOGS_DIR = DATA_DIR / "logs"
-FILES_DIR = Path("data/files")  # OpenAI Files API storage
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
+    allow_methods=settings.cors_methods_list,
+    allow_headers=settings.cors_headers_list,
+)
 
-# Create directories
-for dir_path in [INPUT_DIR, OUTPUT_DIR, LOGS_DIR, FILES_DIR]:
-    dir_path.mkdir(parents=True, exist_ok=True)
+# Data directories (from config)
+DATA_DIR = Path(settings.BATCHES_DIR)
+INPUT_DIR = Path(settings.INPUT_DIR)
+OUTPUT_DIR = Path(settings.OUTPUT_DIR)
+LOGS_DIR = Path(settings.LOGS_DIR)
+FILES_DIR = Path(settings.FILES_DIR)
 
 # Queue limits (match OpenAI Batch API)
 MAX_REQUESTS_PER_JOB = 50000  # Max requests per batch job
@@ -145,6 +152,51 @@ async def startup_event():
     """Initialize database on startup."""
     init_db()
     print("✅ Batch API Server started")
+    print(f"🚀 Server ready at http://{settings.BATCH_API_HOST}:{settings.BATCH_API_PORT}")
+
+
+# ============================================================================
+# Health Check Endpoints
+# ============================================================================
+
+@app.get("/health")
+async def health():
+    """Basic health check - returns 200 if service is running"""
+    return {
+        "status": "healthy",
+        "service": "batch-api",
+        "version": settings.APP_VERSION,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@app.get("/ready")
+async def ready(db: Session = Depends(get_db)):
+    """Readiness check - verifies database connection and dependencies"""
+    try:
+        # Check database connection
+        db.execute("SELECT 1")
+
+        # Check if data directories exist
+        dirs_ok = all([
+            INPUT_DIR.exists(),
+            OUTPUT_DIR.exists(),
+            LOGS_DIR.exists(),
+            FILES_DIR.exists()
+        ])
+
+        if not dirs_ok:
+            raise HTTPException(status_code=503, detail="Data directories not ready")
+
+        return {
+            "status": "ready",
+            "service": "batch-api",
+            "database": "connected",
+            "directories": "ok",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Service not ready: {str(e)}")
 
 
 # ============================================================================
