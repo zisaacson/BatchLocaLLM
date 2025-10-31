@@ -20,10 +20,15 @@ from sqlalchemy.orm import Session
 from vllm import LLM, SamplingParams
 
 from core.config import settings
+from core.batch_app.logging_config import get_logger, set_request_context, clear_request_context
+from core.batch_app import metrics
 
 from .benchmarks import get_benchmark_manager
 from .database import BatchJob, File, SessionLocal, WorkerHeartbeat
 from .webhooks import send_webhook_async
+
+# Initialize logger
+logger = get_logger(__name__)
 
 # Configuration (all from settings)
 CHUNK_SIZE = settings.CHUNK_SIZE
@@ -100,7 +105,7 @@ class BatchWorker:
             db.commit()
         except Exception as e:
             # Don't fail the worker if heartbeat update fails
-            print(f"⚠️  Heartbeat update failed: {e}")
+            logger.warning("Heartbeat update failed", exc_info=True, extra={"error": str(e)})
 
     def get_next_pending_job(self, db: Session) -> BatchJob | None:
         """Get the next pending job from the queue (OpenAI status: validating)."""
@@ -223,12 +228,18 @@ class BatchWorker:
     def process_job(self, job: BatchJob, db: Session):
         """Process a single batch job with chunking and resume capability (OpenAI compatible)."""
         log_file = job.log_file
+        job_start_time = time.time()
 
         try:
             # Update status to in_progress (OpenAI format)
             job.status = 'in_progress'
             job.in_progress_at = int(time.time())
             db.commit()
+
+            # Track batch job status change
+            metrics.track_batch_job(status='in_progress', model=job.model)
+            metrics.batch_jobs_active.labels(status='validating').dec()
+            metrics.batch_jobs_active.labels(status='in_progress').inc()
 
             # Get input file
             input_file = db.query(File).filter(File.file_id == job.input_file_id).first()
@@ -325,6 +336,11 @@ class BatchWorker:
 
                     self.log(log_file, f"✅ Chunk inference complete in {chunk_inference_time:.1f}s ({chunk_inference_time/60:.1f} min)")
 
+                    # Track chunk metrics
+                    metrics.chunk_processing_duration.labels(model=job.model).observe(chunk_inference_time)
+                    metrics.chunk_size.observe(len(chunk_prompts))
+                    metrics.chunks_processed.labels(model=job.model, status='completed').inc()
+
                     # Calculate chunk tokens
                     chunk_prompt_tokens = sum(len(o.prompt_token_ids) if o.prompt_token_ids else 0 for o in outputs)
                     chunk_completion_tokens = sum(len(o.outputs[0].token_ids) for o in outputs)
@@ -336,6 +352,10 @@ class BatchWorker:
 
                     chunk_throughput = chunk_total_tokens / chunk_inference_time
                     self.log(log_file, f"📊 Chunk throughput: {chunk_throughput:.0f} tokens/sec")
+
+                    # Track token metrics
+                    metrics.tokens_generated.labels(model=job.model).inc(chunk_total_tokens)
+                    metrics.throughput_tokens_per_second.labels(model=job.model).set(chunk_throughput)
 
                     # Save chunk results incrementally
                     self.log(log_file, "💾 Saving chunk results...")
@@ -362,6 +382,8 @@ class BatchWorker:
 
                 except Exception as e:
                     self.log(log_file, f"❌ Chunk {chunk_num} failed: {e}")
+                    # Track chunk failure
+                    metrics.chunks_processed.labels(model=job.model, status='failed').inc()
                     raise
 
             self.log(log_file, "\n✅ All chunks processed successfully!")
@@ -416,6 +438,15 @@ class BatchWorker:
             job.throughput_tokens_per_sec = int(throughput)
             db.commit()
 
+            # Track batch completion metrics
+            job_duration = time.time() - job_start_time
+            metrics.track_batch_job(status='completed', model=job.model, duration=job_duration)
+            metrics.batch_jobs_active.labels(status='in_progress').dec()
+            metrics.batch_jobs_active.labels(status='completed').inc()
+            metrics.batch_requests_processed.labels(model=job.model, status='completed').inc(job.completed_requests)
+            if job.failed_requests > 0:
+                metrics.batch_requests_processed.labels(model=job.model, status='failed').inc(job.failed_requests)
+
             self.log(log_file, "\n🎉 Batch job completed successfully!")
 
             # Save benchmark data
@@ -435,6 +466,13 @@ class BatchWorker:
             job.failed_at = int(time.time())
             job.errors = json.dumps({"message": str(e)})
             db.commit()
+
+            # Track batch failure metrics
+            job_duration = time.time() - job_start_time
+            metrics.track_batch_job(status='failed', model=job.model, duration=job_duration)
+            metrics.batch_jobs_active.labels(status='in_progress').dec()
+            metrics.batch_jobs_active.labels(status='failed').inc()
+            metrics.track_error(error_type=type(e).__name__, component="worker")
 
             self.log(log_file, f"\n❌ ERROR: {e}")
             self.log(log_file, "Batch job failed")
@@ -527,30 +565,48 @@ class BatchWorker:
 
             self.benchmark_mgr.save_job_benchmark(job_data)
         except Exception as e:
-            print(f"⚠️  Failed to save benchmark: {e}")
+            logger.warning("Failed to save benchmark", extra={"error": str(e), "batch_id": job.batch_id})
 
     def log(self, log_file: str | None, message: str):
-        """Write to log file and stdout."""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-        log_message = f"[{timestamp}] {message}"
+        """
+        Write to log file and stdout.
 
-        print(log_message)
+        DEPRECATED: Use logger.info() instead for structured logging.
+        This method is kept for backward compatibility with existing log() calls.
+        """
+        # Parse message to extract emoji and actual message
+        # This maintains backward compatibility while using structured logging
+        if message.startswith('✅'):
+            logger.info(message[2:].strip())
+        elif message.startswith('❌'):
+            logger.error(message[2:].strip())
+        elif message.startswith('⚠️'):
+            logger.warning(message[2:].strip())
+        elif message.startswith('🚀'):
+            logger.info(message[2:].strip())
+        elif message.startswith('📋'):
+            logger.info(message[2:].strip())
+        else:
+            logger.info(message)
 
+        # Still write to log file if specified (for backward compatibility)
         if log_file:
+            timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+            log_message = f"[{timestamp}] {message}"
             Path(log_file).parent.mkdir(parents=True, exist_ok=True)
             with open(log_file, 'a') as f:
                 f.write(log_message + '\n')
 
     def run(self):
         """Main worker loop with heartbeat monitoring."""
-        print("=" * 80)
-        print("🚀 BATCH WORKER STARTED")
-        print("=" * 80)
-        print(f"Poll interval: {self.poll_interval}s")
-        print(f"Chunk size: {CHUNK_SIZE}")
-        print(f"GPU memory utilization: {GPU_MEMORY_UTILIZATION}")
-        print("Waiting for jobs...")
-        print("=" * 80)
+        logger.info("=" * 80)
+        logger.info("BATCH WORKER STARTED", extra={
+            "poll_interval_seconds": self.poll_interval,
+            "chunk_size": CHUNK_SIZE,
+            "gpu_memory_utilization": GPU_MEMORY_UTILIZATION
+        })
+        logger.info("=" * 80)
+        logger.info("Waiting for jobs...")
 
         while True:
             try:
@@ -563,12 +619,18 @@ class BatchWorker:
                 job = self.get_next_pending_job(db)
 
                 if job:
-                    print(f"\n📋 Found pending job: {job.batch_id}")
+                    logger.info("Found pending job", extra={"batch_id": job.batch_id})
+
+                    # Set request context for tracing
+                    set_request_context(batch_id=job.batch_id)
 
                     # Update heartbeat (processing)
                     self.update_heartbeat(db, status='processing', job_id=job.batch_id)
 
                     self.process_job(job, db)
+
+                    # Clear request context
+                    clear_request_context()
                 else:
                     # No jobs, wait
                     time.sleep(self.poll_interval)
@@ -576,12 +638,10 @@ class BatchWorker:
                 db.close()
 
             except KeyboardInterrupt:
-                print("\n\n🛑 Worker stopped by user")
+                logger.info("Worker stopped by user")
                 break
             except Exception as e:
-                print(f"❌ Worker error: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error("Worker error", exc_info=True, extra={"error": str(e)})
                 time.sleep(self.poll_interval)
 
 

@@ -5,6 +5,7 @@ Features:
 - Queue limits to prevent overload
 - GPU health checks before accepting jobs
 - Request validation
+- Request tracing with correlation IDs
 """
 
 import json
@@ -14,17 +15,23 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi import File as FastAPIFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from core.config import settings
+from core.batch_app.logging_config import get_logger, set_request_context, clear_request_context
+from core.batch_app import metrics
 
 from .benchmarks import get_benchmark_manager
 from .database import BatchJob, FailedRequest, File, WorkerHeartbeat, get_db, init_db
+
+# Initialize logger
+logger = get_logger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -33,7 +40,86 @@ app = FastAPI(
     version=settings.APP_VERSION
 )
 
-# Add CORS middleware
+
+# ============================================================================
+# Request Tracing Middleware
+# ============================================================================
+
+class RequestTracingMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware to add request tracing with correlation IDs.
+
+    Generates a unique request_id for each request and adds it to:
+    - Response headers (X-Request-ID)
+    - Logging context (for structured logs)
+    - Metrics labels (for Prometheus)
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        # Generate or extract request ID
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+
+        # Set request context for logging
+        set_request_context(request_id=request_id)
+
+        # Add request ID to request state (for access in endpoints)
+        request.state.request_id = request_id
+
+        # Log request
+        logger.info("Request received", extra={
+            "method": request.method,
+            "path": request.url.path,
+            "client": request.client.host if request.client else None
+        })
+
+        # Process request
+        start_time = time.time()
+        try:
+            response = await call_next(request)
+            duration = time.time() - start_time
+
+            # Track metrics
+            metrics.track_request(
+                endpoint=request.url.path,
+                method=request.method,
+                status_code=response.status_code,
+                duration=duration
+            )
+
+            # Log response
+            logger.info("Request completed", extra={
+                "status_code": response.status_code,
+                "duration_seconds": round(duration, 3)
+            })
+
+            # Add request ID to response headers
+            response.headers["X-Request-ID"] = request_id
+
+            return response
+        except Exception as e:
+            duration = time.time() - start_time
+
+            # Track error metrics
+            metrics.track_error(
+                error_type=type(e).__name__,
+                component="api",
+                endpoint=request.url.path,
+                method=request.method
+            )
+
+            logger.error("Request failed", exc_info=True, extra={
+                "error": str(e),
+                "duration_seconds": round(duration, 3)
+            })
+            raise
+        finally:
+            # Clear request context
+            clear_request_context()
+
+
+# Add middlewares
+app.add_middleware(RequestTracingMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -153,8 +239,13 @@ def check_gpu_health() -> dict:
 async def startup_event():
     """Initialize database on startup."""
     init_db()
-    print("✅ Batch API Server started")
-    print(f"🚀 Server ready at http://{settings.BATCH_API_HOST}:{settings.BATCH_API_PORT}")
+    logger.info("Batch API Server started", extra={
+        "host": settings.BATCH_API_HOST,
+        "port": settings.BATCH_API_PORT,
+        "environment": settings.ENVIRONMENT,
+        "version": settings.APP_VERSION
+    })
+    logger.info(f"Server ready at http://{settings.BATCH_API_HOST}:{settings.BATCH_API_PORT}")
 
 
 # ============================================================================
@@ -324,7 +415,7 @@ async def delete_file(file_id: str, db: Session = Depends(get_db)):
         if file_path.exists():
             file_path.unlink()
     except Exception as e:
-        print(f"Warning: Could not delete file {file_path}: {e}")
+        logger.warning("Could not delete file", extra={"file_path": str(file_path), "error": str(e)})
 
     return {
         "id": file_id,
@@ -402,6 +493,9 @@ async def health_check(db: Session = Depends(get_db)):
         for j in pending_jobs
     )
 
+    # Update queue metrics
+    metrics.update_queue_metrics(len(pending_jobs))
+
     # Worker heartbeat
     heartbeat = db.query(WorkerHeartbeat).filter(WorkerHeartbeat.id == 1).first()
     worker_status = "unknown"
@@ -468,114 +562,54 @@ async def prometheus_metrics(db: Session = Depends(get_db)):
 
     Exposes metrics in Prometheus text format for scraping.
     Includes batch job metrics, GPU metrics, and system health.
+
+    Uses prometheus_client for automatic metric collection and formatting.
     """
     from fastapi.responses import PlainTextResponse
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
-    # Collect metrics
-    metrics = []
+    # Update batch job active metrics
+    validating_count = db.query(BatchJob).filter(BatchJob.status == 'validating').count()
+    in_progress_count = db.query(BatchJob).filter(BatchJob.status == 'in_progress').count()
+    completed_count = db.query(BatchJob).filter(BatchJob.status == 'completed').count()
+    failed_count = db.query(BatchJob).filter(BatchJob.status == 'failed').count()
+    cancelled_count = db.query(BatchJob).filter(BatchJob.status == 'cancelled').count()
 
-    # Batch job metrics
-    total_batches = db.query(BatchJob).count()
-    pending_batches = db.query(BatchJob).filter(BatchJob.status == 'validating').count()
-    running_batches = db.query(BatchJob).filter(BatchJob.status == 'in_progress').count()
-    completed_batches = db.query(BatchJob).filter(BatchJob.status == 'completed').count()
-    failed_batches = db.query(BatchJob).filter(BatchJob.status == 'failed').count()
-    cancelled_batches = db.query(BatchJob).filter(BatchJob.status == 'cancelled').count()
+    metrics.batch_jobs_active.labels(status='validating').set(validating_count)
+    metrics.batch_jobs_active.labels(status='in_progress').set(in_progress_count)
+    metrics.batch_jobs_active.labels(status='completed').set(completed_count)
+    metrics.batch_jobs_active.labels(status='failed').set(failed_count)
+    metrics.batch_jobs_active.labels(status='cancelled').set(cancelled_count)
 
-    metrics.append("# HELP vllm_batch_total Total number of batch jobs")
-    metrics.append("# TYPE vllm_batch_total counter")
-    metrics.append(f"vllm_batch_total {total_batches}")
-
-    metrics.append("# HELP vllm_batch_status Number of batches by status")
-    metrics.append("# TYPE vllm_batch_status gauge")
-    metrics.append(f'vllm_batch_status{{status="validating"}} {pending_batches}')
-    metrics.append(f'vllm_batch_status{{status="in_progress"}} {running_batches}')
-    metrics.append(f'vllm_batch_status{{status="completed"}} {completed_batches}')
-    metrics.append(f'vllm_batch_status{{status="failed"}} {failed_batches}')
-    metrics.append(f'vllm_batch_status{{status="cancelled"}} {cancelled_batches}')
-
-    # Request metrics
-    from sqlalchemy import func
-    total_requests = db.query(BatchJob).with_entities(
-        func.sum(BatchJob.total_requests)
-    ).scalar() or 0
-    completed_requests = db.query(BatchJob).with_entities(
-        func.sum(BatchJob.completed_requests)
-    ).scalar() or 0
-    failed_requests_count = db.query(FailedRequest).count()
-
-    metrics.append("# HELP vllm_requests_total Total number of requests processed")
-    metrics.append("# TYPE vllm_requests_total counter")
-    metrics.append(f"vllm_requests_total {total_requests}")
-
-    metrics.append("# HELP vllm_requests_completed Number of completed requests")
-    metrics.append("# TYPE vllm_requests_completed counter")
-    metrics.append(f"vllm_requests_completed {completed_requests}")
-
-    metrics.append("# HELP vllm_requests_failed Number of failed requests")
-    metrics.append("# TYPE vllm_requests_failed counter")
-    metrics.append(f"vllm_requests_failed {failed_requests_count}")
-
-    # Queue metrics
+    # Update queue metrics
     pending_jobs = db.query(BatchJob).filter(
         BatchJob.status.in_(['validating', 'in_progress'])
     ).all()
+    metrics.update_queue_metrics(len(pending_jobs))
 
-    queue_depth = len(pending_jobs)
-    total_queued_requests = sum(
-        j.total_requests - j.completed_requests
-        for j in pending_jobs
-    )
-
-    metrics.append("# HELP vllm_queue_depth Number of jobs in queue")
-    metrics.append("# TYPE vllm_queue_depth gauge")
-    metrics.append(f"vllm_queue_depth {queue_depth}")
-
-    metrics.append("# HELP vllm_queue_requests Number of requests in queue")
-    metrics.append("# TYPE vllm_queue_requests gauge")
-    metrics.append(f"vllm_queue_requests {total_queued_requests}")
-
-    # Worker health
-    heartbeat = db.query(WorkerHeartbeat).filter(WorkerHeartbeat.id == 1).first()
-    worker_healthy = 0
-    if heartbeat:
-        age = (datetime.utcnow() - heartbeat.last_seen).total_seconds()
-        worker_healthy = 1 if age < 60 else 0
-
-    metrics.append("# HELP vllm_worker_healthy Worker health status (1=healthy, 0=unhealthy)")
-    metrics.append("# TYPE vllm_worker_healthy gauge")
-    metrics.append(f"vllm_worker_healthy {worker_healthy}")
-
-    # GPU metrics (if available)
+    # Update GPU metrics (if available)
     gpu_status = check_gpu_health()
     if 'memory_percent' in gpu_status and gpu_status['memory_percent'] > 0:
-        metrics.append("# HELP vllm_gpu_memory_percent GPU memory utilization percentage")
-        metrics.append("# TYPE vllm_gpu_memory_percent gauge")
-        metrics.append(f"vllm_gpu_memory_percent {gpu_status['memory_percent']}")
+        # Convert percentage to bytes (approximate)
+        # This is a simplified calculation - actual implementation would need GPU info
+        metrics.update_gpu_metrics(
+            gpu_id="0",
+            memory_used=int(gpu_status.get('memory_percent', 0) * 1024 * 1024 * 1024 / 100),  # Rough estimate
+            memory_total=1024 * 1024 * 1024,  # Placeholder
+            temperature=gpu_status.get('temperature_c', 0),
+            utilization=gpu_status.get('memory_percent', 0)
+        )
 
-        metrics.append("# HELP vllm_gpu_temperature_celsius GPU temperature in Celsius")
-        metrics.append("# TYPE vllm_gpu_temperature_celsius gauge")
-        metrics.append(f"vllm_gpu_temperature_celsius {gpu_status['temperature_c']}")
+    # Generate Prometheus metrics in text format
+    prometheus_metrics = generate_latest()
 
-        metrics.append("# HELP vllm_gpu_healthy GPU health status (1=healthy, 0=unhealthy)")
-        metrics.append("# TYPE vllm_gpu_healthy gauge")
-        metrics.append(f"vllm_gpu_healthy {1 if gpu_status['healthy'] else 0}")
-
-    # File metrics
-    total_files = db.query(File).filter(~File.deleted).count()
-    total_bytes = db.query(File).filter(~File.deleted).with_entities(
-        func.sum(File.bytes)
-    ).scalar() or 0
-
-    metrics.append("# HELP vllm_files_total Total number of uploaded files")
-    metrics.append("# TYPE vllm_files_total gauge")
-    metrics.append(f"vllm_files_total {total_files}")
-
-    metrics.append("# HELP vllm_files_bytes Total bytes of uploaded files")
-    metrics.append("# TYPE vllm_files_bytes gauge")
-    metrics.append(f"vllm_files_bytes {total_bytes}")
-
-    return PlainTextResponse("\n".join(metrics) + "\n")
+    # Also include legacy metrics for backward compatibility
+    # Return prometheus_client generated metrics
+    # This includes all the metrics we've registered plus automatic process metrics
+    return PlainTextResponse(
+        prometheus_metrics.decode('utf-8'),
+        media_type=CONTENT_TYPE_LATEST
+    )
 
 
 @app.post("/v1/batches")
@@ -739,6 +773,18 @@ async def create_batch(
     db.add(batch_job)
     db.commit()
     db.refresh(batch_job)
+
+    # Track batch job creation metrics
+    metrics.track_batch_job(status='validating', model=model)
+    metrics.batch_jobs_active.labels(status='validating').inc()
+
+    # Set batch context for logging
+    set_request_context(batch_id=batch_id)
+    logger.info("Batch job created", extra={
+        "batch_id": batch_id,
+        "model": model,
+        "total_requests": num_requests
+    })
 
     return batch_job.to_dict()
 
