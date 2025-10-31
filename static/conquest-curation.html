@@ -41,8 +41,22 @@
 
             <div class="sidebar-section">
                 <h3>Tasks</h3>
+                <div class="filters">
+                    <input type="text" id="search-box" class="search-box" placeholder="🔍 Search by name, company, role...">
+                    <select id="filter-status" class="filter-select">
+                        <option value="all">All Tasks</option>
+                        <option value="pending">Pending</option>
+                        <option value="completed">Completed</option>
+                        <option value="gold-star">Gold Star</option>
+                    </select>
+                </div>
                 <div class="task-list" id="task-list">
                     <div class="loading">Loading tasks...</div>
+                </div>
+                <div class="pagination" id="pagination" style="display: none;">
+                    <button class="pagination-btn" id="prev-page">← Prev</button>
+                    <span class="pagination-info" id="page-info">Page 1</span>
+                    <button class="pagination-btn" id="next-page">Next →</button>
                 </div>
             </div>
 
@@ -53,6 +67,9 @@
                 </button>
                 <button class="btn btn-secondary" id="refresh-btn">
                     🔄 Refresh
+                </button>
+                <button class="btn btn-gold-star" id="bulk-gold-star-btn" style="display: none;">
+                    ⭐ Gold Star Selected (<span id="selected-count">0</span>)
                 </button>
             </div>
 
@@ -190,6 +207,8 @@
         let currentConquestType = null;
         let tasks = [];
         let currentTaskIndex = -1;
+        let currentPage = 1;
+        const TASKS_PER_PAGE = 50;
 
         // Initialize app
         async function init() {
@@ -254,25 +273,82 @@
         // Render task list in sidebar
         function renderTaskList() {
             const taskList = document.getElementById('task-list');
-            
-            if (tasks.length === 0) {
-                taskList.innerHTML = '<div class="empty-state-small">No tasks available</div>';
+            const filterStatus = document.getElementById('filter-status').value;
+            const searchQuery = document.getElementById('search-box').value.toLowerCase();
+
+            // Filter tasks
+            const filteredTasks = tasks.filter(task => {
+                const isAnnotated = task.annotations && task.annotations.length > 0;
+                const isGoldStar = task.meta?.gold_star === true;
+
+                // Status filter
+                let statusMatch = true;
+                if (filterStatus === 'pending') statusMatch = !isAnnotated;
+                else if (filterStatus === 'completed') statusMatch = isAnnotated;
+                else if (filterStatus === 'gold-star') statusMatch = isGoldStar;
+
+                // Search filter
+                let searchMatch = true;
+                if (searchQuery) {
+                    const name = (task.data.name || '').toLowerCase();
+                    const company = (task.data.company || '').toLowerCase();
+                    const role = (task.data.role || '').toLowerCase();
+                    searchMatch = name.includes(searchQuery) ||
+                                  company.includes(searchQuery) ||
+                                  role.includes(searchQuery);
+                }
+
+                return statusMatch && searchMatch;
+            });
+
+            if (filteredTasks.length === 0) {
+                taskList.innerHTML = '<div class="empty-state-small">No tasks match filter</div>';
+                document.getElementById('pagination').style.display = 'none';
                 return;
             }
-            
-            taskList.innerHTML = tasks.map((task, index) => {
+
+            // Pagination
+            const totalPages = Math.ceil(filteredTasks.length / TASKS_PER_PAGE);
+            const startIndex = (currentPage - 1) * TASKS_PER_PAGE;
+            const endIndex = startIndex + TASKS_PER_PAGE;
+            const paginatedTasks = filteredTasks.slice(startIndex, endIndex);
+
+            // Update pagination controls
+            const pagination = document.getElementById('pagination');
+            const pageInfo = document.getElementById('page-info');
+            const prevBtn = document.getElementById('prev-page');
+            const nextBtn = document.getElementById('next-page');
+
+            if (totalPages > 1) {
+                pagination.style.display = 'flex';
+                pageInfo.textContent = `Page ${currentPage} of ${totalPages} (${filteredTasks.length} tasks)`;
+                prevBtn.disabled = currentPage === 1;
+                nextBtn.disabled = currentPage === totalPages;
+            } else {
+                pagination.style.display = 'none';
+            }
+
+            taskList.innerHTML = paginatedTasks.map((task, index) => {
                 const isAnnotated = task.annotations && task.annotations.length > 0;
                 const statusClass = isAnnotated ? 'completed' : 'pending';
                 const statusIcon = isAnnotated ? '✅' : '⏳';
-                
+                const isGoldStar = task.meta?.gold_star === true;
+                const goldStarIcon = isGoldStar ? '⭐' : '';
+
                 return `
-                    <div class="task-item ${statusClass}" data-index="${index}">
-                        <div class="task-item-header">
-                            <span class="task-item-icon">${statusIcon}</span>
-                            <span class="task-item-title">${task.data.name || `Task ${task.id}`}</span>
+                    <div class="task-item ${statusClass}" data-index="${index}" data-task-id="${task.id}">
+                        <div class="task-item-checkbox">
+                            <input type="checkbox" class="task-checkbox" data-task-id="${task.id}" onclick="event.stopPropagation()">
                         </div>
-                        <div class="task-item-meta">
-                            <span class="task-item-id">#${task.id}</span>
+                        <div class="task-item-content">
+                            <div class="task-item-header">
+                                <span class="task-item-icon">${statusIcon}</span>
+                                <span class="task-item-title">${task.data.name || `Task ${task.id}`}</span>
+                                ${goldStarIcon ? `<span class="task-gold-star">${goldStarIcon}</span>` : ''}
+                            </div>
+                            <div class="task-item-meta">
+                                <span class="task-item-id">#${task.id}</span>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -285,6 +361,25 @@
                     selectTask(index);
                 });
             });
+
+            // Add checkbox handlers
+            document.querySelectorAll('.task-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', updateBulkGoldStarButton);
+            });
+        }
+
+        function updateBulkGoldStarButton() {
+            const selectedCheckboxes = document.querySelectorAll('.task-checkbox:checked');
+            const count = selectedCheckboxes.length;
+            const bulkBtn = document.getElementById('bulk-gold-star-btn');
+            const countSpan = document.getElementById('selected-count');
+
+            if (count > 0) {
+                bulkBtn.style.display = 'block';
+                countSpan.textContent = count;
+            } else {
+                bulkBtn.style.display = 'none';
+            }
         }
 
         // Select and display a task
@@ -318,11 +413,30 @@
         // Event listeners
         function setupEventListeners() {
             document.getElementById('conquest-type-selector').addEventListener('change', onConquestTypeChange);
+            document.getElementById('filter-status').addEventListener('change', () => {
+                currentPage = 1;
+                renderTaskList();
+            });
+            document.getElementById('search-box').addEventListener('input', () => {
+                currentPage = 1;
+                renderTaskList();
+            });
+            document.getElementById('prev-page').addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    renderTaskList();
+                }
+            });
+            document.getElementById('next-page').addEventListener('click', () => {
+                currentPage++;
+                renderTaskList();
+            });
             document.getElementById('refresh-btn').addEventListener('click', refresh);
             document.getElementById('export-btn').addEventListener('click', showExportModal);
             document.getElementById('annotation-form').addEventListener('submit', submitAnnotation);
             document.getElementById('copy-llm-btn').addEventListener('click', copyLLMAnswers);
             document.getElementById('gold-star-btn').addEventListener('click', toggleGoldStar);
+            document.getElementById('bulk-gold-star-btn').addEventListener('click', bulkGoldStar);
 
             // Keyboard shortcuts
             document.addEventListener('keydown', (e) => {
@@ -331,6 +445,49 @@
                     toggleGoldStar();
                 }
             });
+        }
+
+        async function bulkGoldStar() {
+            const selectedCheckboxes = document.querySelectorAll('.task-checkbox:checked');
+            const taskIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.dataset.taskId));
+
+            if (taskIds.length === 0) {
+                showToast('No tasks selected', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/tasks/bulk-gold-star', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({task_ids: taskIds, is_gold_star: true})
+                });
+
+                if (!response.ok) throw new Error('Failed to bulk gold-star');
+
+                const result = await response.json();
+
+                // Update tasks in memory
+                taskIds.forEach(taskId => {
+                    const task = tasks.find(t => t.id === taskId);
+                    if (task) {
+                        task.meta = task.meta || {};
+                        task.meta.gold_star = true;
+                    }
+                });
+
+                // Uncheck all checkboxes
+                selectedCheckboxes.forEach(cb => cb.checked = false);
+                updateBulkGoldStarButton();
+
+                // Re-render task list to show gold stars
+                renderTaskList();
+
+                showToast(`⭐ Marked ${result.updated_count} tasks as gold-star!`, 'success');
+            } catch (error) {
+                console.error('Bulk gold-star error:', error);
+                showToast('Failed to bulk gold-star', 'error');
+            }
         }
 
         async function toggleGoldStar() {

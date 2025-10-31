@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 import json
 import re
-from datetime import datetime
+from datetime import datetime, UTC
 
 from config import settings
 from .label_studio_client import LabelStudioClient
@@ -61,7 +61,7 @@ async def health():
         "status": "healthy",
         "service": "curation-api",
         "version": settings.APP_VERSION,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(UTC).isoformat()
     }
 
 
@@ -87,7 +87,7 @@ async def ready():
             "service": "curation-api",
             "label_studio": "connected",
             "schemas_loaded": len(schema_registry.list_schemas()),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(UTC).isoformat()
         }
     except Exception as e:
         raise HTTPException(
@@ -660,7 +660,7 @@ async def mark_gold_star(task_id: int, request: GoldStarRequest) -> dict[str, An
         # Update metadata
         current_meta = task.get('meta', {})
         current_meta['gold_star'] = request.is_gold_star
-        current_meta['gold_star_updated_at'] = datetime.utcnow().isoformat()
+        current_meta['gold_star_updated_at'] = datetime.now(UTC).isoformat()
 
         # Update task in Label Studio
         updated_task = label_studio.update_task(
@@ -705,7 +705,7 @@ async def bulk_mark_gold_star(request: BulkGoldStarRequest) -> dict[str, Any]:
             # Update metadata
             current_meta = task.get('meta', {})
             current_meta['gold_star'] = request.is_gold_star
-            current_meta['gold_star_updated_at'] = datetime.utcnow().isoformat()
+            current_meta['gold_star_updated_at'] = datetime.now(UTC).isoformat()
 
             # Update task
             label_studio.update_task(task_id=task_id, meta=current_meta)

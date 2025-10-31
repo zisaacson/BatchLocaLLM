@@ -179,9 +179,88 @@ body {
    Task List
    ============================================================================ */
 
+.filters {
+    margin-bottom: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.search-box {
+    width: 100%;
+    padding: var(--spacing-sm);
+    background: var(--bg-tertiary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.search-box:focus {
+    outline: none;
+    border-color: var(--gradient-start);
+}
+
+.search-box::placeholder {
+    color: var(--text-muted);
+}
+
+.filter-select {
+    width: 100%;
+    padding: var(--spacing-sm);
+    background: var(--bg-tertiary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: var(--gradient-start);
+}
+
 .task-list {
     max-height: 400px;
     overflow-y: auto;
+}
+
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md);
+    padding: var(--spacing-sm);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+}
+
+.pagination-btn {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--bg-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: var(--gradient-start);
+    border-color: var(--gradient-start);
+}
+
+.pagination-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.pagination-info {
+    font-size: 0.75rem;
+    color: var(--text-muted);
 }
 
 .task-item {
@@ -192,6 +271,9 @@ body {
     cursor: pointer;
     transition: all 0.2s;
     border: 2px solid transparent;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
 }
 
 .task-item:hover {
@@ -206,6 +288,20 @@ body {
 
 .task-item.completed {
     opacity: 0.7;
+}
+
+.task-item-checkbox {
+    padding-top: 2px;
+}
+
+.task-checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.task-item-content {
+    flex: 1;
 }
 
 .task-item-header {
@@ -223,6 +319,12 @@ body {
     font-weight: 600;
     color: var(--text-primary);
     font-size: 0.875rem;
+    flex: 1;
+}
+
+.task-gold-star {
+    font-size: 0.875rem;
+    margin-left: auto;
 }
 
 .task-item-meta {
