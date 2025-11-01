@@ -9,7 +9,7 @@ import json
 import sys
 
 # Configuration
-LABEL_STUDIO_URL = "http://localhost:4015"
+LABEL_STUDIO_URL = "http://localhost:4115"
 TOKEN_FILE = ".label_studio_token"
 CONFIG_FILE = "label_studio_config.xml"
 DATA_FILE = "label_studio_tasks.json"

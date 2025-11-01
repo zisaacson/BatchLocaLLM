@@ -18,13 +18,14 @@ from openai import OpenAI
 # =============================================================================
 
 # Point to your vLLM Batch Server
-# For local: http://localhost:8000/v1
-# For remote: http://10.0.0.223:8000/v1
-BASE_URL = "http://localhost:8000/v1"
+# For local: http://localhost:4080/v1
+# For remote: http://10.0.0.223:4080/v1
+BASE_URL = "http://localhost:4080/v1"
 API_KEY = "not-needed-for-local"  # vLLM doesn't require auth by default
 
-# Model name (must match what's loaded in vLLM)
-MODEL = "meta-llama/Llama-3.1-8B-Instruct"
+# Model name (must match what's in your model registry)
+# Run: curl http://localhost:4080/v1/models to see available models
+MODEL = "google/gemma-3-4b-it"
 
 # =============================================================================
 # Example Batch Requests

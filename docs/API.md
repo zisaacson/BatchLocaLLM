@@ -5,8 +5,12 @@ Complete API reference for vLLM Batch Server.
 ## Base URL
 
 ```
-http://localhost:8000/v1
+http://localhost:4080/v1
 ```
+
+**Note:** The API server runs on port **4080** (not 8000). For interactive API documentation, visit:
+- Swagger UI: http://localhost:4080/docs
+- ReDoc: http://localhost:4080/redoc
 
 ## Authentication
 

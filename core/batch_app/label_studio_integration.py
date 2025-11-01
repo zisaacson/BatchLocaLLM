@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 class LabelStudioClient:
     """Client for Label Studio API integration."""
 
-    def __init__(self, base_url: str = "http://localhost:4015", api_key: Optional[str] = None):
+    def __init__(self, base_url: str = "http://localhost:4115", api_key: Optional[str] = None):
         """
         Initialize Label Studio client.
 
