@@ -11,10 +11,11 @@ SQLAlchemy 2.0 with full type safety using Mapped[T] pattern.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -118,6 +119,13 @@ class BatchJob(Base):
     throughput_tokens_per_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Progress tracking fields
+    tokens_processed: Mapped[int] = mapped_column(Integer, default=0)
+    current_throughput: Mapped[float] = mapped_column(Float, default=0.0)
+    queue_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_progress_update: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    estimated_completion_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     # Webhook support (custom extension)
     webhook_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     webhook_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -198,7 +206,7 @@ class FailedRequest(Base):
     last_retry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
         """Convert to dictionary for API responses."""
@@ -227,25 +235,99 @@ class WorkerHeartbeat(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
 
     # Worker status
-    status: Mapped[str] = mapped_column(String(32), default='idle')  # idle, processing, error
+    status: Mapped[str] = mapped_column(String(32), default='idle')  # idle, processing, error, testing
     current_job_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # Model tracking (NEW - know what's loaded in GPU)
+    loaded_model: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    model_loaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Worker process tracking (NEW - detect zombies)
+    worker_pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    worker_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # GPU metrics
     gpu_memory_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     gpu_temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Timestamp
-    last_seen: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_seen: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-    def to_dict(self):
+
+class ModelRegistry(Base):
+    """Model registry for tracking available models and their test results.
+
+    SQLAlchemy 2.0 with Mapped[T] for full type safety.
+    """
+
+    __tablename__ = 'model_registry'
+
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Model identification
+    model_id: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)  # HuggingFace ID
+    name: Mapped[str] = mapped_column(String(256), nullable=False)  # Display name
+
+    # Model metadata
+    size_gb: Mapped[float] = mapped_column(Float, nullable=False)
+    estimated_memory_gb: Mapped[float] = mapped_column(Float, nullable=False)
+    max_model_len: Mapped[int] = mapped_column(Integer, default=4096)
+    gpu_memory_utilization: Mapped[float] = mapped_column(Float, default=0.90)
+    cpu_offload_gb: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # GGUF-specific fields
+    local_path: Mapped[str | None] = mapped_column(String(512), nullable=True)  # Path to downloaded GGUF file
+    quantization_type: Mapped[str | None] = mapped_column(String(32), nullable=True)  # Q4_0, Q2_K, FP16, etc.
+
+    # vLLM configuration
+    enable_prefix_caching: Mapped[bool] = mapped_column(Boolean, default=True)
+    chunked_prefill_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Compatibility
+    rtx4080_compatible: Mapped[bool] = mapped_column(Boolean, default=True)
+    requires_hf_auth: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Status tracking
+    status: Mapped[str] = mapped_column(String(32), default='untested')  # untested, downloading, testing, tested, failed
+    download_progress: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0.0 to 1.0
+
+    # Test results (JSON)
+    test_results: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
+    benchmark_results: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
+
+    # Performance metrics
+    throughput_tokens_per_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
+    throughput_requests_per_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    tested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    def to_dict(self) -> dict:
         """Convert to dictionary for API responses."""
         return {
+            'id': self.id,
+            'model_id': self.model_id,
+            'name': self.name,
+            'size_gb': self.size_gb,
+            'estimated_memory_gb': self.estimated_memory_gb,
+            'max_model_len': self.max_model_len,
+            'gpu_memory_utilization': self.gpu_memory_utilization,
+            'enable_prefix_caching': self.enable_prefix_caching,
+            'chunked_prefill_enabled': self.chunked_prefill_enabled,
+            'rtx4080_compatible': self.rtx4080_compatible,
+            'requires_hf_auth': self.requires_hf_auth,
             'status': self.status,
-            'current_job_id': self.current_job_id,
-            'gpu_memory_percent': self.gpu_memory_percent,
-            'gpu_temperature': self.gpu_temperature,
-            'last_seen': self.last_seen.isoformat() if self.last_seen else None,
-            'age_seconds': (datetime.utcnow() - self.last_seen).total_seconds() if self.last_seen else None
+            'download_progress': self.download_progress,
+            'test_results': json.loads(self.test_results) if self.test_results else None,
+            'benchmark_results': json.loads(self.benchmark_results) if self.benchmark_results else None,
+            'throughput_tokens_per_sec': self.throughput_tokens_per_sec,
+            'throughput_requests_per_sec': self.throughput_requests_per_sec,
+            'avg_latency_ms': self.avg_latency_ms,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'tested_at': self.tested_at.isoformat() if self.tested_at else None
         }
 
 
@@ -275,4 +357,73 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+class Dataset(Base):
+    """
+    Uploaded datasets for benchmarking.
+
+    Stores JSONL files with candidate data that can be run through multiple models.
+    """
+    __tablename__ = "datasets"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    file_path: Mapped[str] = mapped_column(String, nullable=False)
+    count: Mapped[int] = mapped_column(Integer, nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class Benchmark(Base):
+    """
+    Benchmark runs - tracks running a model on a dataset.
+
+    Stores progress, metrics, and results for model evaluation runs.
+    """
+    __tablename__ = "benchmarks"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    model_id: Mapped[str] = mapped_column(String, ForeignKey("model_registry.model_id"), nullable=False)
+    dataset_id: Mapped[str] = mapped_column(String, ForeignKey("datasets.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)  # 'running', 'completed', 'failed'
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    completed: Mapped[int] = mapped_column(Integer, default=0)
+    total: Mapped[int] = mapped_column(Integer, nullable=False)
+    throughput: Mapped[float] = mapped_column(Float, default=0.0)
+    eta_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    total_time_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    results_file: Mapped[str | None] = mapped_column(String, nullable=True)
+    metadata_file: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class Annotation(Base):
+    """
+    Annotations for candidate results - golden examples, fixes, flags.
+
+    Integrates with Label Studio for training data curation.
+    """
+    __tablename__ = "annotations"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    dataset_id: Mapped[str] = mapped_column(String, ForeignKey("datasets.id"), nullable=False)
+    candidate_id: Mapped[str] = mapped_column(String, nullable=False)
+    model_id: Mapped[str] = mapped_column(String, ForeignKey("model_registry.model_id"), nullable=False)
+    is_golden: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_fixed: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_wrong: Mapped[bool] = mapped_column(Boolean, default=False)
+    label_studio_task_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
+    )
 

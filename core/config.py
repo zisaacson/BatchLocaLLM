@@ -176,6 +176,13 @@ class Settings(BaseSettings):
     LABEL_STUDIO_HEALTH_TIMEOUT: int = 5  # Timeout for health checks
 
     # ========================================================================
+    # Rate Limiting
+    # ========================================================================
+    ENABLE_RATE_LIMITING: bool = False  # Enable/disable rate limiting globally
+    RATE_LIMIT_BATCHES: str = "10/minute"  # Rate limit for POST /v1/batches
+    RATE_LIMIT_FILES: str = "20/minute"  # Rate limit for POST /v1/files
+
+    # ========================================================================
     # Security
     # ========================================================================
     API_KEY: Optional[str] = None  # If set, require API key for requests
@@ -185,10 +192,10 @@ class Settings(BaseSettings):
     CORS_ALLOW_HEADERS: str = "*"  # CORS allowed headers (comma-separated or "*")
     
     # ========================================================================
-    # External Services (for Aris integration)
+    # External Services (for integrations)
     # ========================================================================
-    ARIS_APP_URL: Optional[str] = None  # e.g., http://10.0.0.223:4000
-    ARIS_WEBHOOK_URL: Optional[str] = None  # e.g., http://10.0.0.223:4000/api/ml/batch/webhook
+    ARIS_APP_URL: Optional[str] = None  # e.g., http://your-app-server:4000
+    ARIS_WEBHOOK_URL: Optional[str] = None  # e.g., http://your-app-server:4000/api/ml/batch/webhook
 
     # ========================================================================
     # Feature Flags

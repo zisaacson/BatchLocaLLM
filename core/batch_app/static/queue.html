@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Queue Monitor - vLLM Batch Server</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .status-online {
+            background: #10b981;
+            color: white;
+        }
+        
+        .status-offline {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e5e7eb;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 15px 0;
+            position: relative;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .stat-box {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .stat-label {
+            color: #6b7280;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            color: #111827;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+        
+        .queue-item {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #9ca3af;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .queue-position {
+            background: #667eea;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        
+        .queue-info {
+            flex: 1;
+            margin-left: 15px;
+        }
+        
+        .queue-meta {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+        
+        .eta-badge {
+            background: #fbbf24;
+            color: #78350f;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .no-jobs {
+            text-align: center;
+            color: #6b7280;
+            padding: 40px;
+            font-size: 1.1em;
+        }
+        
+        .refresh-info {
+            text-align: center;
+            color: white;
+            margin-top: 20px;
+            font-size: 0.9em;
+        }
+        
+        .model-badge {
+            background: #3b82f6;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Queue Monitor</h1>
+        
+        <!-- Worker Status -->
+        <div class="card">
+            <h2>Worker Status</h2>
+            <div id="worker-status">Loading...</div>
+        </div>
+        
+        <!-- Current Job -->
+        <div class="card" id="current-job-card" style="display: none;">
+            <h2>Current Job</h2>
+            <div id="current-job">Loading...</div>
+        </div>
+        
+        <!-- Queue -->
+        <div class="card">
+            <h2>Queue (<span id="queue-count">0</span> jobs)</h2>
+            <div id="queue-list">Loading...</div>
+        </div>
+        
+        <div class="refresh-info">
+            Auto-refreshing every 5 seconds
+        </div>
+    </div>
+    
+    <script>
+        function formatDuration(seconds) {
+            if (!seconds) return 'Unknown';
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            if (hours > 0) {
+                return `${hours}h ${minutes}m`;
+            }
+            return `${minutes}m`;
+        }
+        
+        function formatNumber(num) {
+            if (!num) return '0';
+            return num.toLocaleString();
+        }
+        
+        async function updateQueue() {
+            try {
+                const response = await fetch('/v1/queue');
+                const data = await response.json();
+                
+                // Update worker status
+                const workerHtml = `
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span class="status-badge status-${data.worker.status}">${data.worker.status}</span>
+                        ${data.worker.current_model ? `<span class="model-badge">${data.worker.current_model}</span>` : ''}
+                        ${data.worker.last_seen ? `<span style="color: #6b7280;">Last seen: ${new Date(data.worker.last_seen).toLocaleTimeString()}</span>` : ''}
+                    </div>
+                `;
+                document.getElementById('worker-status').innerHTML = workerHtml;
+                
+                // Update current job
+                if (data.current_job) {
+                    document.getElementById('current-job-card').style.display = 'block';
+                    const job = data.current_job;
+                    const currentJobHtml = `
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <div>
+                                    <strong>Batch ID:</strong> ${job.batch_id}<br>
+                                    <span class="model-badge">${job.model}</span>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-size: 2em; font-weight: bold; color: #667eea;">${job.progress.progress_percent}%</div>
+                                    <div style="color: #6b7280; font-size: 0.9em;">Complete</div>
+                                </div>
+                            </div>
+                            
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${job.progress.progress_percent}%">
+                                    ${job.progress.completed_requests} / ${job.progress.total_requests} requests
+                                </div>
+                            </div>
+                            
+                            <div class="stats-grid">
+                                <div class="stat-box">
+                                    <div class="stat-label">Tokens Processed</div>
+                                    <div class="stat-value">${formatNumber(job.progress.tokens_processed)}</div>
+                                </div>
+                                <div class="stat-box">
+                                    <div class="stat-label">Current Throughput</div>
+                                    <div class="stat-value">${job.throughput.current_tokens_per_sec} tok/s</div>
+                                </div>
+                                <div class="stat-box">
+                                    <div class="stat-label">ETA</div>
+                                    <div class="stat-value">${job.timing.eta_minutes ? formatDuration(job.timing.eta_seconds) : 'Calculating...'}</div>
+                                </div>
+                                <div class="stat-box">
+                                    <div class="stat-label">Last Update</div>
+                                    <div class="stat-value" style="font-size: 1em;">${job.timing.last_update ? new Date(job.timing.last_update).toLocaleTimeString() : 'N/A'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('current-job').innerHTML = currentJobHtml;
+                } else {
+                    document.getElementById('current-job-card').style.display = 'none';
+                }
+                
+                // Update queue
+                document.getElementById('queue-count').textContent = data.queue_length;
+                
+                if (data.queue.length === 0) {
+                    document.getElementById('queue-list').innerHTML = '<div class="no-jobs">No jobs in queue</div>';
+                } else {
+                    const queueHtml = data.queue.map(job => `
+                        <div class="queue-item">
+                            <div class="queue-position">#${job.position}</div>
+                            <div class="queue-info">
+                                <div><strong>${job.batch_id}</strong></div>
+                                <div class="queue-meta">
+                                    <span class="model-badge">${job.model}</span>
+                                    ${job.total_requests} requests
+                                    ${job.total_tokens ? `• ${formatNumber(job.total_tokens)} tokens` : ''}
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="eta-badge">Starts in ${formatDuration(job.starts_in_seconds)}</div>
+                                ${job.estimated_duration_minutes ? `<div class="queue-meta" style="margin-top: 5px;">Duration: ~${formatDuration(job.estimated_duration_seconds)}</div>` : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                    document.getElementById('queue-list').innerHTML = queueHtml;
+                }
+                
+            } catch (error) {
+                console.error('Failed to fetch queue status:', error);
+            }
+        }
+        
+        // Initial load
+        updateQueue();
+        
+        // Auto-refresh every 5 seconds
+        setInterval(updateQueue, 5000);
+    </script>
+</body>
+</html>
+

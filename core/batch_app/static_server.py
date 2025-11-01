@@ -1,8 +1,8 @@
 """
-Static File Server for Aris Integration
+Static File Server for Integration
 
 Serves vLLM batch client and documentation on port 4081
-Aris can fetch the client directly from: http://10.0.0.223:4081/vllm-batch-client.ts
+External applications can fetch the client directly from: http://your-server:4081/vllm-batch-client.ts
 
 Usage:
     python -m batch_app.static_server
@@ -14,10 +14,11 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="vLLM Batch Integration Server")
 
-# Enable CORS so Aris can fetch files
+# Enable CORS so external applications can fetch files
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,6 +30,10 @@ app.add_middleware(
 # Base directory
 BASE_DIR = Path(__file__).parent.parent
 INTEGRATION_DIR = BASE_DIR / "aris-integration"
+STATIC_DIR = BASE_DIR.parent / "static"
+
+# Mount static files (CSS, JS, etc.)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 @app.get("/integration")
 async def integration_page():
@@ -504,10 +509,21 @@ async def serve_doc(filename: str):
 
     return FileResponse(file_path, media_type="text/plain")
 
+
+@app.get("/models")
+async def model_management():
+    """Model management UI"""
+    file_path = Path(__file__).parent.parent.parent / "static" / "model-management.html"
+    if not file_path.exists():
+        return {"error": "Model management UI not found"}
+    return FileResponse(file_path, media_type="text/html")
+
+
 if __name__ == "__main__":
     print("🚀 Starting vLLM Batch Integration Server")
     print("📦 Serving files at: http://10.0.0.223:4081")
     print("📄 Landing page: http://10.0.0.223:4081")
+    print("🤖 Model Management: http://10.0.0.223:4081/models")
     print("📥 Download client: http://10.0.0.223:4081/vllm-batch-client.ts")
     print()
 

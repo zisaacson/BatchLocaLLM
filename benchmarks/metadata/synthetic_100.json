@@ -1,0 +1,13 @@
+{
+  "dataset": "synthetic_100",
+  "description": "Synthetic candidate evaluations for benchmarking (100 requests)",
+  "created_at": "2025-11-01T10:26:59.408916",
+  "total_requests": 100,
+  "models_tested": [
+    "gemma-3-4b",
+    "llama-3.2-3b",
+    "qwen-3-4b"
+  ],
+  "data_type": "synthetic",
+  "note": "This is completely synthetic data generated for demonstration purposes. No real candidate information is included."
+}

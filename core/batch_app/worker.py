@@ -10,26 +10,41 @@ Features:
 
 import json
 import os
+import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
+print("🔄 Worker starting...", flush=True)
+print("📦 Importing dependencies...", flush=True)
+
 import requests
+from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+print("✅ SQLAlchemy imported", flush=True)
+
 from vllm import LLM, SamplingParams
+
+print("✅ vLLM imported", flush=True)
 
 from core.config import settings
 from core.batch_app.logging_config import get_logger, set_request_context, clear_request_context
 from core.batch_app import metrics
-from core.batch_app.sentry_config import init_sentry, set_batch_context, capture_exception
+from core.batch_app.sentry_config import init_sentry, set_batch_context
+
+print("✅ Core modules imported", flush=True)
 
 from .benchmarks import get_benchmark_manager
-from .database import BatchJob, File, SessionLocal, WorkerHeartbeat
+from .database import BatchJob, File, SessionLocal, WorkerHeartbeat, ModelRegistry
 from .webhooks import send_webhook_async
+
+print("✅ All imports complete", flush=True)
 
 # Initialize logger
 logger = get_logger(__name__)
+print("✅ Logger initialized", flush=True)
 
 # Configuration (all from settings)
 CHUNK_SIZE = settings.CHUNK_SIZE
@@ -97,9 +112,10 @@ class BatchWorker:
                 heartbeat = WorkerHeartbeat(id=1)
                 db.add(heartbeat)
 
-            heartbeat.last_seen = datetime.utcnow()
+            heartbeat.last_seen = datetime.now(timezone.utc)
             heartbeat.status = status
             heartbeat.current_job_id = job_id
+            heartbeat.loaded_model = self.current_model  # Track what model is loaded
             heartbeat.gpu_memory_percent = gpu_status.get('memory_percent')
             heartbeat.gpu_temperature = gpu_status.get('temperature_c')
 
@@ -193,7 +209,25 @@ class BatchWorker:
         return saved_count
 
     def load_model(self, model: str, log_file: str | None):
-        """Load vLLM model if not already loaded."""
+        """
+        Load vLLM model if not already loaded.
+
+        Supports:
+        - HuggingFace models (model ID)
+        - Local GGUF models (from ModelRegistry)
+        - CPU offload (from ModelRegistry)
+        - Model-specific configs (from ModelRegistry)
+
+        CRITICAL: Model hot-swapping strategy
+        ======================================
+        When switching models, we MUST:
+        1. Delete the LLM object (releases CUDA context)
+        2. Run gc.collect() (forces Python garbage collection)
+        3. Sleep 3 seconds (gives GPU driver time to free VRAM)
+
+        Without this sequence, GPU memory leaks and causes OOM on next model load.
+        The 3-second sleep is empirically determined - shorter delays cause OOM.
+        """
         if self.current_model == model and self.current_llm is not None:
             self.log(log_file, f"✅ Model {model} already loaded, reusing")
             return
@@ -201,29 +235,93 @@ class BatchWorker:
         self.log(log_file, f"🚀 Loading model: {model}")
 
         try:
-            # Unload previous model if exists
+            # CRITICAL: Unload previous model to prevent OOM
+            # ================================================
+            # vLLM holds GPU memory until explicitly freed. Without this block,
+            # loading a second model will OOM even if the first model would fit.
             if self.current_llm is not None:
-                self.log(log_file, f"Unloading previous model: {self.current_model}")
+                self.log(log_file, f"🔄 Unloading previous model: {self.current_model}")
                 del self.current_llm
                 self.current_llm = None
                 self.current_model = None
-                time.sleep(2)  # Give GPU time to free memory
 
-            # Load new model with conservative GPU memory
+                # Force garbage collection and give GPU time to free memory
+                # The 3-second sleep is REQUIRED - GPU driver needs time to release VRAM
+                import gc
+                gc.collect()
+                time.sleep(3)
+                self.log(log_file, f"✅ Previous model unloaded, GPU memory freed")
+
+            # Try to get model config from registry
+            db = SessionLocal()
+            try:
+                model_config = db.query(ModelRegistry).filter(
+                    ModelRegistry.model_id == model
+                ).first()
+            finally:
+                db.close()
+
+            # Determine model path and config
+            if model_config:
+                self.log(log_file, f"📋 Found model config in registry: {model_config.name}")
+
+                # Use local path if available (GGUF), otherwise HuggingFace ID
+                model_path = model_config.local_path or model_config.model_id
+                max_model_len = model_config.max_model_len
+                gpu_mem_util = model_config.gpu_memory_utilization
+                cpu_offload = model_config.cpu_offload_gb
+                enable_prefix_cache = model_config.enable_prefix_caching
+                enable_chunked = model_config.chunked_prefill_enabled
+
+                self.log(log_file, f"  Model path: {model_path}")
+                self.log(log_file, f"  Max length: {max_model_len}")
+                self.log(log_file, f"  GPU memory: {gpu_mem_util}")
+                self.log(log_file, f"  CPU offload: {cpu_offload} GB")
+
+            else:
+                # Fallback to defaults for models not in registry
+                self.log(log_file, f"⚠️  Model not in registry, using defaults")
+                model_path = model
+                max_model_len = settings.DEFAULT_MAX_MODEL_LEN
+                gpu_mem_util = GPU_MEMORY_UTILIZATION
+                cpu_offload = 0.0
+                enable_prefix_cache = True
+                enable_chunked = True
+
+            # Build vLLM config
+            vllm_config = {
+                "model": model_path,
+                "max_model_len": max_model_len,
+                "gpu_memory_utilization": gpu_mem_util,
+                "disable_log_stats": True,
+                "enable_prefix_caching": enable_prefix_cache,
+                "enable_chunked_prefill": enable_chunked,
+            }
+
+            # Add CPU offload if needed
+            if cpu_offload > 0:
+                vllm_config["cpu_offload_gb"] = cpu_offload
+                self.log(log_file, f"⚠️  CPU offload enabled: {cpu_offload} GB (will be slower)")
+
+            # Load model
             start_time = time.time()
-            self.current_llm = LLM(
-                model=model,
-                max_model_len=settings.DEFAULT_MAX_MODEL_LEN,
-                gpu_memory_utilization=GPU_MEMORY_UTILIZATION,
-                disable_log_stats=True,
-            )
-            load_time = time.time() - start_time
+            self.log(log_file, f"⏳ Loading model with vLLM...")
 
+            self.current_llm = LLM(**vllm_config)
+
+            load_time = time.time() - start_time
             self.current_model = model
             self.log(log_file, f"✅ Model loaded in {load_time:.1f}s")
 
+            # Log GPU status after load
+            gpu_status = check_gpu_health()
+            self.log(log_file, f"📊 GPU Memory: {gpu_status.get('memory_percent', 0):.1f}% used")
+            self.log(log_file, f"🌡️  GPU Temp: {gpu_status.get('temperature_c', 0)}°C")
+
         except Exception as e:
             self.log(log_file, f"❌ Failed to load model: {e}")
+            import traceback
+            self.log(log_file, f"Traceback: {traceback.format_exc()}")
             raise
 
     def process_job(self, job: BatchJob, db: Session):
@@ -311,6 +409,21 @@ class BatchWorker:
             total_completion_tokens = 0
             total_tokens = 0
 
+            # CRITICAL: Chunking Strategy
+            # ============================
+            # Process requests in chunks of 100 to:
+            # 1. Prevent OOM from loading all prompts into GPU at once
+            # 2. Enable incremental saves (lose max 100 requests on crash, not entire batch)
+            # 3. Provide progress updates every ~2-5 minutes
+            #
+            # Why 100?
+            # - Small enough to fit in memory (100 * ~800 tokens = 80K tokens)
+            # - Large enough for vLLM to batch efficiently (vLLM batches within chunk)
+            # - Fast enough for responsive progress updates
+            #
+            # vLLM's internal batching:
+            # - vLLM automatically batches the 100 prompts for parallel processing
+            # - We don't need to batch manually - just pass all 100 at once
             num_chunks = (len(all_requests) + CHUNK_SIZE - 1) // CHUNK_SIZE
             self.log(log_file, f"\n⚡ Processing {len(all_requests)} requests in {num_chunks} chunks")
             self.log(log_file, f"vLLM will handle batching within each {CHUNK_SIZE}-request chunk")
@@ -365,7 +478,13 @@ class BatchWorker:
                     metrics.tokens_generated.labels(model=job.model).inc(chunk_total_tokens)
                     metrics.throughput_tokens_per_second.labels(model=job.model).set(chunk_throughput)
 
-                    # Save chunk results incrementally
+                    # CRITICAL: Incremental Saves
+                    # ============================
+                    # Save results after EVERY chunk (not just at the end) to prevent data loss.
+                    # If worker crashes, we can resume from the last saved chunk.
+                    #
+                    # Without this, a crash at 4,900/5,000 requests loses ALL work.
+                    # With this, we only lose the current chunk (max 100 requests).
                     self.log(log_file, "💾 Saving chunk results...")
                     saved = self.save_chunk_results(
                         outputs,
@@ -375,8 +494,20 @@ class BatchWorker:
                         log_file
                     )
 
-                    # Update job progress
+                    # Update job progress with real-time stats
                     job.completed_requests += saved
+                    job.tokens_processed = total_tokens
+                    job.current_throughput = chunk_throughput
+                    job.last_progress_update = datetime.now(timezone.utc)
+
+                    # Calculate ETA
+                    if chunk_num < num_chunks:
+                        avg_time_per_chunk = total_inference_time / chunk_num
+                        remaining_chunks = num_chunks - chunk_num
+                        est_remaining_seconds = avg_time_per_chunk * remaining_chunks
+                        from datetime import timedelta
+                        job.estimated_completion_time = datetime.now(timezone.utc) + timedelta(seconds=est_remaining_seconds)
+
                     db.commit()
 
                     self.log(log_file, f"✅ Saved {saved} results ({job.completed_requests}/{total_requests} total)")
@@ -599,14 +730,42 @@ class BatchWorker:
 
         # Still write to log file if specified (for backward compatibility)
         if log_file:
-            timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
             log_message = f"[{timestamp}] {message}"
             Path(log_file).parent.mkdir(parents=True, exist_ok=True)
             with open(log_file, 'a') as f:
                 f.write(log_message + '\n')
 
     def run(self):
-        """Main worker loop with heartbeat monitoring."""
+        """
+        Main worker loop with heartbeat monitoring.
+
+        ARCHITECTURE: Separate API + Worker Design
+        ===========================================
+        The worker is a SEPARATE process from the API server. This design:
+
+        1. API Server (api_server.py):
+           - Handles HTTP requests (create batch, check status, download results)
+           - Writes jobs to PostgreSQL queue
+           - Returns immediately (never blocks on inference)
+
+        2. Worker (this file):
+           - Polls PostgreSQL queue every 10 seconds
+           - Processes ONE job at a time (sequential, not parallel)
+           - Automatically switches models when job.model changes
+           - Updates job status in database (API reads this for status checks)
+
+        Why separate processes?
+        - API stays responsive (never blocked by slow inference)
+        - Worker can crash/restart without affecting API
+        - Easy to scale (run multiple workers on different GPUs)
+        - Clean separation of concerns
+
+        Why sequential (not parallel)?
+        - Consumer GPUs (RTX 4080) can only fit ONE model at a time
+        - Loading multiple models causes OOM
+        - Model hot-swapping requires sequential processing
+        """
         logger.info("=" * 80)
         logger.info("BATCH WORKER STARTED", extra={
             "poll_interval_seconds": self.poll_interval,
@@ -623,7 +782,7 @@ class BatchWorker:
                 # Update heartbeat (idle)
                 self.update_heartbeat(db, status='idle')
 
-                # Get next pending job
+                # Get next pending job (FIFO queue)
                 job = self.get_next_pending_job(db)
 
                 if job:
@@ -635,12 +794,13 @@ class BatchWorker:
                     # Update heartbeat (processing)
                     self.update_heartbeat(db, status='processing', job_id=job.batch_id)
 
+                    # Process job (blocks until complete)
                     self.process_job(job, db)
 
                     # Clear request context
                     clear_request_context()
                 else:
-                    # No jobs, wait
+                    # No jobs in queue, sleep and poll again
                     time.sleep(self.poll_interval)
 
                 db.close()
@@ -654,10 +814,32 @@ class BatchWorker:
 
 
 if __name__ == "__main__":
-    # Initialize Sentry error tracking
-    init_sentry()
+    try:
+        # Initialize Sentry error tracking (skip if SENTRY_DSN not set)
+        print("🔄 Initializing Sentry...", flush=True)
+        try:
+            init_sentry()
+            print("✅ Sentry initialized", flush=True)
+        except Exception as e:
+            print(f"⚠️  Sentry init failed (continuing anyway): {e}", flush=True)
 
-    # Start worker
-    worker = BatchWorker(poll_interval=10)
-    worker.run()
+        # Test database connection
+        print("🔄 Testing database connection...", flush=True)
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        print("✅ Database connection OK", flush=True)
+
+        # Start worker
+        print("🔄 Starting batch worker...", flush=True)
+        worker = BatchWorker(poll_interval=10)
+        print("✅ Worker initialized, starting main loop...", flush=True)
+        worker.run()
+    except KeyboardInterrupt:
+        print("\n⚠️  Worker stopped by user", flush=True)
+    except Exception as e:
+        print(f"❌ FATAL ERROR during worker startup: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        raise
 

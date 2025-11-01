@@ -9,14 +9,28 @@ Group=zack
 WorkingDirectory=/home/zack/Documents/augment-projects/Local/vllm-batch-server
 Environment="PATH=/home/zack/Documents/augment-projects/Local/vllm-batch-server/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Environment="PYTHONUNBUFFERED=1"
-ExecStart=/home/zack/Documents/augment-projects/Local/vllm-batch-server/venv/bin/python -m batch_app.worker
-Restart=always
-RestartSec=10
+ExecStart=/home/zack/Documents/augment-projects/Local/vllm-batch-server/venv/bin/python -m core.batch_app.worker
+
+# Restart policy
+Restart=on-failure
+RestartSec=30
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+# Logging
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=aristotle-worker
 
 # Resource limits
 LimitNOFILE=65536
+MemoryMax=24G        # Hard limit - kill if exceeded (prevents OOM)
+MemoryHigh=20G       # Soft limit - throttle if exceeded
+CPUQuota=400%        # Max 4 CPU cores
+
+# Security
+PrivateTmp=true
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target

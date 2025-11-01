@@ -1,121 +1,226 @@
 # =============================================================================
-# Aristotle Inference Endpoint - Supporting Services
+# vLLM Batch Server - All Services (Clean 4xxx Port Layout)
 # =============================================================================
 #
-# ARCHITECTURE:
-# - vLLM Batch API runs NATIVELY (systemd service) for direct GPU access
-# - These services run in Docker (no GPU needed):
-#   * Label Studio (4015) - Data labeling for model improvement
-#   * Grafana (4020) - Monitoring dashboards
-#   * Prometheus (4022) - Metrics collection
-#   * Loki (4021) - Log aggregation
+# PORT LAYOUT:
+# 40xx = vLLM Batch Server Core
+#   4080 - Main API Server (native Python)
+#   4081 - Docs/Config Server (native Python)
 #
-# The vLLM API is managed by systemd:
-#   sudo systemctl start aristotle-batch-api
-#   sudo systemctl status aristotle-batch-api
-#   journalctl -u aristotle-batch-api -f
+# 41xx = Label Studio
+#   4115 - Label Studio
+#   4118 - Label Studio PostgreSQL
+#
+# 42xx = Monitoring
+#   4220 - Grafana
+#   4221 - Loki
+#   4222 - Prometheus
+#   4224 - Node Exporter
+#
+# 43xx = Databases
+#   4332 - Main PostgreSQL (vLLM Batch Server)
+#
+# USAGE:
+#   docker compose -f docker/docker-compose.yml up -d
+#   docker compose -f docker/docker-compose.yml down
+#   docker compose -f docker/docker-compose.yml logs -f
 #
 # =============================================================================
 
 services:
   # ===========================================================================
-  # DATA LABELING (4015-4018)
+  # DATABASES (43xx)
   # ===========================================================================
-  
-  label-studio-db:
-    image: postgres:16
-    container_name: aristotle-label-studio-db
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: vllm-batch-postgres
+    restart: unless-stopped
     ports:
-      - "4018:5432"
+      - "4332:5432"
     environment:
-      - POSTGRES_DB=labelstudio
-      - POSTGRES_USER=labelstudio
-      - POSTGRES_PASSWORD=labelstudio
+      POSTGRES_DB: vllm_batch
+      POSTGRES_USER: vllm_batch_user
+      POSTGRES_PASSWORD: vllm_batch_password_dev
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      POSTGRES_WORK_MEM: 16MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 128MB
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../scripts/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vllm_batch_user -d vllm_batch"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vllm-network
+
+  # ===========================================================================
+  # LABEL STUDIO (41xx)
+  # ===========================================================================
+
+  label-studio-db:
+    image: postgres:16-alpine
+    container_name: vllm-label-studio-db
+    restart: unless-stopped
+    ports:
+      - "4118:5432"
+    environment:
+      POSTGRES_DB: labelstudio
+      POSTGRES_USER: labelstudio
+      POSTGRES_PASSWORD: labelstudio
     volumes:
       - label-studio-db-data:/var/lib/postgresql/data
-    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U labelstudio"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - vllm-network
 
   label-studio:
     image: heartexlabs/label-studio:latest
-    container_name: aristotle-label-studio
+    container_name: vllm-label-studio
+    restart: unless-stopped
     ports:
-      - "4015:8080"
+      - "4115:8080"
     environment:
-      - DJANGO_DB=default
-      - POSTGRE_NAME=labelstudio
-      - POSTGRE_USER=labelstudio
-      - POSTGRE_PASSWORD=labelstudio
-      - POSTGRE_PORT=5432
-      - POSTGRE_HOST=label-studio-db
+      DJANGO_DB: default
+      POSTGRE_NAME: labelstudio
+      POSTGRE_USER: labelstudio
+      POSTGRE_PASSWORD: labelstudio
+      POSTGRE_PORT: 5432
+      POSTGRE_HOST: label-studio-db
     volumes:
       - label-studio-data:/label-studio/data
     depends_on:
       label-studio-db:
         condition: service_healthy
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
+    networks:
+      - vllm-network
 
   # ===========================================================================
-  # MONITORING (4020-4022)
+  # MONITORING (42xx)
   # ===========================================================================
 
   grafana:
     image: grafana/grafana:latest
-    container_name: aristotle-grafana
+    container_name: vllm-grafana
+    restart: unless-stopped
     ports:
-      - "4020:3000"
+      - "4220:3000"
     environment:
-      - GF_SERVER_HTTP_PORT=3000
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      GF_SERVER_HTTP_PORT: 3000
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_SERVER_ROOT_URL: http://localhost:4220
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./monitoring/grafana:/etc/grafana/provisioning
-    restart: unless-stopped
+      - ../monitoring/grafana:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - vllm-network
 
   loki:
     image: grafana/loki:latest
-    container_name: aristotle-loki
-    ports:
-      - "4021:3100"
-    command: ["-config.file=/etc/loki/local-config.yaml"]
-    volumes:
-      - loki-data:/loki
+    container_name: vllm-loki
     restart: unless-stopped
+    ports:
+      - "4221:3100"
+    volumes:
+      - ../monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - vllm-network
 
   prometheus:
     image: prom/prometheus:latest
-    container_name: aristotle-prometheus
+    container_name: vllm-prometheus
+    restart: unless-stopped
     ports:
-      - "4022:9090"
+      - "4222:9090"
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus-data:/prometheus
-    restart: unless-stopped
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - vllm-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: vllm-node-exporter
+    restart: unless-stopped
+    ports:
+      - "4224:9100"
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - vllm-network
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: vllm-promtail
+    restart: unless-stopped
+    volumes:
+      - ../monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+      - ../logs:/var/log/vllm:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - vllm-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  vllm-network:
+    driver: bridge
+    name: vllm-batch-network
+
+# =============================================================================
+# Volumes
+# =============================================================================
 volumes:
+  postgres-data:
+    name: vllm-batch-postgres-data
   label-studio-db-data:
-    name: aristotle-label-studio-db-data
+    name: vllm-label-studio-db-data
   label-studio-data:
-    name: aristotle-label-studio-data
+    name: vllm-label-studio-data
   grafana-data:
-    name: aristotle-grafana-data
+    name: vllm-grafana-data
   loki-data:
-    name: aristotle-loki-data
+    name: vllm-loki-data
   prometheus-data:
-    name: aristotle-prometheus-data
+    name: vllm-prometheus-data

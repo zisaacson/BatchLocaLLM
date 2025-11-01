@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vLLM Batch Server - Configuration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .nav {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .nav a {
+            color: #667eea;
+            text-decoration: none;
+            margin-right: 20px;
+            font-weight: 600;
+        }
+
+        .nav a:hover {
+            text-decoration: underline;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .form-group .description {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .button.secondary {
+            background: #f7f9fc;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .section {
+            border-top: 2px solid #f0f0f0;
+            padding-top: 20px;
+            margin-top: 20px;
+        }
+
+        .section:first-child {
+            border-top: none;
+            padding-top: 0;
+            margin-top: 0;
+        }
+
+        .section h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .current-value {
+            background: #f7f9fc;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            color: #667eea;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ System Configuration</h1>
+            <p>Configure vLLM Batch Server Settings</p>
+        </div>
+
+        <div class="nav">
+            <a href="/">← Back to Hub</a>
+            <a href="/admin">Admin Panel</a>
+            <a href="/queue">Queue Monitor</a>
+        </div>
+
+        <div id="alert" class="alert"></div>
+
+        <div class="card">
+            <h2>📊 Current Configuration</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Changes are applied immediately and persist until server restart. 
+                To make changes permanent, update your .env file.
+            </p>
+
+            <form id="configForm">
+                <!-- Rate Limiting -->
+                <div class="section">
+                    <h3>🚦 Rate Limiting</h3>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="enableRateLimiting" name="ENABLE_RATE_LIMITING">
+                            <span>Enable Rate Limiting</span>
+                        </label>
+                        <div class="description">When disabled, all rate limits are ignored (useful for testing)</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rateLimitBatches">Batch Creation Rate Limit</label>
+                        <div class="description">Format: "N/minute" or "N/hour" (e.g., "10/minute", "100/hour")</div>
+                        <input type="text" id="rateLimitBatches" name="RATE_LIMIT_BATCHES" placeholder="10/minute">
+                        <div class="current-value">Current: <span id="currentRateLimitBatches">Loading...</span></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rateLimitFiles">File Upload Rate Limit</label>
+                        <div class="description">Format: "N/minute" or "N/hour" (e.g., "20/minute", "200/hour")</div>
+                        <input type="text" id="rateLimitFiles" name="RATE_LIMIT_FILES" placeholder="20/minute">
+                        <div class="current-value">Current: <span id="currentRateLimitFiles">Loading...</span></div>
+                    </div>
+                </div>
+
+                <!-- GPU Settings -->
+                <div class="section">
+                    <h3>🎮 GPU Settings</h3>
+                    
+                    <div class="form-group">
+                        <label for="gpuMemoryUtilization">GPU Memory Utilization</label>
+                        <div class="description">Percentage of GPU memory to use (0.0 - 1.0). Higher = more capacity, lower = more stability</div>
+                        <input type="number" id="gpuMemoryUtilization" name="GPU_MEMORY_UTILIZATION" step="0.05" min="0.5" max="0.99" placeholder="0.90">
+                        <div class="current-value">Current: <span id="currentGpuMemoryUtilization">Loading...</span></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="gpuMemoryThreshold">GPU Memory Threshold (%)</label>
+                        <div class="description">Reject new jobs when GPU memory exceeds this percentage</div>
+                        <input type="number" id="gpuMemoryThreshold" name="GPU_MEMORY_THRESHOLD" step="1" min="80" max="99" placeholder="95">
+                        <div class="current-value">Current: <span id="currentGpuMemoryThreshold">Loading...</span>%</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="gpuTempThreshold">GPU Temperature Threshold (°C)</label>
+                        <div class="description">Reject new jobs when GPU temperature exceeds this value</div>
+                        <input type="number" id="gpuTempThreshold" name="GPU_TEMP_THRESHOLD" step="1" min="70" max="95" placeholder="85">
+                        <div class="current-value">Current: <span id="currentGpuTempThreshold">Loading...</span>°C</div>
+                    </div>
+                </div>
+
+                <!-- Worker Settings -->
+                <div class="section">
+                    <h3>⚙️ Worker Settings</h3>
+                    
+                    <div class="form-group">
+                        <label for="chunkSize">Chunk Size</label>
+                        <div class="description">Number of requests to process at once (larger = faster but more memory)</div>
+                        <input type="number" id="chunkSize" name="CHUNK_SIZE" step="100" min="100" max="10000" placeholder="5000">
+                        <div class="current-value">Current: <span id="currentChunkSize">Loading...</span></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="workerPollInterval">Worker Poll Interval (seconds)</label>
+                        <div class="description">How often the worker checks for new jobs</div>
+                        <input type="number" id="workerPollInterval" name="WORKER_POLL_INTERVAL" step="1" min="1" max="60" placeholder="5">
+                        <div class="current-value">Current: <span id="currentWorkerPollInterval">Loading...</span>s</div>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" class="button">💾 Save Configuration</button>
+                    <button type="button" class="button secondary" onclick="loadConfig()">🔄 Reload</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Load current configuration
+        async function loadConfig() {
+            try {
+                const response = await fetch('/admin/config');
+                const config = await response.json();
+                
+                // Rate limiting
+                document.getElementById('enableRateLimiting').checked = config.ENABLE_RATE_LIMITING;
+                document.getElementById('rateLimitBatches').value = config.RATE_LIMIT_BATCHES;
+                document.getElementById('rateLimitFiles').value = config.RATE_LIMIT_FILES;
+                document.getElementById('currentRateLimitBatches').textContent = config.RATE_LIMIT_BATCHES;
+                document.getElementById('currentRateLimitFiles').textContent = config.RATE_LIMIT_FILES;
+                
+                // GPU settings
+                document.getElementById('gpuMemoryUtilization').value = config.GPU_MEMORY_UTILIZATION;
+                document.getElementById('gpuMemoryThreshold').value = config.GPU_MEMORY_THRESHOLD;
+                document.getElementById('gpuTempThreshold').value = config.GPU_TEMP_THRESHOLD;
+                document.getElementById('currentGpuMemoryUtilization').textContent = config.GPU_MEMORY_UTILIZATION;
+                document.getElementById('currentGpuMemoryThreshold').textContent = config.GPU_MEMORY_THRESHOLD;
+                document.getElementById('currentGpuTempThreshold').textContent = config.GPU_TEMP_THRESHOLD;
+                
+                // Worker settings
+                document.getElementById('chunkSize').value = config.CHUNK_SIZE;
+                document.getElementById('workerPollInterval').value = config.WORKER_POLL_INTERVAL;
+                document.getElementById('currentChunkSize').textContent = config.CHUNK_SIZE;
+                document.getElementById('currentWorkerPollInterval').textContent = config.WORKER_POLL_INTERVAL;
+                
+            } catch (error) {
+                showAlert('error', 'Failed to load configuration: ' + error.message);
+            }
+        }
+
+        // Save configuration
+        document.getElementById('configForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const config = {};
+            
+            for (const [key, value] of formData.entries()) {
+                if (key === 'ENABLE_RATE_LIMITING') {
+                    config[key] = document.getElementById('enableRateLimiting').checked;
+                } else if (key.includes('RATE_LIMIT')) {
+                    config[key] = value;
+                } else {
+                    config[key] = parseFloat(value) || value;
+                }
+            }
+            
+            try {
+                const response = await fetch('/admin/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('success', '✅ Configuration saved successfully! Changes are active now.');
+                    loadConfig();  // Reload to show updated values
+                } else {
+                    showAlert('error', '❌ Failed to save: ' + result.detail);
+                }
+            } catch (error) {
+                showAlert('error', '❌ Error saving configuration: ' + error.message);
+            }
+        });
+
+        function showAlert(type, message) {
+            const alert = document.getElementById('alert');
+            alert.className = 'alert ' + type;
+            alert.textContent = message;
+            alert.style.display = 'block';
+            
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
+
+        // Load config on page load
+        loadConfig();
+    </script>
+</body>
+</html>
+

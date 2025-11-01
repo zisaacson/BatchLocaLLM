@@ -7,7 +7,7 @@ Includes retry logic with exponential backoff.
 
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 from sqlalchemy.orm import Session
@@ -58,7 +58,7 @@ def send_webhook(
     for attempt in range(max_retries):
         try:
             batch_job.webhook_attempts = attempt + 1
-            batch_job.webhook_last_attempt = datetime.utcnow()
+            batch_job.webhook_last_attempt = datetime.now(timezone.utc)
 
             response = requests.post(
                 batch_job.webhook_url,

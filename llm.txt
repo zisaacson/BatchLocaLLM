@@ -1,0 +1,343 @@
+# vLLM Batch Server - Complete System Reference (llm.txt)
+
+**Last Updated:** 2025-11-01  
+**Purpose:** Single-file reference for AI coding assistants (Claude, Cursor, Copilot)  
+**Download this file and paste into your AI to get instant context!**
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. SYSTEM OVERVIEW - What this is and why it exists
+2. PORT LAYOUT - All services and their ports (4xxx block)
+3. QUICK START - Get running in 5 minutes
+4. ARCHITECTURE - How everything works together
+5. API REFERENCE - How to use the batch API
+6. TROUBLESHOOTING - Fix common problems
+7. ADMIN TOOLS - Web UIs and management
+8. EMERGENCY PROCEDURES - When things go very wrong
+
+================================================================================
+1. SYSTEM OVERVIEW
+================================================================================
+
+## What is this?
+
+A production-ready OpenAI-compatible batch inference server for local LLMs.
+Runs on consumer GPUs (RTX 4080 16GB) and processes 50,000+ requests per batch.
+
+## Why does this exist?
+
+- ❌ OpenAI Batch API costs add up fast ($$$)
+- ❌ Consumer GPUs run out of memory (OOM crashes)
+- ❌ Processing 50K requests takes days without batching
+- ❌ Comparing multiple models requires manual orchestration
+- ❌ No visibility into progress or failures
+
+This project solves all of that.
+
+## Key Features
+
+- ✅ OpenAI-compatible API (drop-in replacement)
+- ✅ Model hot-swapping (automatic GPU memory management)
+- ✅ Incremental saves (never lose progress)
+- ✅ Real-time monitoring (Grafana + Prometheus + Loki)
+- ✅ Data curation (Label Studio integration)
+- ✅ Runs on RTX 4080 16GB (consumer hardware)
+
+## Tech Stack
+
+- **Backend:** FastAPI + SQLAlchemy + PostgreSQL
+- **Inference:** vLLM 0.11.0 (offline batch mode)
+- **Monitoring:** Grafana + Prometheus + Loki
+- **Labeling:** Label Studio
+- **Deployment:** Docker Compose + Python 3.13
+- **GPU:** NVIDIA RTX 4080 16GB (CUDA 12.x)
+
+================================================================================
+2. PORT LAYOUT - Clean 4xxx Block
+================================================================================
+
+All services run on ports 4000-4399 for easy organization:
+
+```
+40xx = Core Services
+  4080 - Main API Server (batch jobs, health checks)
+  4081 - Docs/Config Server (documentation hub, admin panel)
+
+41xx = Label Studio (Data Labeling)
+  4115 - Label Studio Web UI
+  4118 - Label Studio PostgreSQL Database
+
+42xx = Monitoring Stack
+  4220 - Grafana (dashboards, visualization)
+  4221 - Loki (log aggregation)
+  4222 - Prometheus (metrics collection)
+  4224 - Node Exporter (system metrics)
+
+43xx = Databases
+  4332 - Main PostgreSQL (batch jobs, model registry)
+```
+
+## Quick Access URLs
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| **📖 Documentation Hub** | http://localhost:4081 | **START HERE** |
+| **🎛️ Admin Panel** | http://localhost:4081/admin | Manage system |
+| **⚙️ Configuration** | http://localhost:4081/config | Configure settings |
+| **📊 Queue Monitor** | http://localhost:4081/queue | View batch jobs |
+| **📚 API Docs** | http://localhost:4080/docs | Interactive API docs |
+| **🔌 API Endpoint** | http://localhost:4080 | Submit batch jobs |
+| **❤️ Health Check** | http://localhost:4080/health | Check if running |
+| **📝 Label Studio** | http://localhost:4115 | Data labeling |
+| **📊 Grafana** | http://localhost:4220 | Monitoring dashboards |
+| **📈 Prometheus** | http://localhost:4222 | Metrics |
+
+================================================================================
+3. QUICK START
+================================================================================
+
+## Prerequisites
+
+- NVIDIA GPU with 16GB+ VRAM (RTX 4080, RTX 4090, A100, etc.)
+- CUDA 12.x installed
+- Docker and Docker Compose
+- Python 3.10-3.12 (NOT 3.13 - vLLM incompatible)
+- 50GB+ free disk space
+
+## Installation
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/zisaacson/vllm-batch-server.git
+cd vllm-batch-server
+
+# 2. Create virtual environment
+python3.12 -m venv venv
+source venv/bin/activate
+
+# 3. Install dependencies
+pip install -e core/
+
+# 4. Start Docker services
+cd docker && docker compose up -d && cd ..
+
+# 5. Initialize database
+python scripts/init_postgres_schema.py
+python scripts/migrate_add_model_registry.py
+
+# 6. Start the server
+./scripts/restart_server.sh
+
+# 7. Wait 15 seconds for models to load
+
+# 8. Check status
+./scripts/status_server.sh
+```
+
+## Verify Installation
+
+```bash
+# Check health
+curl http://localhost:4080/health
+
+# List models
+curl http://localhost:4080/v1/models
+
+# Open admin panel
+xdg-open http://localhost:4081/admin
+```
+
+If you see ✅ for API Server and Worker, you're ready!
+
+================================================================================
+4. ARCHITECTURE
+================================================================================
+
+## System Components
+
+```
+CLIENT → API SERVER (4080) → POSTGRESQL (4332) → WORKER → vLLM → GPU
+```
+
+## Data Flow
+
+1. **Client uploads JSONL file** → API Server (POST /v1/files)
+2. **Client creates batch job** → API Server (POST /v1/batches)
+3. **API validates and stores** → PostgreSQL
+4. **Worker polls database** → Finds pending job
+5. **Worker loads model** → vLLM engine (GPU)
+6. **Worker processes batch** → vLLM generates responses
+7. **Worker saves results** → Incrementally to disk + database
+8. **Client retrieves results** → API Server (GET /v1/batches/{id}/results)
+
+## Model Hot-Swapping
+
+The worker automatically manages GPU memory:
+
+1. Check if requested model is already loaded
+2. If different model needed:
+   - Unload current model
+   - Clear GPU memory
+   - Load new model
+3. Process batch
+4. Keep model loaded for next job (if same model)
+
+================================================================================
+5. API REFERENCE
+================================================================================
+
+## 1. Upload Input File
+
+```bash
+curl -X POST http://localhost:4080/v1/files \
+  -F "file=@input.jsonl" \
+  -F "purpose=batch"
+```
+
+## 2. Create Batch Job
+
+```bash
+curl -X POST http://localhost:4080/v1/batches \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_file_id": "file_abc123",
+    "endpoint": "/v1/chat/completions",
+    "completion_window": "24h"
+  }'
+```
+
+## 3. Check Batch Status
+
+```bash
+curl http://localhost:4080/v1/batches/batch_xyz789
+```
+
+## 4. Get Results
+
+```bash
+curl http://localhost:4080/v1/batches/batch_xyz789/results
+```
+
+## Input File Format
+
+JSONL file with one request per line:
+
+```jsonl
+{"custom_id": "req-1", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "google/gemma-3-4b-it", "messages": [{"role": "user", "content": "Hello!"}]}}
+```
+
+## Available Models
+
+- `google/gemma-3-4b-it` (Gemma 3 4B)
+- `meta-llama/Llama-3.2-1B-Instruct`
+- `meta-llama/Llama-3.2-3B-Instruct`
+- `Qwen/Qwen3-4B-Instruct-2507`
+- `allenai/OLMo-2-1124-7B-Instruct`
+- `ibm-granite/granite-3.1-3b-a800m-instruct`
+
+================================================================================
+6. TROUBLESHOOTING
+================================================================================
+
+## "CUDA out of memory"
+
+```bash
+./scripts/restart_server.sh
+```
+
+Or use admin panel: http://localhost:4081/admin → "🧹 Clear GPU Memory"
+
+## "Worker not processing jobs"
+
+```bash
+tail -50 logs/worker.log
+```
+
+Restart: http://localhost:4081/admin → "🔄 Restart Worker"
+
+## "Database connection refused"
+
+```bash
+docker ps | grep postgres
+cd docker && docker compose restart vllm-batch-postgres
+```
+
+## "Model not found"
+
+```bash
+python scripts/migrate_add_model_registry.py
+```
+
+## "Rate limited (429)"
+
+http://localhost:4081/config → Uncheck "Enable Rate Limiting" → Save
+
+================================================================================
+7. ADMIN TOOLS
+================================================================================
+
+## Documentation Hub
+**URL:** http://localhost:4081  
+Central hub with real-time status and all tools
+
+## Admin Panel
+**URL:** http://localhost:4081/admin  
+Restart worker, clear GPU, view metrics
+
+## Configuration Panel
+**URL:** http://localhost:4081/config  
+Configure rate limiting, GPU settings, worker parameters
+
+## Grafana Dashboards
+**URL:** http://localhost:4220 (admin/admin)  
+GPU metrics, batch job metrics, system metrics
+
+## Label Studio
+**URL:** http://localhost:4115  
+Data curation and labeling
+
+================================================================================
+8. EMERGENCY PROCEDURES
+================================================================================
+
+## Nuclear Option: Kill Everything
+
+```bash
+pkill -9 -f "python -m uvicorn core.batch_app.api_server"
+pkill -9 -f "python -m core.batch_app.worker"
+nvidia-smi --gpu-reset
+cd docker && docker compose down && docker compose up -d
+sleep 10
+./scripts/restart_server.sh
+```
+
+## Check for Zombie Processes
+
+```bash
+nvidia-smi
+ps aux | grep -E "python.*vllm|python.*worker|python.*api_server"
+kill -9 <PID>
+```
+
+## Logs Location
+
+```
+logs/
+├── api_server.log    # API server logs
+├── worker.log        # Worker logs
+└── batch_*.log       # Individual batch job logs
+```
+
+================================================================================
+SUPPORT
+================================================================================
+
+- **GitHub:** https://github.com/zisaacson/vllm-batch-server
+- **Issues:** https://github.com/zisaacson/vllm-batch-server/issues
+- **Docs:** http://localhost:4081 (when running)
+
+================================================================================
+END OF llm.txt - Paste this into your AI coding assistant for instant context!
+================================================================================

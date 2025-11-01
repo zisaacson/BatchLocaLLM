@@ -7,7 +7,7 @@ name = "vllm-batch-server"
 version = "1.0.0"
 description = "OpenAI-compatible batch processing server powered by vLLM with integrated data curation system"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 authors = [
     {name = "vLLM Batch Server Contributors"}
@@ -24,11 +24,13 @@ keywords = [
     "label-studio"
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
@@ -46,6 +48,7 @@ dependencies = [
     "python-json-logger>=3.2.0",
     "prometheus-client>=0.21.0",
     "sentry-sdk[fastapi]>=2.0.0",  # Error tracking and monitoring
+    "slowapi>=0.1.9",  # Rate limiting
 ]
 
 [project.optional-dependencies]
@@ -75,12 +78,12 @@ Issues = "https://github.com/zisaacson/vllm-batch-server/issues"
 
 [tool.black]
 line-length = 100
-target-version = ["py313"]
+target-version = ["py310", "py311", "py312"]
 include = '\.pyi?$'
 
 [tool.ruff]
 line-length = 100
-target-version = "py313"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = [
@@ -102,7 +105,7 @@ ignore = [
 "__init__.py" = ["F401"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.10"
 warn_return_any = false  # Too noisy with SQLAlchemy and external APIs
 warn_unused_configs = true
 disallow_untyped_defs = false  # Allow gradual typing - enforce where it matters
@@ -158,10 +161,11 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "--cov=batch_app",
-    "--cov=curation_app",
+    "--cov=result_handlers",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
+    # "--cov-fail-under=80",  # TODO: Enable after adding unit tests
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -171,8 +175,8 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["batch_app", "curation_app"]
-omit = ["tests/*", "**/__pycache__/*"]
+source = ["batch_app", "result_handlers"]
+omit = ["tests/*", "**/__pycache__/*", "*/migrations/*"]
 
 [tool.coverage.report]
 exclude_lines = [

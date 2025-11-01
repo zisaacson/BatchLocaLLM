@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dataset Workbench - vLLM Batch Server</title>
+    <link rel="stylesheet" href="/static/css/shared.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .workbench {
+            display: grid;
+            grid-template-columns: 250px 1fr 300px;
+            grid-template-rows: 60px 1fr;
+            height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            grid-column: 1 / -1;
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Left Sidebar - Datasets */
+        .sidebar-left {
+            background: white;
+            border-right: 1px solid #e2e8f0;
+            overflow-y: auto;
+        }
+
+        .sidebar-section {
+            padding: 20px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .sidebar-section h3 {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #718096;
+            margin-bottom: 12px;
+        }
+
+        .dataset-item {
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 6px;
+            transition: all 0.2s;
+        }
+
+        .dataset-item:hover {
+            background: #f7fafc;
+        }
+
+        .dataset-item.active {
+            background: #edf2f7;
+            border-left: 3px solid #667eea;
+        }
+
+        .dataset-name {
+            font-weight: 500;
+            font-size: 14px;
+            color: #2d3748;
+        }
+
+        .dataset-meta {
+            font-size: 11px;
+            color: #718096;
+            margin-top: 4px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: white;
+            border: 1px solid #e2e8f0;
+            color: #4a5568;
+        }
+
+        /* Center - Results Grid */
+        .main-content {
+            background: #f5f7fa;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .dataset-header {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .dataset-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 15px;
+        }
+
+        .model-selector {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        .model-chip {
+            padding: 8px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: white;
+        }
+
+        .model-chip:hover {
+            border-color: #cbd5e0;
+        }
+
+        .model-chip.selected {
+            border-color: #667eea;
+            background: #edf2f7;
+            font-weight: 500;
+        }
+
+        .model-chip.running {
+            border-color: #f6ad55;
+            background: #fffaf0;
+        }
+
+        .model-chip.completed {
+            border-color: #48bb78;
+            background: #f0fff4;
+        }
+
+        .action-bar {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Results Cards */
+        .results-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .result-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .candidate-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .candidate-info h4 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .candidate-info p {
+            font-size: 13px;
+            color: #718096;
+            margin-top: 4px;
+        }
+
+        .candidate-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            padding: 6px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: #f7fafc;
+            border-color: #cbd5e0;
+        }
+
+        .icon-btn.golden {
+            color: #f6ad55;
+        }
+
+        .icon-btn.golden.active {
+            background: #fffaf0;
+            border-color: #f6ad55;
+        }
+
+        /* Model Comparison Grid */
+        .model-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .model-result {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 15px;
+            background: #f7fafc;
+        }
+
+        .model-result.highlight {
+            border-color: #f6ad55;
+            background: #fffaf0;
+        }
+
+        .model-result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .model-name {
+            font-weight: 600;
+            font-size: 13px;
+            color: #4a5568;
+        }
+
+        .model-status {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+
+        .status-completed {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-running {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+
+        .evaluation-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .eval-field {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+        }
+
+        .eval-label {
+            color: #718096;
+        }
+
+        .eval-value {
+            font-weight: 500;
+            color: #2d3748;
+        }
+
+        /* Right Sidebar - Stats & Actions */
+        .sidebar-right {
+            background: white;
+            border-left: 1px solid #e2e8f0;
+            overflow-y: auto;
+        }
+
+        .stats-section {
+            padding: 20px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 13px;
+        }
+
+        .stat-label {
+            color: #718096;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .progress-item {
+            padding: 12px;
+            background: #f7fafc;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+
+        .progress-meta {
+            font-size: 11px;
+            color: #718096;
+            margin-top: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="workbench">
+        <!-- Header -->
+        <div class="header">
+            <h1>🔬 Dataset Workbench</h1>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="uploadDataset()">📁 Upload Dataset</button>
+                <button class="btn btn-primary" onclick="showAddModelDialog()">➕ Add Model from HuggingFace</button>
+            </div>
+        </div>
+
+        <!-- Add Model Dialog (hidden by default) -->
+        <div id="add-model-dialog" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; padding: 40px;">
+            <div style="max-width: 800px; margin: 0 auto; background: white; border-radius: 8px; padding: 30px; max-height: 90vh; overflow-y: auto;">
+                <h2>➕ Add Model from HuggingFace</h2>
+                <p style="color: #666; margin-bottom: 20px;">
+                    Copy/paste the entire HuggingFace model page (including vLLM commands) and we'll automatically extract everything needed!
+                </p>
+
+                <textarea id="hf-content" placeholder="Paste HuggingFace model page content here...
+
+Example:
+vllm serve &quot;google/gemma-3-12b-it-qat-q4_0-gguf&quot;
+hf auth login
+pip install vllm
+..." style="width: 100%; height: 300px; padding: 15px; border: 2px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 14px;"></textarea>
+
+                <div id="parse-result" style="margin-top: 20px; display: none;">
+                    <h3>📋 Parsed Model Configuration</h3>
+                    <div id="parse-result-content" style="background: #f5f5f5; padding: 15px; border-radius: 4px; margin-top: 10px;"></div>
+                </div>
+
+                <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+                    <button class="btn btn-secondary" onclick="closeAddModelDialog()">Cancel</button>
+                    <button class="btn btn-secondary" onclick="parseHuggingFaceContent()">🔍 Parse Content</button>
+                    <button id="add-model-btn" class="btn btn-primary" onclick="addParsedModel()" style="display: none;">✅ Add Model</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Left Sidebar: Datasets -->
+        <div class="sidebar-left">
+            <div class="sidebar-section">
+                <h3>📁 Datasets</h3>
+                <div id="dataset-list">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content: Results -->
+        <div class="main-content">
+            <div class="dataset-header">
+                <div class="dataset-title" id="dataset-title">Select a dataset</div>
+                
+                <div class="model-selector" id="model-selector">
+                    <!-- Populated by JS -->
+                </div>
+                
+                <div class="action-bar">
+                    <button class="btn btn-primary" id="run-models" disabled>▶️ Run Selected Models</button>
+                    <button class="btn btn-secondary" id="export-golden" disabled>⭐ Export Golden Dataset</button>
+                </div>
+            </div>
+
+            <div class="results-container" id="results-container">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- Right Sidebar: Stats & Progress -->
+        <div class="sidebar-right">
+            <div class="stats-section">
+                <h3>📊 Stats</h3>
+                <div class="stat-item">
+                    <span class="stat-label">Total</span>
+                    <span class="stat-value" id="stat-total">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Completed</span>
+                    <span class="stat-value" id="stat-completed">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Golden ⭐</span>
+                    <span class="stat-value" id="stat-golden">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Fixed ✏️</span>
+                    <span class="stat-value" id="stat-fixed">0</span>
+                </div>
+            </div>
+
+            <div class="stats-section">
+                <h3>⚙️ Active Jobs</h3>
+                <div id="active-jobs">
+                    <p style="color: #718096; font-size: 13px;">No active jobs</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/workbench.js"></script>
+</body>
+</html>
+

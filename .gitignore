@@ -90,7 +90,57 @@ dmypy.json
 .ruff_cache/
 
 batch_50k.jsonl
+batch_5k*.jsonl
+test_*.jsonl
+
+# Benchmark raw data (contains real candidate data)
+benchmarks/raw/*.jsonl
+
+# Results with real data
+results/**/*.jsonl
+results/**/*.log
 
 # Aris-specific integrations (private)
 integrations/aris/
 !integrations/examples/
+docs/integrations/aris/
+
+# Lock files (LibreOffice, etc.)
+**/.~lock.*#
+
+# Worker PID files
+*.pid
+
+# ============================================================================
+# SENSITIVE DATA - NEVER COMMIT
+# ============================================================================
+
+# Real candidate/user data (NEVER COMMIT)
+**/real_*.jsonl
+**/production_*.jsonl
+**/candidate_*.jsonl
+**/user_*.jsonl
+
+# Coverage reports (can be large)
+coverage.xml
+.coverage
+htmlcov/
+
+# Benchmark metadata that might contain sensitive info
+benchmarks/metadata/*-real-*.json
+benchmarks/metadata/*-production-*.json
+
+# Any file with "private" or "secret" in name
+**/*private*
+**/*secret*
+**/*confidential*
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS-specific
+.DS_Store
+Thumbs.db
+desktop.ini

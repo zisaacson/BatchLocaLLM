@@ -3,7 +3,7 @@ Benchmark data integration for job estimation and tracking.
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -70,7 +70,7 @@ class BenchmarkManager:
         estimated_seconds += int(model_load_time)
 
         # Calculate estimated completion time
-        estimated_completion = datetime.utcnow() + timedelta(seconds=estimated_seconds)
+        estimated_completion = datetime.now(timezone.utc) + timedelta(seconds=estimated_seconds)
 
         return {
             'estimated_seconds': estimated_seconds,
@@ -143,7 +143,7 @@ class BenchmarkManager:
         # Create benchmark metadata
         benchmark = {
             "test_id": f"batch-job-{job_data['batch_id']}",
-            "timestamp": datetime.utcnow().isoformat() + 'Z',
+            "timestamp": datetime.now(timezone.utc).isoformat() + 'Z',
             "platform": "vllm-native",
             "model": job_data['model'],
             "config": {
@@ -171,7 +171,7 @@ class BenchmarkManager:
         }
 
         # Save to file
-        filename = f"batch-job-{job_data['model'].replace('/', '-')}-{job_data['total_requests']}-{datetime.utcnow().strftime('%Y-%m-%d')}.json"
+        filename = f"batch-job-{job_data['model'].replace('/', '-')}-{job_data['total_requests']}-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.json"
         filepath = output_path / filename
 
         with open(filepath, 'w') as f:

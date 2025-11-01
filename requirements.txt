@@ -1,0 +1,41 @@
+# vLLM Batch Server - Production Dependencies
+# Python 3.10+
+
+# Core vLLM inference engine
+vllm==0.11.0
+
+# Web framework and API
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+aiofiles>=24.1.0
+
+# Data validation
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+
+# HTTP client
+httpx>=0.28.0
+
+# Database
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+aiosqlite>=0.20.0
+
+# Logging and monitoring
+python-json-logger>=3.2.0
+prometheus-client>=0.21.0
+sentry-sdk[fastapi]>=2.0.0
+
+# Rate limiting
+slowapi>=0.1.9
+
+# GPU monitoring (optional)
+pynvml>=11.5.0
+
+# For installation from pyproject.toml:
+# pip install -e .
+#
+# For development dependencies:
+# pip install -r requirements-dev.txt
+

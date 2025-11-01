@@ -111,12 +111,12 @@ class ResultHandlerRegistry:
     def register(self, handler: ResultHandler) -> None:
         """
         Register a result handler.
-        
+
         Args:
             handler: Handler instance to register
         """
         self.handlers.append(handler)
-        logger.info(f"Registered result handler: {handler.name()}")
+        logger.info(f"Registered result handler: {handler.name}")
     
     def process_results(
         self,
@@ -136,26 +136,26 @@ class ResultHandlerRegistry:
             Dictionary mapping handler names to success status
         """
         handler_results = {}
-        
+
         for handler in self.handlers:
-            if not handler.enabled():
-                logger.debug(f"Handler {handler.name()} is disabled, skipping")
+            if not handler.enabled(metadata):
+                logger.debug(f"Handler {handler.name} is disabled, skipping")
                 continue
-            
+
             try:
-                logger.info(f"Running handler: {handler.name()}")
+                logger.info(f"Running handler: {handler.name}")
                 success = handler.handle(batch_id, results, metadata)
-                handler_results[handler.name()] = success
-                
+                handler_results[handler.name] = success
+
                 if success:
-                    logger.info(f"✅ Handler {handler.name()} completed successfully")
+                    logger.info(f"✅ Handler {handler.name} completed successfully")
                 else:
-                    logger.warning(f"⚠️  Handler {handler.name()} returned False")
+                    logger.warning(f"⚠️  Handler {handler.name} returned False")
                     
             except Exception as e:
-                logger.error(f"❌ Handler {handler.name()} failed: {e}")
+                logger.error(f"❌ Handler {handler.name} failed: {e}")
                 handler.on_error(e)
-                handler_results[handler.name()] = False
+                handler_results[handler.name] = False
         
         return handler_results
 

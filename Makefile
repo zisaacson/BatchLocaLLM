@@ -1,64 +1,101 @@
-.PHONY: help install test lint format clean run-api run-worker run-curation docker-up docker-down
+.PHONY: help install install-dev test test-unit test-integration lint format clean run-api run-worker run-all docker-up docker-down pre-commit docs
 
 help:
 	@echo "vLLM Batch Server - Available Commands"
 	@echo ""
 	@echo "Setup:"
-	@echo "  make install        Install dependencies"
+	@echo "  make install          Install production dependencies"
+	@echo "  make install-dev      Install development dependencies"
 	@echo ""
 	@echo "Development:"
-	@echo "  make test           Run test suite"
-	@echo "  make lint           Run linters (ruff, mypy)"
-	@echo "  make format         Format code (black, ruff)"
-	@echo "  make clean          Clean temporary files"
+	@echo "  make test             Run all tests"
+	@echo "  make test-unit        Run unit tests only"
+	@echo "  make test-integration Run integration tests only"
+	@echo "  make lint             Run linters (ruff, mypy)"
+	@echo "  make format           Format code (black, isort, ruff)"
+	@echo "  make pre-commit       Run pre-commit hooks"
+	@echo "  make clean            Clean temporary files"
 	@echo ""
 	@echo "Run Services:"
-	@echo "  make run-api        Start batch API server (port 4080)"
-	@echo "  make run-worker     Start batch worker"
-	@echo "  make run-curation   Start curation UI (port 8001)"
+	@echo "  make run-api          Start batch API server (port 4080)"
+	@echo "  make run-worker       Start batch worker"
+	@echo "  make run-all          Start all services"
 	@echo ""
 	@echo "Docker:"
-	@echo "  make docker-up      Start all services with docker-compose"
-	@echo "  make docker-down    Stop all services"
+	@echo "  make docker-up        Start PostgreSQL with docker-compose"
+	@echo "  make docker-down      Stop all docker services"
+	@echo ""
+	@echo "Documentation:"
+	@echo "  make docs             Build documentation"
 
 install:
 	python -m pip install --upgrade pip
-	python -m pip install -e ".[dev]"
+	pip install -r requirements.txt
+
+install-dev:
+	python -m pip install --upgrade pip
+	pip install -r requirements.txt
+	pip install -r requirements-dev.txt
+	pre-commit install
 
 test:
-	pytest tests/ -v --cov=batch_app --cov=curation_app --cov-report=html --cov-report=term
+	pytest tests/ -v --cov=core --cov-report=html --cov-report=term --cov-report=xml
+
+test-unit:
+	pytest tests/unit/ -v --cov=core --cov-report=term
+
+test-integration:
+	pytest tests/integration/ -v --maxfail=3
 
 lint:
-	ruff check batch_app curation_app tests
-	mypy batch_app curation_app
+	@echo "Running ruff..."
+	ruff check core/ tools/ integrations/examples/
+	@echo "Running mypy..."
+	mypy core/ --ignore-missing-imports
 
 format:
-	black batch_app curation_app tests tools
-	ruff check --fix batch_app curation_app tests
+	@echo "Running black..."
+	black core/ tools/ integrations/examples/
+	@echo "Running isort..."
+	isort core/ tools/ integrations/examples/
+	@echo "Running ruff --fix..."
+	ruff check --fix core/ tools/ integrations/examples/
+
+pre-commit:
+	pre-commit run --all-files
 
 clean:
+	@echo "Cleaning temporary files..."
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
 	rm -rf htmlcov/ .coverage coverage.xml
+	rm -rf build/ dist/ *.egg-info
 
 run-api:
 	@echo "Starting vLLM Batch API on http://localhost:4080"
-	uvicorn batch_app.api_server:app --host 0.0.0.0 --port 4080 --reload
+	python -m core.batch_app.api_server
 
 run-worker:
 	@echo "Starting Batch Worker..."
-	python -m batch_app.worker
+	python -m core.batch_app.worker
 
-run-curation:
-	@echo "Starting Curation UI on http://localhost:8001"
-	uvicorn curation_app.api:app --host 0.0.0.0 --port 8001 --reload
+run-all:
+	@echo "Starting all services..."
+	./scripts/start_all.sh
 
 docker-up:
-	docker-compose -f docker/docker-compose.yml up -d
+	@echo "Starting PostgreSQL..."
+	docker compose -f docker-compose.postgres.yml up -d
 
 docker-down:
-	docker-compose -f docker/docker-compose.yml down
+	@echo "Stopping all docker services..."
+	docker compose -f docker-compose.postgres.yml down
+	docker compose -f docker-compose.monitoring.yml down 2>/dev/null || true
+
+docs:
+	@echo "Building documentation..."
+	mkdocs build
 

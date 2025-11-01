@@ -47,7 +47,7 @@ def init_sentry() -> None:
     if not settings.SENTRY_DSN:
         logger.info("Sentry DSN not configured - error tracking disabled")
         return
-    
+
     try:
         # Configure logging integration
         # Capture ERROR and above, but don't send breadcrumbs for every log
@@ -55,13 +55,13 @@ def init_sentry() -> None:
             level=logging.INFO,  # Capture info and above as breadcrumbs
             event_level=logging.ERROR  # Send errors and above as events
         )
-        
+
         # Initialize Sentry
         sentry_sdk.init(
             dsn=settings.SENTRY_DSN,
             environment=settings.ENVIRONMENT,
             release=f"{settings.APP_NAME}@{settings.APP_VERSION}",
-            
+
             # Integrations
             integrations=[
                 FastApiIntegration(
@@ -71,20 +71,20 @@ def init_sentry() -> None:
                 SqlalchemyIntegration(),
                 sentry_logging,
             ],
-            
+
             # Performance Monitoring
             traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
             profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
-            
+
             # Additional options
             send_default_pii=False,  # Don't send personally identifiable information
             attach_stacktrace=True,  # Include stack traces in messages
             max_breadcrumbs=50,  # Keep last 50 breadcrumbs
-            
+
             # Custom tags
             before_send=before_send_filter,
         )
-        
+
         logger.info(
             "Sentry initialized",
             extra={
@@ -93,7 +93,7 @@ def init_sentry() -> None:
                 "profiles_sample_rate": settings.SENTRY_PROFILES_SAMPLE_RATE
             }
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to initialize Sentry: {e}", exc_info=True)
 
@@ -118,29 +118,29 @@ def before_send_filter(event: dict, hint: dict) -> Optional[dict]:
     # Add custom tags
     event.setdefault("tags", {})
     event["tags"]["service"] = "vllm-batch-server"
-    
+
     # Filter out specific errors we don't care about
     if "exc_info" in hint:
         exc_type, exc_value, tb = hint["exc_info"]
-        
+
         # Don't send client disconnection errors
         if exc_type.__name__ in ["ClientDisconnect", "ConnectionResetError"]:
             return None
-        
+
         # Don't send 404 errors (not really errors)
         if "404" in str(exc_value):
             return None
-    
+
     # Add request context if available
     if "request" in event:
         request = event["request"]
-        
+
         # Add custom headers to context
         if "headers" in request:
             headers = request["headers"]
             if "X-Request-ID" in headers:
                 event["tags"]["request_id"] = headers["X-Request-ID"]
-    
+
     return event
 
 
@@ -170,16 +170,16 @@ def capture_exception(
     """
     if not settings.SENTRY_DSN:
         return
-    
+
     with sentry_sdk.push_scope() as scope:
         # Set level
         scope.level = level
-        
+
         # Add context
         if context:
             for key, value in context.items():
                 scope.set_context(key, value)
-        
+
         # Capture exception
         sentry_sdk.capture_exception(error)
 
@@ -212,16 +212,16 @@ def capture_message(
     """
     if not settings.SENTRY_DSN:
         return
-    
+
     with sentry_sdk.push_scope() as scope:
         # Set level
         scope.level = level
-        
+
         # Add context
         if context:
             for key, value in context.items():
                 scope.set_context(key, value)
-        
+
         # Capture message
         sentry_sdk.capture_message(message)
 
@@ -241,7 +241,7 @@ def set_user_context(user_id: str, email: Optional[str] = None) -> None:
     """
     if not settings.SENTRY_DSN:
         return
-    
+
     sentry_sdk.set_user({
         "id": user_id,
         "email": email
@@ -268,7 +268,7 @@ def set_batch_context(batch_id: str, model: str, requests: int) -> None:
     """
     if not settings.SENTRY_DSN:
         return
-    
+
     sentry_sdk.set_context("batch", {
         "batch_id": batch_id,
         "model": model,
@@ -285,7 +285,7 @@ def clear_context() -> None:
     """
     if not settings.SENTRY_DSN:
         return
-    
+
     sentry_sdk.set_user(None)
     sentry_sdk.set_context("batch", None)
 

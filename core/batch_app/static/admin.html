@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vLLM Batch Server - Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .status-indicator.running {
+            background: #10b981;
+            box-shadow: 0 0 10px #10b981;
+        }
+        
+        .status-indicator.stopped {
+            background: #ef4444;
+        }
+        
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .stat:last-child {
+            border-bottom: none;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .stat-value {
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn-danger {
+            background: #ef4444;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+        
+        .btn-warning {
+            background: #f59e0b;
+        }
+        
+        .btn-warning:hover {
+            background: #d97706;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+        
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+        
+        .alert-warning {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #f59e0b;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛠️ vLLM Batch Server - Admin Panel</h1>
+            <p class="subtitle">System management and monitoring</p>
+        </div>
+        
+        <div class="grid">
+            <!-- Processes Card -->
+            <div class="card">
+                <h2>
+                    <span class="status-indicator" id="process-status"></span>
+                    Processes
+                </h2>
+                <div class="stat">
+                    <span class="stat-label">API Server</span>
+                    <span class="stat-value" id="api-status">Loading...</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Worker</span>
+                    <span class="stat-value" id="worker-status">Loading...</span>
+                </div>
+                <button class="btn btn-warning" onclick="restartWorker()">🔄 Restart Worker</button>
+                <button class="btn btn-danger" onclick="clearGPUMemory()">🧹 Clear GPU Memory</button>
+                <div id="process-alert" class="hidden"></div>
+            </div>
+            
+            <!-- GPU Card -->
+            <div class="card">
+                <h2>🎮 GPU Status</h2>
+                <div class="stat">
+                    <span class="stat-label">Memory Used</span>
+                    <span class="stat-value" id="gpu-memory">Loading...</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="gpu-memory-bar" style="width: 0%"></div>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Temperature</span>
+                    <span class="stat-value" id="gpu-temp">Loading...</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Utilization</span>
+                    <span class="stat-value" id="gpu-util">Loading...</span>
+                </div>
+            </div>
+            
+            <!-- Queue Card -->
+            <div class="card">
+                <h2>📋 Job Queue</h2>
+                <div class="stat">
+                    <span class="stat-label">Jobs in Queue</span>
+                    <span class="stat-value" id="queue-length">Loading...</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Active Job</span>
+                    <span class="stat-value" id="active-job">None</span>
+                </div>
+                <button class="btn" onclick="window.location.href='/queue-monitor.html'">📊 View Queue Monitor</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>📝 Quick Actions</h2>
+            <div class="grid">
+                <button class="btn" onclick="window.location.href='/'">🏠 API Home</button>
+                <button class="btn" onclick="window.location.href='/queue-monitor.html'">📊 Queue Monitor</button>
+                <button class="btn" onclick="window.location.href='/docs'">📚 API Docs</button>
+                <button class="btn" onclick="refreshStatus()">🔄 Refresh Status</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        async function fetchStatus() {
+            try {
+                const response = await fetch('/admin/system/status');
+                const data = await response.json();
+                
+                // Update process status
+                const apiRunning = data.processes.api_server?.running || false;
+                const workerRunning = data.processes.worker?.running || false;
+                
+                document.getElementById('api-status').textContent = apiRunning ? '✅ Running' : '❌ Stopped';
+                document.getElementById('worker-status').textContent = workerRunning ? '✅ Running' : '❌ Stopped';
+                
+                const processIndicator = document.getElementById('process-status');
+                if (apiRunning && workerRunning) {
+                    processIndicator.className = 'status-indicator running';
+                } else {
+                    processIndicator.className = 'status-indicator stopped';
+                }
+                
+                // Update GPU status
+                if (data.gpu && !data.gpu.error) {
+                    const memPercent = data.gpu.memory_percent.toFixed(1);
+                    document.getElementById('gpu-memory').textContent = 
+                        `${data.gpu.memory_used_mb}MB / ${data.gpu.memory_total_mb}MB (${memPercent}%)`;
+                    document.getElementById('gpu-memory-bar').style.width = memPercent + '%';
+                    document.getElementById('gpu-temp').textContent = `${data.gpu.temperature_c}°C`;
+                    document.getElementById('gpu-util').textContent = `${data.gpu.utilization_percent}%`;
+                } else {
+                    document.getElementById('gpu-memory').textContent = 'N/A';
+                    document.getElementById('gpu-temp').textContent = 'N/A';
+                    document.getElementById('gpu-util').textContent = 'N/A';
+                }
+                
+            } catch (error) {
+                console.error('Error fetching status:', error);
+            }
+            
+            // Fetch queue status
+            try {
+                const response = await fetch('/v1/queue');
+                const data = await response.json();
+                
+                document.getElementById('queue-length').textContent = data.queue_length || 0;
+                
+                const activeJob = data.queue?.find(j => j.status === 'processing');
+                if (activeJob) {
+                    document.getElementById('active-job').textContent = activeJob.batch_id;
+                } else {
+                    document.getElementById('active-job').textContent = 'None';
+                }
+            } catch (error) {
+                console.error('Error fetching queue:', error);
+            }
+        }
+        
+        async function restartWorker() {
+            if (!confirm('Restart the worker process? This will interrupt any running jobs.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/admin/system/restart-worker', { method: 'POST' });
+                const data = await response.json();
+                
+                showAlert('process-alert', data.message, 'success');
+                setTimeout(fetchStatus, 3000);
+            } catch (error) {
+                showAlert('process-alert', 'Error restarting worker: ' + error.message, 'error');
+            }
+        }
+        
+        async function clearGPUMemory() {
+            if (!confirm('Clear GPU memory? This will kill the worker and restart it.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/admin/system/clear-gpu-memory', { method: 'POST' });
+                const data = await response.json();
+                
+                showAlert('process-alert', data.message + ' ' + (data.note || ''), 'success');
+                setTimeout(fetchStatus, 15000);
+            } catch (error) {
+                showAlert('process-alert', 'Error clearing GPU memory: ' + error.message, 'error');
+            }
+        }
+        
+        function showAlert(elementId, message, type) {
+            const alert = document.getElementById(elementId);
+            alert.textContent = message;
+            alert.className = `alert alert-${type}`;
+            alert.classList.remove('hidden');
+            
+            setTimeout(() => {
+                alert.classList.add('hidden');
+            }, 5000);
+        }
+        
+        function refreshStatus() {
+            fetchStatus();
+        }
+        
+        // Initial fetch
+        fetchStatus();
+        
+        // Auto-refresh every 5 seconds
+        setInterval(fetchStatus, 5000);
+    </script>
+</body>
+</html>
+
