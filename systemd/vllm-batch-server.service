@@ -1,0 +1,48 @@
+[Unit]
+Description=vLLM Batch Server - OpenAI-compatible batch inference server
+Documentation=https://github.com/zisaacson/vllm-batch-server
+After=network.target docker.service
+Requires=docker.service
+Wants=vllm-batch-postgres.service
+
+[Service]
+Type=forking
+User=zack
+Group=zack
+WorkingDirectory=/home/zack/Documents/augment-projects/Local/vllm-batch-server
+
+# Environment
+Environment="PATH=/home/zack/Documents/augment-projects/Local/vllm-batch-server/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/home/zack/Documents/augment-projects/Local/vllm-batch-server/.env
+
+# Wait for PostgreSQL to be ready
+ExecStartPre=/bin/sleep 5
+ExecStartPre=/home/zack/Documents/augment-projects/Local/vllm-batch-server/scripts/wait_for_postgres.sh
+
+# Check GPU memory
+ExecStartPre=/home/zack/Documents/augment-projects/Local/vllm-batch-server/scripts/check_gpu_memory.sh
+
+# Start the server
+ExecStart=/home/zack/Documents/augment-projects/Local/vllm-batch-server/scripts/restart_server.sh
+
+# Stop the server
+ExecStop=/home/zack/Documents/augment-projects/Local/vllm-batch-server/scripts/stop_server.sh
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+StartLimitInterval=200
+StartLimitBurst=5
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vllm-batch-server
+
+[Install]
+WantedBy=multi-user.target
+

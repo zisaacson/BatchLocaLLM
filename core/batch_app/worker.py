@@ -303,20 +303,59 @@ class BatchWorker:
                 vllm_config["cpu_offload_gb"] = cpu_offload
                 self.log(log_file, f"⚠️  CPU offload enabled: {cpu_offload} GB (will be slower)")
 
-            # Load model
+            # Load model with retry logic for GPU memory issues
             start_time = time.time()
             self.log(log_file, f"⏳ Loading model with vLLM...")
 
-            self.current_llm = LLM(**vllm_config)
+            max_retries = 3
+            retry_delay = 10  # seconds
+            last_error = None
 
-            load_time = time.time() - start_time
-            self.current_model = model
-            self.log(log_file, f"✅ Model loaded in {load_time:.1f}s")
+            for attempt in range(1, max_retries + 1):
+                try:
+                    self.current_llm = LLM(**vllm_config)
 
-            # Log GPU status after load
-            gpu_status = check_gpu_health()
-            self.log(log_file, f"📊 GPU Memory: {gpu_status.get('memory_percent', 0):.1f}% used")
-            self.log(log_file, f"🌡️  GPU Temp: {gpu_status.get('temperature_c', 0)}°C")
+                    load_time = time.time() - start_time
+                    self.current_model = model
+                    self.log(log_file, f"✅ Model loaded in {load_time:.1f}s (attempt {attempt}/{max_retries})")
+
+                    # Log GPU status after load
+                    gpu_status = check_gpu_health()
+                    self.log(log_file, f"📊 GPU Memory: {gpu_status.get('memory_percent', 0):.1f}% used")
+                    self.log(log_file, f"🌡️  GPU Temp: {gpu_status.get('temperature_c', 0)}°C")
+
+                    # Success! Break out of retry loop
+                    break
+
+                except ValueError as e:
+                    last_error = e
+                    error_msg = str(e)
+
+                    # Check if it's a GPU memory error
+                    if "Free memory on device" in error_msg or "not enough memory" in error_msg.lower():
+                        if attempt < max_retries:
+                            self.log(log_file, f"⚠️  GPU memory error on attempt {attempt}/{max_retries}: {error_msg}")
+                            self.log(log_file, f"🔄 Waiting {retry_delay}s before retry...")
+
+                            # Force garbage collection
+                            import gc
+                            gc.collect()
+                            time.sleep(retry_delay)
+
+                            # Check GPU status
+                            gpu_status = check_gpu_health()
+                            self.log(log_file, f"📊 GPU Memory before retry: {gpu_status.get('memory_percent', 0):.1f}% used")
+                        else:
+                            self.log(log_file, f"❌ GPU memory error persists after {max_retries} attempts")
+                            raise
+                    else:
+                        # Not a memory error, don't retry
+                        raise
+
+                except Exception as e:
+                    # Other errors, don't retry
+                    last_error = e
+                    raise
 
         except Exception as e:
             self.log(log_file, f"❌ Failed to load model: {e}")

@@ -34,14 +34,35 @@ fi
 echo "   ✅ All processes stopped"
 echo ""
 
-# Check GPU memory
-echo "2️⃣ Checking GPU status..."
-if command -v nvidia-smi &> /dev/null; then
-    GPU_MEM=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits)
-    GPU_TOTAL=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits)
-    echo "   GPU Memory: ${GPU_MEM}MB / ${GPU_TOTAL}MB"
+# Wait for PostgreSQL to be ready
+echo "2️⃣ Waiting for PostgreSQL..."
+if [ -f "$SCRIPT_DIR/wait_for_postgres.sh" ]; then
+    if ! "$SCRIPT_DIR/wait_for_postgres.sh"; then
+        echo "❌ PostgreSQL is not ready! Aborting."
+        exit 1
+    fi
 else
-    echo "   ⚠️  nvidia-smi not found, skipping GPU check"
+    echo "   ⚠️  wait_for_postgres.sh not found, skipping health check"
+    sleep 2
+fi
+echo ""
+
+# Check and clear GPU memory if needed
+echo "3️⃣ Checking GPU memory..."
+if [ -f "$SCRIPT_DIR/check_gpu_memory.sh" ]; then
+    if ! "$SCRIPT_DIR/check_gpu_memory.sh"; then
+        echo "❌ GPU memory check failed! Aborting."
+        exit 1
+    fi
+else
+    echo "   ⚠️  check_gpu_memory.sh not found, using basic check"
+    if command -v nvidia-smi &> /dev/null; then
+        GPU_MEM=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits)
+        GPU_TOTAL=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits)
+        echo "   GPU Memory: ${GPU_MEM}MB / ${GPU_TOTAL}MB"
+    else
+        echo "   ⚠️  nvidia-smi not found, skipping GPU check"
+    fi
 fi
 echo ""
 
@@ -49,7 +70,7 @@ echo ""
 mkdir -p logs
 
 # Start API server on port 4080
-echo "3️⃣ Starting API server (port 4080)..."
+echo "4️⃣ Starting API server (port 4080)..."
 source venv/bin/activate
 nohup python -m uvicorn core.batch_app.api_server:app --host 0.0.0.0 --port 4080 > logs/api_server.log 2>&1 &
 API_PID=$!
@@ -74,7 +95,7 @@ sleep 2
 echo ""
 
 # Start worker
-echo "4️⃣ Starting worker..."
+echo "5️⃣ Starting worker..."
 nohup python -m core.batch_app.worker > logs/worker.log 2>&1 &
 WORKER_PID=$!
 echo "   Started worker (PID: $WORKER_PID)"
