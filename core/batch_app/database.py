@@ -23,8 +23,9 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    ForeignKey,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship
 
 from core.config import settings
 
@@ -136,6 +137,10 @@ class BatchJob(Base):
     webhook_attempts: Mapped[int] = mapped_column(Integer, default=0)
     webhook_last_attempt: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     webhook_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    webhook_secret: Mapped[str | None] = mapped_column(String(128), nullable=True)  # Per-webhook HMAC secret
+    webhook_max_retries: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Custom retry count
+    webhook_timeout: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Custom timeout in seconds
+    webhook_events: Mapped[str | None] = mapped_column(String(256), nullable=True)  # Comma-separated: completed,failed,progress
 
     def to_dict(self):
         """Convert to OpenAI Batch API format."""
@@ -430,4 +435,27 @@ class Annotation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
     )
+
+
+class WebhookDeadLetter(Base):
+    """
+    Dead Letter Queue for failed webhook deliveries.
+
+    Tracks webhooks that failed after all retry attempts.
+    Allows manual inspection and retry.
+    """
+    __tablename__ = "webhook_dead_letter"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    batch_id: Mapped[str] = mapped_column(String, ForeignKey("batch_jobs.batch_id"), nullable=False)
+    webhook_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)  # JSON payload
+    error_message: Mapped[str] = mapped_column(Text, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_attempt_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    retried_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    retry_success: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 

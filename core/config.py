@@ -132,6 +132,7 @@ class Settings(BaseSettings):
     WEBHOOK_TIMEOUT: int = 30  # Request timeout in seconds
     WEBHOOK_MAX_RETRIES: int = 3
     WEBHOOK_RETRY_DELAY: int = 5  # Seconds between retries
+    WEBHOOK_SECRET: str | None = None  # Secret key for HMAC-SHA256 signatures (set in .env for security)
     
     # ========================================================================
     # vLLM Engine

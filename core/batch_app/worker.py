@@ -124,6 +124,25 @@ class BatchWorker:
             # Don't fail the worker if heartbeat update fails
             logger.warning("Heartbeat update failed", exc_info=True, extra={"error": str(e)})
 
+    def _should_send_webhook(self, job: BatchJob, event: str) -> bool:
+        """
+        Check if webhook should be sent for this event.
+
+        Args:
+            job: Batch job
+            event: Event type (completed, failed, progress)
+
+        Returns:
+            True if webhook should be sent, False otherwise
+        """
+        if not job.webhook_events:
+            # No filter configured - send all events
+            return True
+
+        # Parse comma-separated events
+        subscribed_events = [e.strip() for e in job.webhook_events.split(",")]
+        return event in subscribed_events
+
     def get_next_pending_job(self, db: Session) -> BatchJob | None:
         """
         Get the next pending job from the queue (OpenAI status: validating).
@@ -646,7 +665,7 @@ class BatchWorker:
             self.auto_import_to_curation(job, db, log_file)
 
             # Send webhook notification (async, non-blocking)
-            if job.webhook_url:
+            if job.webhook_url and self._should_send_webhook(job, "completed"):
                 self.log(log_file, f"📡 Sending webhook to {job.webhook_url}...")
                 send_webhook_async(job.batch_id, job.webhook_url)
 
@@ -671,7 +690,7 @@ class BatchWorker:
             self.log(log_file, traceback.format_exc())
 
             # Send webhook notification for failure (async, non-blocking)
-            if job.webhook_url:
+            if job.webhook_url and self._should_send_webhook(job, "failed"):
                 self.log(log_file, f"📡 Sending failure webhook to {job.webhook_url}...")
                 send_webhook_async(job.batch_id, job.webhook_url)
 

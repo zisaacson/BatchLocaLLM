@@ -33,7 +33,7 @@ from core.batch_app import metrics
 from core.batch_app.sentry_config import init_sentry
 
 from .benchmarks import get_benchmark_manager
-from .database import BatchJob, FailedRequest, File, WorkerHeartbeat, ModelRegistry, get_db, init_db, SessionLocal
+from .database import BatchJob, FailedRequest, File, WorkerHeartbeat, ModelRegistry, WebhookDeadLetter, get_db, init_db, SessionLocal
 from models.registry import get_model_registry
 from .model_manager import (
     AddModelRequest,
@@ -168,18 +168,29 @@ MAX_TOTAL_QUEUED_REQUESTS = settings.MAX_TOTAL_QUEUED_REQUESTS
 # PYDANTIC MODELS (OpenAI API Compatible)
 # ============================================================================
 
+class WebhookConfig(BaseModel):
+    """Webhook configuration for batch job notifications."""
+    url: str = Field(..., description="Webhook URL to receive notifications")
+    secret: str | None = Field(None, description="HMAC secret for signature verification")
+    max_retries: int | None = Field(None, description="Max retry attempts (default: 3)", ge=1, le=10)
+    timeout: int | None = Field(None, description="Request timeout in seconds (default: 30)", ge=5, le=300)
+    events: list[str] | None = Field(None, description="Events to subscribe to: completed, failed, progress")
+
+
 class CreateBatchRequest(BaseModel):
     """
     OpenAI-compatible batch creation request.
 
-    Extended with priority field:
+    Extended with priority field and webhook configuration:
     - priority: -1 (low/testing), 0 (normal/default), 1 (high/production)
+    - webhook: Optional webhook configuration for notifications
     """
     input_file_id: str = Field(..., description="ID of uploaded input file")
     endpoint: str = Field("/v1/chat/completions", description="API endpoint")
     completion_window: str = Field("24h", description="Completion window")
     metadata: dict[str, str] | None = Field(None, description="Custom metadata")
     priority: int = Field(0, description="Job priority: -1 (low), 0 (normal), 1 (high)", ge=-1, le=1)
+    webhook: WebhookConfig | None = Field(None, description="Webhook configuration for notifications")
 
 
 class CancelBatchRequest(BaseModel):
@@ -1098,11 +1109,15 @@ async def create_batch(
         throughput_tokens_per_sec=None,
         total_tokens=None,
         priority=batch_request.priority,  # Priority queue support
-        webhook_url=None,
+        webhook_url=batch_request.webhook.url if batch_request.webhook else None,
         webhook_status=None,
         webhook_attempts=0,
         webhook_last_attempt=None,
-        webhook_error=None
+        webhook_error=None,
+        webhook_secret=batch_request.webhook.secret if batch_request.webhook else None,
+        webhook_max_retries=batch_request.webhook.max_retries if batch_request.webhook else None,
+        webhook_timeout=batch_request.webhook.timeout if batch_request.webhook else None,
+        webhook_events=",".join(batch_request.webhook.events) if batch_request.webhook and batch_request.webhook.events else None
     )
 
     db.add(batch_job)
@@ -2506,6 +2521,120 @@ async def model_install_websocket(websocket: WebSocket, model_id: str):
             await websocket.close()
         except:
             pass
+
+
+# ============================================================================
+# Webhook Dead Letter Queue Endpoints
+# ============================================================================
+
+@app.get("/v1/webhooks/dead-letter")
+async def list_failed_webhooks(
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """
+    List failed webhook deliveries from the dead letter queue.
+
+    Returns webhooks that failed after all retry attempts.
+    """
+    failed_webhooks = db.query(WebhookDeadLetter).order_by(
+        WebhookDeadLetter.created_at.desc()
+    ).limit(limit).offset(offset).all()
+
+    total = db.query(WebhookDeadLetter).count()
+
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": wh.id,
+                "batch_id": wh.batch_id,
+                "webhook_url": wh.webhook_url,
+                "error_message": wh.error_message,
+                "attempts": wh.attempts,
+                "last_attempt_at": wh.last_attempt_at.isoformat() if wh.last_attempt_at else None,
+                "created_at": wh.created_at.isoformat() if wh.created_at else None,
+                "retried_at": wh.retried_at.isoformat() if wh.retried_at else None,
+                "retry_success": wh.retry_success
+            }
+            for wh in failed_webhooks
+        ],
+        "has_more": (offset + limit) < total,
+        "total": total
+    }
+
+
+@app.post("/v1/webhooks/dead-letter/{dead_letter_id}/retry")
+async def retry_failed_webhook(
+    dead_letter_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Retry a failed webhook delivery from the dead letter queue.
+
+    Attempts to resend the webhook with the original payload.
+    """
+    from .webhooks import send_webhook
+
+    # Get dead letter entry
+    dead_letter = db.query(WebhookDeadLetter).filter(
+        WebhookDeadLetter.id == dead_letter_id
+    ).first()
+
+    if not dead_letter:
+        raise HTTPException(status_code=404, detail="Dead letter entry not found")
+
+    # Get batch job
+    batch_job = db.query(BatchJob).filter(
+        BatchJob.batch_id == dead_letter.batch_id
+    ).first()
+
+    if not batch_job:
+        raise HTTPException(status_code=404, detail="Batch job not found")
+
+    # Reset webhook status for retry
+    batch_job.webhook_status = None
+    batch_job.webhook_attempts = 0
+    batch_job.webhook_error = None
+
+    # Attempt to send webhook
+    success = send_webhook(batch_job, db)
+
+    # Update dead letter entry
+    dead_letter.retried_at = datetime.now(timezone.utc)
+    dead_letter.retry_success = success
+    db.commit()
+
+    return {
+        "id": dead_letter_id,
+        "batch_id": dead_letter.batch_id,
+        "retry_success": success,
+        "retried_at": dead_letter.retried_at.isoformat()
+    }
+
+
+@app.delete("/v1/webhooks/dead-letter/{dead_letter_id}")
+async def delete_failed_webhook(
+    dead_letter_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a failed webhook entry from the dead letter queue.
+
+    Use this after manually resolving the issue or if the webhook is no longer needed.
+    """
+    dead_letter = db.query(WebhookDeadLetter).filter(
+        WebhookDeadLetter.id == dead_letter_id
+    ).first()
+
+    if not dead_letter:
+        raise HTTPException(status_code=404, detail="Dead letter entry not found")
+
+    db.delete(dead_letter)
+    db.commit()
+
+    return {"deleted": True, "id": dead_letter_id}
 
 
 if __name__ == "__main__":

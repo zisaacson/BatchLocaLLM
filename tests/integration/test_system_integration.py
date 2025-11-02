@@ -592,8 +592,53 @@ class TestWebhooks:
         assert hasattr(BatchJob, 'webhook_attempts')
         assert hasattr(BatchJob, 'webhook_last_attempt')
         assert hasattr(BatchJob, 'webhook_error')
+        assert hasattr(BatchJob, 'webhook_secret')
+        assert hasattr(BatchJob, 'webhook_max_retries')
+        assert hasattr(BatchJob, 'webhook_timeout')
+        assert hasattr(BatchJob, 'webhook_events')
 
         print("✅ Webhook fields exist in BatchJob model")
+
+    def test_webhook_signature_generation(self):
+        """Test HMAC-SHA256 signature generation for webhooks."""
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+        from core.batch_app.webhooks import generate_webhook_signature, verify_webhook_signature
+
+        payload = {
+            "id": "batch_test123",
+            "object": "batch",
+            "status": "completed"
+        }
+        secret = "test_secret_key_12345"
+
+        # Generate signature
+        signature = generate_webhook_signature(payload, secret)
+        assert signature, "Signature should not be empty"
+        assert len(signature) == 64, "SHA256 hex signature should be 64 chars"
+
+        # Verify signature
+        signature_header = f"sha256={signature}"
+        assert verify_webhook_signature(payload, signature_header, secret), "Signature verification should pass"
+
+        # Verify wrong signature fails
+        wrong_signature = f"sha256={'0' * 64}"
+        assert not verify_webhook_signature(payload, wrong_signature, secret), "Wrong signature should fail"
+
+        print("✅ Webhook signature generation and verification works")
+
+    def test_webhook_dead_letter_queue_endpoints(self):
+        """Test dead letter queue endpoints for failed webhooks."""
+        # List failed webhooks (should be empty initially)
+        response = requests.get(f"{API_BASE}/v1/webhooks/dead-letter")
+        assert response.status_code == 200
+        data = response.json()
+        assert "data" in data
+        assert "total" in data
+        assert isinstance(data["data"], list)
+
+        print(f"✅ Dead letter queue endpoints accessible (total: {data['total']})")
 
 
 class TestLabelStudioIntegration:
