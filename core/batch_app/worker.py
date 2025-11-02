@@ -125,10 +125,22 @@ class BatchWorker:
             logger.warning("Heartbeat update failed", exc_info=True, extra={"error": str(e)})
 
     def get_next_pending_job(self, db: Session) -> BatchJob | None:
-        """Get the next pending job from the queue (OpenAI status: validating)."""
+        """
+        Get the next pending job from the queue (OpenAI status: validating).
+
+        Jobs are processed in priority order:
+        1. High priority (priority=1) - Production jobs
+        2. Normal priority (priority=0) - Standard jobs
+        3. Low priority (priority=-1) - Testing/benchmarking
+
+        Within each priority level, jobs are processed FIFO (created_at).
+        """
         return db.query(BatchJob).filter(
             BatchJob.status == 'validating'
-        ).order_by(BatchJob.created_at).first()
+        ).order_by(
+            BatchJob.priority.desc(),  # High priority first
+            BatchJob.created_at        # Then FIFO
+        ).first()
 
     def count_completed_results(self, output_file: str) -> int:
         """Count how many results have already been saved (for resume capability)."""

@@ -12,7 +12,7 @@ import json
 import os
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
@@ -169,11 +169,17 @@ MAX_TOTAL_QUEUED_REQUESTS = settings.MAX_TOTAL_QUEUED_REQUESTS
 # ============================================================================
 
 class CreateBatchRequest(BaseModel):
-    """OpenAI-compatible batch creation request."""
+    """
+    OpenAI-compatible batch creation request.
+
+    Extended with priority field:
+    - priority: -1 (low/testing), 0 (normal/default), 1 (high/production)
+    """
     input_file_id: str = Field(..., description="ID of uploaded input file")
     endpoint: str = Field("/v1/chat/completions", description="API endpoint")
     completion_window: str = Field("24h", description="Completion window")
     metadata: dict[str, str] | None = Field(None, description="Custom metadata")
+    priority: int = Field(0, description="Job priority: -1 (low), 0 (normal), 1 (high)", ge=-1, le=1)
 
 
 class CancelBatchRequest(BaseModel):
@@ -903,6 +909,9 @@ async def create_batch(
     """
     Create a batch job (OpenAI Batch API compatible).
 
+    The API accepts jobs up to MAX_QUEUE_DEPTH (20 jobs). The worker processes
+    jobs sequentially (one at a time) to prevent OOM on single-GPU systems.
+
     Args:
         request: FastAPI Request object (for rate limiting)
         batch_request: Batch creation request with input_file_id, endpoint, completion_window, metadata
@@ -913,8 +922,8 @@ async def create_batch(
     Raises:
         HTTPException 400: Invalid request
         HTTPException 404: Input file not found
-        HTTPException 429: Queue full or rate limit exceeded
-        HTTPException 503: GPU unhealthy
+        HTTPException 429: Queue full (20+ jobs queued)
+        HTTPException 503: Worker offline or GPU unhealthy
     """
     # Check GPU health before accepting job
     gpu_status = check_gpu_health()
@@ -924,7 +933,7 @@ async def create_batch(
             detail=f"GPU unhealthy: {gpu_status['reason']}. Try again later."
         )
 
-    # Check worker status - ensure we're resource-aware
+    # Check worker status - ensure worker is alive
     worker_heartbeat = db.query(WorkerHeartbeat).filter(WorkerHeartbeat.id == 1).first()
     if worker_heartbeat:
         # Check if worker is alive (heartbeat within last 60 seconds)
@@ -943,12 +952,10 @@ async def create_batch(
                     detail=f"Worker offline (last seen {int(age_seconds)}s ago). Cannot accept jobs."
                 )
 
-        # Check if worker is busy processing
-        if worker_heartbeat.status == 'processing':
-            raise HTTPException(
-                status_code=503,
-                detail=f"Worker busy processing job {worker_heartbeat.current_job_id}. Try again later."
-            )
+        # NOTE: We do NOT check if worker is busy processing
+        # The worker processes jobs sequentially (one at a time) to prevent OOM on RTX 4080
+        # But the API should accept jobs up to MAX_QUEUE_DEPTH (20 jobs)
+        # Queue depth check below is sufficient to prevent resource exhaustion
 
     # Validate endpoint
     if batch_request.endpoint != "/v1/chat/completions":
@@ -1090,6 +1097,7 @@ async def create_batch(
         log_file=str(log_file_path),
         throughput_tokens_per_sec=None,
         total_tokens=None,
+        priority=batch_request.priority,  # Priority queue support
         webhook_url=None,
         webhook_status=None,
         webhook_attempts=0,
@@ -1118,13 +1126,67 @@ async def create_batch(
 
 @app.get("/v1/batches/{batch_id}")
 async def get_batch(batch_id: str, db: Session = Depends(get_db)):
-    """Get batch job status (OpenAI Batch API compatible)."""
+    """
+    Get batch job status (OpenAI Batch API compatible).
+
+    Extended with queue visibility:
+    - queue_position: Position in queue (1 = next to process)
+    - estimated_start_time: When job is expected to start processing
+    - estimated_completion_time: When job is expected to complete
+    """
     batch_job = db.query(BatchJob).filter(BatchJob.batch_id == batch_id).first()
 
     if not batch_job:
         raise HTTPException(status_code=404, detail=f"Batch not found: {batch_id}")
 
-    return batch_job.to_dict()
+    # Get base response
+    response = batch_job.to_dict()
+
+    # Add queue visibility for queued jobs
+    if batch_job.status == 'validating':
+        # Calculate queue position (1-based)
+        queue_position = db.query(BatchJob).filter(
+            BatchJob.status == 'validating',
+            BatchJob.created_at < batch_job.created_at
+        ).count() + 1
+
+        response['queue_position'] = queue_position
+
+        # Estimate start time based on current job progress
+        current_job = db.query(BatchJob).filter(
+            BatchJob.status == 'in_progress'
+        ).first()
+
+        if current_job and current_job.estimated_completion_time:
+            # Current job has ETA, use it as base
+            estimated_start = current_job.estimated_completion_time
+        else:
+            # No current job or no ETA, assume immediate start
+            estimated_start = datetime.now(timezone.utc)
+
+        # Add estimated time for jobs ahead in queue
+        # Rough estimate: 2 minutes per job (conservative)
+        jobs_ahead = queue_position - 1
+        if jobs_ahead > 0:
+            estimated_start += timedelta(minutes=2 * jobs_ahead)
+
+        response['estimated_start_time'] = estimated_start.isoformat()
+
+        # Estimate completion time (start + job duration)
+        # Use total_requests to estimate duration (rough: 100 req/min)
+        if batch_job.total_requests:
+            estimated_duration_minutes = max(1, batch_job.total_requests / 100)
+            estimated_completion = estimated_start + timedelta(minutes=estimated_duration_minutes)
+            response['estimated_completion_time'] = estimated_completion.isoformat()
+
+    elif batch_job.status == 'in_progress':
+        # Job is currently processing
+        response['queue_position'] = 0  # 0 = currently processing
+
+        if batch_job.estimated_completion_time:
+            response['estimated_completion_time'] = batch_job.estimated_completion_time.isoformat()
+
+    return response
 
 
 @app.get("/v1/batches")

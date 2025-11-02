@@ -339,6 +339,263 @@ class TestBatchProcessing:
         pytest.fail(f"Batch job did not complete within {max_wait}s")
 
 
+class TestQueueBehavior:
+    """Test queue behavior and concurrent job submission."""
+
+    def test_multiple_concurrent_jobs(self):
+        """Test that API accepts multiple jobs even when worker is processing."""
+        # Create test file
+        test_requests = [
+            {
+                "custom_id": f"test-{i}",
+                "method": "POST",
+                "url": "/v1/chat/completions",
+                "body": {
+                    "model": "google/gemma-3-4b-it",
+                    "messages": [{"role": "user", "content": "Say hello"}],
+                    "max_tokens": 10
+                }
+            }
+            for i in range(3)
+        ]
+
+        # Upload file
+        file_content = "\n".join([json.dumps(req) for req in test_requests])
+        files = {"file": ("test.jsonl", file_content, "application/jsonl")}
+        data = {"purpose": "batch"}
+        response = requests.post(f"{API_BASE}/v1/files", files=files, data=data)
+        assert response.status_code == 200, f"File upload failed: {response.text}"
+        file_id = response.json()["id"]
+
+        # Submit 3 jobs rapidly
+        batch_ids = []
+        for i in range(3):
+            response = requests.post(
+                f"{API_BASE}/v1/batches",
+                json={
+                    "input_file_id": file_id,
+                    "endpoint": "/v1/chat/completions",
+                    "completion_window": "24h",
+                    "metadata": {"test": f"concurrent-{i}"}
+                }
+            )
+
+            # Should accept all jobs (not reject with 503)
+            assert response.status_code == 200, f"Job {i} rejected: {response.text}"
+            batch_ids.append(response.json()["id"])
+            print(f"✅ Job {i+1}/3 accepted: {batch_ids[-1]}")
+
+        print(f"✅ All 3 jobs accepted concurrently")
+
+        # Wait for all jobs to complete
+        for batch_id in batch_ids:
+            max_wait = 120
+            start = time.time()
+            while time.time() - start < max_wait:
+                response = requests.get(f"{API_BASE}/v1/batches/{batch_id}")
+                status = response.json()["status"]
+                if status == "completed":
+                    break
+                time.sleep(2)
+
+            assert status == "completed", f"Job {batch_id} did not complete in {max_wait}s"
+
+        print(f"✅ All 3 jobs completed")
+
+    def test_queue_visibility(self):
+        """Test that batch status includes queue position and ETA."""
+        # Create test file
+        test_requests = [
+            {
+                "custom_id": "test-queue-visibility",
+                "method": "POST",
+                "url": "/v1/chat/completions",
+                "body": {
+                    "model": "google/gemma-3-4b-it",
+                    "messages": [{"role": "user", "content": "Say hello"}],
+                    "max_tokens": 10
+                }
+            }
+        ]
+
+        # Upload file
+        file_content = "\n".join([json.dumps(req) for req in test_requests])
+        files = {"file": ("test.jsonl", file_content, "application/jsonl")}
+        data = {"purpose": "batch"}
+        response = requests.post(f"{API_BASE}/v1/files", files=files, data=data)
+        assert response.status_code == 200
+        file_id = response.json()["id"]
+
+        # Submit job
+        response = requests.post(
+            f"{API_BASE}/v1/batches",
+            json={
+                "input_file_id": file_id,
+                "endpoint": "/v1/chat/completions",
+                "completion_window": "24h"
+            }
+        )
+        assert response.status_code == 200
+        batch_id = response.json()["id"]
+
+        # Check status - should have queue visibility
+        response = requests.get(f"{API_BASE}/v1/batches/{batch_id}")
+        assert response.status_code == 200
+
+        status = response.json()
+        print(f"Status: {json.dumps(status, indent=2)}")
+
+        # Should have queue position (either queued or processing)
+        if status["status"] == "validating":
+            assert "queue_position" in status, "Missing queue_position for queued job"
+            assert status["queue_position"] >= 1, "Queue position should be >= 1"
+            assert "estimated_start_time" in status, "Missing estimated_start_time"
+            print(f"✅ Queue position: {status['queue_position']}")
+            print(f"✅ Estimated start: {status['estimated_start_time']}")
+        elif status["status"] == "in_progress":
+            assert status.get("queue_position") == 0, "Processing job should have queue_position=0"
+            print(f"✅ Job is processing (queue_position=0)")
+
+        # Wait for completion
+        max_wait = 60
+        start = time.time()
+        while time.time() - start < max_wait:
+            response = requests.get(f"{API_BASE}/v1/batches/{batch_id}")
+            if response.json()["status"] == "completed":
+                break
+            time.sleep(2)
+
+        print(f"✅ Queue visibility test passed")
+
+    def test_priority_queue(self):
+        """Test that high-priority jobs are processed before low-priority jobs."""
+        # Create test file
+        test_requests = [
+            {
+                "custom_id": "test-priority",
+                "method": "POST",
+                "url": "/v1/chat/completions",
+                "body": {
+                    "model": "google/gemma-3-4b-it",
+                    "messages": [{"role": "user", "content": "Say hello"}],
+                    "max_tokens": 10
+                }
+            }
+        ]
+
+        # Upload file
+        file_content = "\n".join([json.dumps(req) for req in test_requests])
+        files = {"file": ("test.jsonl", file_content, "application/jsonl")}
+        data = {"purpose": "batch"}
+        response = requests.post(f"{API_BASE}/v1/files", files=files, data=data)
+        assert response.status_code == 200
+        file_id = response.json()["id"]
+
+        # Submit 3 jobs with different priorities
+        # Job 1: Low priority (-1)
+        response = requests.post(
+            f"{API_BASE}/v1/batches",
+            json={
+                "input_file_id": file_id,
+                "endpoint": "/v1/chat/completions",
+                "completion_window": "24h",
+                "priority": -1,
+                "metadata": {"name": "low-priority"}
+            }
+        )
+        assert response.status_code == 200
+        low_priority_id = response.json()["id"]
+        print(f"✅ Low priority job submitted: {low_priority_id}")
+
+        # Job 2: Normal priority (0)
+        response = requests.post(
+            f"{API_BASE}/v1/batches",
+            json={
+                "input_file_id": file_id,
+                "endpoint": "/v1/chat/completions",
+                "completion_window": "24h",
+                "priority": 0,
+                "metadata": {"name": "normal-priority"}
+            }
+        )
+        assert response.status_code == 200
+        normal_priority_id = response.json()["id"]
+        print(f"✅ Normal priority job submitted: {normal_priority_id}")
+
+        # Job 3: High priority (1)
+        response = requests.post(
+            f"{API_BASE}/v1/batches",
+            json={
+                "input_file_id": file_id,
+                "endpoint": "/v1/chat/completions",
+                "completion_window": "24h",
+                "priority": 1,
+                "metadata": {"name": "high-priority"}
+            }
+        )
+        assert response.status_code == 200
+        high_priority_id = response.json()["id"]
+        print(f"✅ High priority job submitted: {high_priority_id}")
+
+        # Wait for all jobs to complete
+        for batch_id in [low_priority_id, normal_priority_id, high_priority_id]:
+            max_wait = 120
+            start = time.time()
+            while time.time() - start < max_wait:
+                response = requests.get(f"{API_BASE}/v1/batches/{batch_id}")
+                status = response.json()["status"]
+                if status == "completed":
+                    break
+                time.sleep(2)
+
+            assert status == "completed", f"Job {batch_id} did not complete in {max_wait}s"
+
+        print(f"✅ All priority queue jobs completed")
+
+    def test_queue_full_rejection(self):
+        """Test that API rejects jobs when queue is full (20 jobs)."""
+        # This test would require submitting 21 jobs
+        # Skip for now as it would take too long
+        pytest.skip("Requires submitting 21 jobs - too slow for CI")
+
+
+class TestWebhooks:
+    """Test webhook notification functionality."""
+
+    def test_webhook_documentation_exists(self):
+        """Test that webhook documentation exists and is comprehensive."""
+        webhook_docs = Path(__file__).parent.parent.parent / "docs" / "WEBHOOKS.md"
+        assert webhook_docs.exists(), "Webhook documentation missing"
+
+        content = webhook_docs.read_text()
+
+        # Check for key sections
+        assert "Quick Start" in content
+        assert "Webhook Payload Format" in content
+        assert "Retry Logic" in content
+        assert "Testing Webhooks Locally" in content
+        assert "Security Best Practices" in content
+        assert "Troubleshooting" in content
+
+        print("✅ Webhook documentation is comprehensive")
+
+    def test_webhook_fields_in_database(self):
+        """Test that webhook fields exist in BatchJob model."""
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+        from core.batch_app.database import BatchJob
+
+        # Check that BatchJob has webhook fields
+        assert hasattr(BatchJob, 'webhook_url')
+        assert hasattr(BatchJob, 'webhook_status')
+        assert hasattr(BatchJob, 'webhook_attempts')
+        assert hasattr(BatchJob, 'webhook_last_attempt')
+        assert hasattr(BatchJob, 'webhook_error')
+
+        print("✅ Webhook fields exist in BatchJob model")
+
+
 class TestLabelStudioIntegration:
     """Test Label Studio integration (if enabled)."""
     

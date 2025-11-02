@@ -109,11 +109,24 @@ Create a new batch job.
   "input_file_id": "file-abc123",
   "endpoint": "/v1/chat/completions",
   "completion_window": "24h",
+  "priority": 0,
   "metadata": {
-    "description": "My batch job"
+    "description": "My batch job",
+    "webhook_url": "https://myapp.com/batch-complete"
   }
 }
 ```
+
+**Request Fields:**
+- `input_file_id` (required): ID of uploaded input file
+- `endpoint` (required): API endpoint (only `/v1/chat/completions` supported)
+- `completion_window` (required): Completion window (only `"24h"` supported)
+- `priority` (optional): Job priority
+  - `-1` = Low priority (testing/benchmarking)
+  - `0` = Normal priority (default)
+  - `1` = High priority (production)
+- `metadata` (optional): Custom metadata
+  - `webhook_url`: URL to receive completion notification (see [Webhooks](WEBHOOKS.md))
 
 **Response:**
 ```json
@@ -163,9 +176,20 @@ Get batch job status.
     "completed": 98,
     "failed": 2
   },
+  "queue_position": 0,
+  "estimated_start_time": "2025-11-02T01:30:00Z",
+  "estimated_completion_time": "2025-11-02T02:00:00Z",
   ...
 }
 ```
+
+**Extended Fields (Queue Visibility):**
+- `queue_position`: Position in queue (only for `status: "validating"`)
+  - `1` = Next to process
+  - `2+` = Position in queue
+  - `0` = Currently processing (for `status: "in_progress"`)
+- `estimated_start_time`: When job is expected to start (ISO 8601)
+- `estimated_completion_time`: When job is expected to complete (ISO 8601)
 
 **Status Values:**
 - `validating` - Validating input file

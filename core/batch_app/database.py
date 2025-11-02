@@ -126,6 +126,10 @@ class BatchJob(Base):
     last_progress_update: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     estimated_completion_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Priority queue support (custom extension)
+    # -1 = low (testing/benchmarking), 0 = normal (default), 1 = high (production)
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+
     # Webhook support (custom extension)
     webhook_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     webhook_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
