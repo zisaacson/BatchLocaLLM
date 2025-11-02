@@ -88,13 +88,6 @@ services:
     restart: unless-stopped
     ports:
       - "4115:8080"
-    environment:
-      DJANGO_DB: default
-      POSTGRE_NAME: labelstudio
-      POSTGRE_USER: labelstudio
-      POSTGRE_PASSWORD: labelstudio
-      POSTGRE_PORT: 5432
-      POSTGRE_HOST: label-studio-db
     volumes:
       - label-studio-data:/label-studio/data
     depends_on:
