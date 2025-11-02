@@ -124,21 +124,21 @@ def send_webhook(
         "error_file_url": f"/v1/batches/{batch_job.batch_id}/errors" if batch_job.failed_requests > 0 else None
     }
 
-    # Build headers
-    headers = {"Content-Type": "application/json"}
-
-    # Add HMAC signature if secret is configured
+    # Get secret for signature generation (if configured)
     secret = batch_job.webhook_secret or settings.WEBHOOK_SECRET
-    if secret:
-        signature = generate_webhook_signature(payload, secret)
-        headers["X-Webhook-Signature"] = f"sha256={signature}"
-        headers["X-Webhook-Timestamp"] = str(int(datetime.now(timezone.utc).timestamp()))
 
     # Retry logic with exponential backoff
     for attempt in range(max_retries):
         try:
             batch_job.webhook_attempts = attempt + 1
             batch_job.webhook_last_attempt = datetime.now(timezone.utc)
+
+            # Build headers with fresh signature and timestamp for each attempt
+            headers = {"Content-Type": "application/json"}
+            if secret:
+                signature = generate_webhook_signature(payload, secret)
+                headers["X-Webhook-Signature"] = f"sha256={signature}"
+                headers["X-Webhook-Timestamp"] = str(int(datetime.now(timezone.utc).timestamp()))
 
             response = requests.post(
                 batch_job.webhook_url,

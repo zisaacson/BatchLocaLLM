@@ -19,7 +19,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, 
 from fastapi import File as FastAPIFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -175,6 +175,21 @@ class WebhookConfig(BaseModel):
     max_retries: int | None = Field(None, description="Max retry attempts (default: 3)", ge=1, le=10)
     timeout: int | None = Field(None, description="Request timeout in seconds (default: 30)", ge=5, le=300)
     events: list[str] | None = Field(None, description="Events to subscribe to: completed, failed, progress")
+
+    @field_validator('events')
+    @classmethod
+    def validate_events(cls, v):
+        """Validate that webhook events are valid."""
+        if v is None:
+            return v
+
+        valid_events = {"completed", "failed", "progress"}
+        invalid = set(v) - valid_events
+
+        if invalid:
+            raise ValueError(f"Invalid events: {invalid}. Valid events: {valid_events}")
+
+        return v
 
 
 class CreateBatchRequest(BaseModel):
@@ -2568,12 +2583,17 @@ async def list_failed_webhooks(
 @app.post("/v1/webhooks/dead-letter/{dead_letter_id}/retry")
 async def retry_failed_webhook(
     dead_letter_id: int,
+    force: bool = False,
     db: Session = Depends(get_db)
 ):
     """
     Retry a failed webhook delivery from the dead letter queue.
 
     Attempts to resend the webhook with the original payload.
+
+    Args:
+        dead_letter_id: ID of the dead letter entry to retry
+        force: If True, retry even if already successfully retried (default: False)
     """
     from .webhooks import send_webhook
 
@@ -2584,6 +2604,13 @@ async def retry_failed_webhook(
 
     if not dead_letter:
         raise HTTPException(status_code=404, detail="Dead letter entry not found")
+
+    # Check if already successfully retried (unless force=True)
+    if dead_letter.retry_success and not force:
+        raise HTTPException(
+            status_code=400,
+            detail="Webhook already successfully retried. Use force=true to retry anyway."
+        )
 
     # Get batch job
     batch_job = db.query(BatchJob).filter(
@@ -2610,7 +2637,8 @@ async def retry_failed_webhook(
         "id": dead_letter_id,
         "batch_id": dead_letter.batch_id,
         "retry_success": success,
-        "retried_at": dead_letter.retried_at.isoformat()
+        "retried_at": dead_letter.retried_at.isoformat(),
+        "forced": force
     }
 
 
