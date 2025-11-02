@@ -1,0 +1,71 @@
+<View>
+  <Header value="Candidate Evaluation Review"/>
+  
+  <!-- Input Data Display -->
+  <View style="box-shadow: 2px 2px 5px #999; padding: 20px; margin-top: 2em; border-radius: 5px;">
+    <Header value="Candidate Information"/>
+    <Text name="candidate_name" value="$candidate_name"/>
+    <Text name="candidate_title" value="$candidate_title"/>
+    <Text name="candidate_company" value="$candidate_company"/>
+  </View>
+  
+  <!-- Model Response Display -->
+  <View style="box-shadow: 2px 2px 5px #999; padding: 20px; margin-top: 2em; border-radius: 5px;">
+    <Header value="Model Response"/>
+    <Text name="model_name" value="Model: $model_name"/>
+    <TextArea name="response" value="$response" rows="10" editable="true"/>
+  </View>
+  
+  <!-- Evaluation Fields -->
+  <View style="box-shadow: 2px 2px 5px #999; padding: 20px; margin-top: 2em; border-radius: 5px;">
+    <Header value="Evaluation"/>
+    
+    <Choices name="recommendation" toName="response" choice="single" showInline="true">
+      <Header value="Recommendation"/>
+      <Choice value="Strong Yes"/>
+      <Choice value="Yes"/>
+      <Choice value="Maybe"/>
+      <Choice value="No"/>
+      <Choice value="Strong No"/>
+    </Choices>
+    
+    <Choices name="trajectory" toName="response" choice="single" showInline="true">
+      <Header value="Career Trajectory"/>
+      <Choice value="Exceptional"/>
+      <Choice value="Strong"/>
+      <Choice value="Good"/>
+      <Choice value="Average"/>
+      <Choice value="Weak"/>
+    </Choices>
+    
+    <Choices name="company_pedigree" toName="response" choice="single" showInline="true">
+      <Header value="Company Pedigree"/>
+      <Choice value="Exceptional"/>
+      <Choice value="Strong"/>
+      <Choice value="Good"/>
+      <Choice value="Average"/>
+      <Choice value="Weak"/>
+    </Choices>
+    
+    <Choices name="educational_pedigree" toName="response" choice="single" showInline="true">
+      <Header value="Educational Pedigree"/>
+      <Choice value="Exceptional"/>
+      <Choice value="Strong"/>
+      <Choice value="Good"/>
+      <Choice value="Average"/>
+      <Choice value="Weak"/>
+    </Choices>
+    
+    <Checkbox name="is_software_engineer" toName="response">
+      <Label value="Is Software Engineer"/>
+    </Checkbox>
+  </View>
+  
+  <!-- Quality Rating -->
+  <View style="box-shadow: 2px 2px 5px #999; padding: 20px; margin-top: 2em; border-radius: 5px;">
+    <Header value="Quality Control"/>
+    <Rating name="quality" toName="response" maxRating="5" icon="star" size="large"/>
+    <TextArea name="notes" toName="response" placeholder="Notes or corrections..." rows="3"/>
+  </View>
+</View>
+
