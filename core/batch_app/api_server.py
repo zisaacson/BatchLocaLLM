@@ -742,6 +742,17 @@ async def queue_monitor():
         return HTMLResponse(content=f.read())
 
 
+@app.get("/history", response_class=HTMLResponse)
+async def job_history():
+    """Serve the job history UI."""
+    history_html_path = Path(__file__).parent / "static" / "history.html"
+    if not history_html_path.exists():
+        raise HTTPException(status_code=404, detail="Job history page not found")
+
+    with open(history_html_path) as f:
+        return HTMLResponse(content=f.read())
+
+
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_panel():
     """Serve the admin panel UI."""
@@ -755,13 +766,14 @@ async def admin_panel():
 
 @app.get("/static/{filename}")
 async def serve_static_file(filename: str):
-    """Serve static files (docs, etc.)."""
+    """Serve static files (docs, JS, etc.)."""
     # Map of allowed files
     allowed_files = {
         "llm.txt": Path(__file__).parent.parent.parent / "llm.txt",
         "STATUS.md": Path(__file__).parent.parent.parent / "STATUS.md",
         "SYSTEM_MANAGEMENT.md": Path(__file__).parent.parent.parent / "SYSTEM_MANAGEMENT.md",
         "README.md": Path(__file__).parent.parent.parent / "README.md",
+        "history.js": Path(__file__).parent / "static" / "history.js",
     }
 
     if filename not in allowed_files:
@@ -771,7 +783,14 @@ async def serve_static_file(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
 
-    return FileResponse(file_path, media_type="text/plain", filename=filename)
+    # Determine media type
+    media_type = "text/plain"
+    if filename.endswith(".js"):
+        media_type = "application/javascript"
+    elif filename.endswith(".md"):
+        media_type = "text/markdown"
+
+    return FileResponse(file_path, media_type=media_type, filename=filename)
 
 
 @app.get("/config", response_class=HTMLResponse)
@@ -2663,6 +2682,222 @@ async def delete_failed_webhook(
     db.commit()
 
     return {"deleted": True, "id": dead_letter_id}
+
+
+# ============================================================================
+# Job History API
+# ============================================================================
+
+@app.get("/v1/jobs/history")
+async def get_job_history(
+    limit: int = 50,
+    offset: int = 0,
+    status: str | None = None,
+    model: str | None = None,
+    start_date: int | None = None,
+    end_date: int | None = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get job history with filtering and pagination.
+
+    Args:
+        limit: Number of jobs to return (default: 50, max: 500)
+        offset: Number of jobs to skip (for pagination)
+        status: Filter by status (validating, queued, in_progress, finalizing, completed, failed, cancelled, expired)
+        model: Filter by model name
+        start_date: Filter jobs created after this Unix timestamp
+        end_date: Filter jobs created before this Unix timestamp
+
+    Returns:
+        {
+            "jobs": [...],
+            "total": 1234,
+            "limit": 50,
+            "offset": 0,
+            "has_more": true
+        }
+    """
+    # Validate limit
+    limit = min(limit, 500)
+
+    # Build query
+    query = db.query(BatchJob)
+
+    # Apply filters
+    if status:
+        query = query.filter(BatchJob.status == status)
+    if model:
+        query = query.filter(BatchJob.model == model)
+    if start_date:
+        query = query.filter(BatchJob.created_at >= start_date)
+    if end_date:
+        query = query.filter(BatchJob.created_at <= end_date)
+
+    # Get total count
+    total = query.count()
+
+    # Get paginated results
+    jobs = query.order_by(BatchJob.created_at.desc()).offset(offset).limit(limit).all()
+
+    # Format response
+    job_list = []
+    for job in jobs:
+        # Calculate duration
+        duration = None
+        if job.completed_at and job.created_at:
+            duration = job.completed_at - job.created_at
+        elif job.failed_at and job.created_at:
+            duration = job.failed_at - job.created_at
+
+        # Calculate throughput
+        throughput = None
+        if duration and duration > 0 and job.completed_requests > 0:
+            throughput = job.completed_requests / duration
+
+        job_list.append({
+            "batch_id": job.batch_id,
+            "status": job.status,
+            "model": job.model,
+            "created_at": job.created_at,
+            "completed_at": job.completed_at,
+            "failed_at": job.failed_at,
+            "cancelled_at": job.cancelled_at,
+            "total_requests": job.total_requests,
+            "completed_requests": job.completed_requests,
+            "failed_requests": job.failed_requests,
+            "duration": duration,
+            "throughput": throughput,
+            "priority": job.priority,
+            "webhook_url": job.webhook_url is not None,
+            "has_errors": job.errors is not None
+        })
+
+    return {
+        "jobs": job_list,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": (offset + limit) < total
+    }
+
+
+@app.get("/v1/jobs/stats")
+async def get_job_stats(
+    start_date: int | None = None,
+    end_date: int | None = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get job statistics and analytics.
+
+    Args:
+        start_date: Filter jobs created after this Unix timestamp
+        end_date: Filter jobs created before this Unix timestamp
+
+    Returns:
+        {
+            "total_jobs": 1234,
+            "by_status": {...},
+            "by_model": {...},
+            "success_rate": 0.978,
+            "avg_duration": 45.2,
+            "total_requests": 5678,
+            "timeline": [...]
+        }
+    """
+    from sqlalchemy import func
+
+    # Build base query
+    query = db.query(BatchJob)
+
+    # Apply date filters
+    if start_date:
+        query = query.filter(BatchJob.created_at >= start_date)
+    if end_date:
+        query = query.filter(BatchJob.created_at <= end_date)
+
+    # Total jobs
+    total_jobs = query.count()
+
+    # Jobs by status
+    status_counts = db.query(
+        BatchJob.status,
+        func.count(BatchJob.batch_id).label('count')
+    ).filter(
+        BatchJob.created_at >= start_date if start_date else True,
+        BatchJob.created_at <= end_date if end_date else True
+    ).group_by(BatchJob.status).all()
+
+    by_status = {status: count for status, count in status_counts}
+
+    # Jobs by model
+    model_counts = db.query(
+        BatchJob.model,
+        func.count(BatchJob.batch_id).label('count')
+    ).filter(
+        BatchJob.created_at >= start_date if start_date else True,
+        BatchJob.created_at <= end_date if end_date else True
+    ).group_by(BatchJob.model).all()
+
+    by_model = {model: count for model, count in model_counts if model}
+
+    # Success rate
+    completed = by_status.get('completed', 0)
+    failed = by_status.get('failed', 0)
+    success_rate = completed / (completed + failed) if (completed + failed) > 0 else 0
+
+    # Average duration (for completed jobs)
+    completed_jobs = query.filter(BatchJob.status == 'completed').all()
+    durations = []
+    for job in completed_jobs:
+        if job.completed_at and job.created_at:
+            durations.append(job.completed_at - job.created_at)
+
+    avg_duration = sum(durations) / len(durations) if durations else 0
+
+    # Total requests
+    total_requests = db.query(func.sum(BatchJob.total_requests)).filter(
+        BatchJob.created_at >= start_date if start_date else True,
+        BatchJob.created_at <= end_date if end_date else True
+    ).scalar() or 0
+
+    completed_requests = db.query(func.sum(BatchJob.completed_requests)).filter(
+        BatchJob.created_at >= start_date if start_date else True,
+        BatchJob.created_at <= end_date if end_date else True
+    ).scalar() or 0
+
+    # Timeline (jobs per hour for last 24 hours)
+    import time
+    now = int(time.time())
+    timeline = []
+
+    for i in range(24):
+        hour_start = now - (i + 1) * 3600
+        hour_end = now - i * 3600
+
+        hour_jobs = db.query(func.count(BatchJob.batch_id)).filter(
+            BatchJob.created_at >= hour_start,
+            BatchJob.created_at < hour_end
+        ).scalar() or 0
+
+        timeline.append({
+            "timestamp": hour_start,
+            "jobs": hour_jobs
+        })
+
+    timeline.reverse()  # Oldest to newest
+
+    return {
+        "total_jobs": total_jobs,
+        "by_status": by_status,
+        "by_model": by_model,
+        "success_rate": round(success_rate, 4),
+        "avg_duration": round(avg_duration, 2),
+        "total_requests": total_requests,
+        "completed_requests": completed_requests,
+        "timeline": timeline
+    }
 
 
 if __name__ == "__main__":
