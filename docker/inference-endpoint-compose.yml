@@ -27,8 +27,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.batch-api
-    image: aristotle-inference-api:latest
-    container_name: aristotle-inference-api
+    image: vllm-batch-inference-api:latest
+    container_name: vllm-batch-inference-api
     ports:
       - "4080:4080"
     
@@ -76,7 +76,7 @@ services:
   
   label-studio-db:
     image: postgres:16
-    container_name: aristotle-label-studio-db
+    container_name: vllm-label-studio-db
     ports:
       - "4018:5432"
     environment:
@@ -89,7 +89,7 @@ services:
 
   label-studio:
     image: heartexlabs/label-studio:latest
-    container_name: aristotle-label-studio
+    container_name: vllm-label-studio
     ports:
       - "4015:4015"
     environment:
@@ -127,7 +127,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    container_name: aristotle-grafana
+    container_name: vllm-grafana
     ports:
       - "4020:4020"
     environment:
@@ -141,7 +141,7 @@ services:
 
   loki:
     image: grafana/loki:latest
-    container_name: aristotle-loki
+    container_name: vllm-loki
     ports:
       - "4021:4021"
     command: ["-config.file=/etc/loki/local-config.yaml"]
@@ -151,7 +151,7 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-    container_name: aristotle-prometheus
+    container_name: vllm-prometheus
     ports:
       - "4022:4022"
     command:

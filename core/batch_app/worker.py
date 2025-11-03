@@ -226,7 +226,14 @@ class BatchWorker:
                                 }
                             }
                         },
-                        'error': None
+                        'error': None,
+                        # Include input data for Label Studio integration
+                        'input': {
+                            'messages': req.get('body', {}).get('messages', []),
+                            'model': req.get('body', {}).get('model', self.current_model),
+                            'temperature': req.get('body', {}).get('temperature'),
+                            'max_tokens': req.get('body', {}).get('max_tokens')
+                        }
                     }
 
                     # Write to file
@@ -696,22 +703,25 @@ class BatchWorker:
 
     def auto_import_to_curation(self, job: BatchJob, db: Session, log_file: str | None):
         """
-        Automatically import batch results to curation system.
+        Automatically import batch results to Label Studio for curation.
 
-        This enables viewing all batch results in the beautiful curation UI
-        and marking gold-star examples for training datasets.
+        This enables viewing all batch results in Label Studio where you can:
+        - Review LLM outputs for quality
+        - Correct errors in responses
+        - Mark gold-star examples for training
+        - Export curated datasets (ICL, fine-tuning)
         """
         try:
-            # Check if auto-import is enabled
-            if not settings.AUTO_IMPORT_TO_CURATION:
-                self.log(log_file, "⏭️  Auto-import to curation disabled (set AUTO_IMPORT_TO_CURATION=true to enable)")
+            # Check if Label Studio is configured
+            if not settings.LABEL_STUDIO_URL or not settings.LABEL_STUDIO_API_KEY:
+                self.log(log_file, "⏭️  Label Studio not configured (set LABEL_STUDIO_URL and LABEL_STUDIO_API_KEY)")
                 return
 
-            self.log(log_file, f"\n📥 Auto-importing to curation system at {settings.CURATION_API_URL}...")
+            if not settings.LABEL_STUDIO_PROJECT_ID:
+                self.log(log_file, "⏭️  No Label Studio project configured (set LABEL_STUDIO_PROJECT_ID)")
+                return
 
-            # Get conquest type from metadata
-            metadata = json.loads(job.metadata_json) if job.metadata_json else {}
-            conquest_type = metadata.get('conquest_type', 'candidate_evaluation')
+            self.log(log_file, f"\n📥 Auto-importing to Label Studio at {settings.LABEL_STUDIO_URL}...")
 
             # Read output file
             output_file = db.query(File).filter(File.file_id == job.output_file_id).first()
@@ -733,28 +743,39 @@ class BatchWorker:
 
             self.log(log_file, f"📊 Found {len(results)} results to import")
 
-            # Import to curation system
-            response = requests.post(
-                f"{settings.CURATION_API_URL}/api/tasks/bulk-import",
-                json={
-                    "batch_id": job.batch_id,
-                    "conquest_type": conquest_type,
-                    "results": results,
-                    "model_version": job.model
-                },
-                timeout=60
-            )
+            # Use Label Studio handler
+            from core.result_handlers.label_studio import LabelStudioHandler
 
-            if response.status_code == 200:
-                result = response.json()
-                self.log(log_file, f"✅ Imported {result.get('created_count', 0)} tasks to curation system")
-                self.log(log_file, f"🌐 View at: {settings.CURATION_API_URL}?conquest_type={conquest_type}")
+            handler = LabelStudioHandler(config={
+                'url': settings.LABEL_STUDIO_URL,
+                'api_key': settings.LABEL_STUDIO_API_KEY,
+                'project_id': settings.LABEL_STUDIO_PROJECT_ID
+            })
+
+            # Prepare metadata
+            metadata = json.loads(job.metadata_json) if job.metadata_json else {}
+            metadata['label_studio_project_id'] = settings.LABEL_STUDIO_PROJECT_ID
+            # completed_at is a Unix timestamp (int), not datetime
+            if job.completed_at:
+                from datetime import datetime, timezone
+                metadata['completed_at'] = datetime.fromtimestamp(job.completed_at, tz=timezone.utc).isoformat()
             else:
-                self.log(log_file, f"⚠️  Curation import failed: {response.status_code} {response.text[:200]}")
+                metadata['completed_at'] = None
+
+            # Import to Label Studio
+            success = handler.handle(job.batch_id, results, metadata)
+
+            if success:
+                self.log(log_file, f"✅ Imported {len(results)} tasks to Label Studio")
+                self.log(log_file, f"🌐 View at: {settings.LABEL_STUDIO_URL}/projects/{settings.LABEL_STUDIO_PROJECT_ID}")
+            else:
+                self.log(log_file, f"⚠️  Label Studio import failed (check logs for details)")
 
         except Exception as e:
             self.log(log_file, f"⚠️  Auto-import error (non-fatal): {e}")
-            # Don't fail the job if curation import fails
+            import traceback
+            self.log(log_file, f"   Traceback: {traceback.format_exc()}")
+            # Don't fail the job if Label Studio import fails
 
     def save_benchmark(self, job: BatchJob, processing_time: float):
         """Save benchmark data from completed job."""

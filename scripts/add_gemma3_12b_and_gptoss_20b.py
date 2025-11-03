@@ -3,7 +3,7 @@ Add Gemma 3 12B Q4_0 GGUF and GPT-OSS 20B to model registry.
 """
 
 import sys
-sys.path.insert(0, '/home/zack/Documents/augment-projects/Local/vllm-batch-server')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.batch_app.database import SessionLocal, ModelRegistry
 from core.batch_app.model_parser import parse_and_prepare_model

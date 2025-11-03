@@ -27,6 +27,443 @@ logger = get_logger(__name__)
 _active_tests = {}  # model_id -> {process, log_file, start_time}
 
 
+def search_models(
+    db: Session,
+    query: Optional[str] = None,
+    status: Optional[str] = None,
+    rtx4080_compatible: Optional[bool] = None,
+    min_size_gb: Optional[float] = None,
+    max_size_gb: Optional[float] = None,
+    min_memory_gb: Optional[float] = None,
+    max_memory_gb: Optional[float] = None,
+    quantization_type: Optional[str] = None,
+    sort_by: str = 'created_at',
+    sort_order: str = 'desc',
+    limit: int = 100,
+    offset: int = 0
+):
+    """
+    Search and filter models with advanced criteria.
+
+    Args:
+        db: Database session
+        query: Text search in model_id, name, or notes
+        status: Filter by status (downloading, ready, failed, etc.)
+        rtx4080_compatible: Filter by RTX 4080 compatibility
+        min_size_gb: Minimum model size in GB
+        max_size_gb: Maximum model size in GB
+        min_memory_gb: Minimum GPU memory requirement
+        max_memory_gb: Maximum GPU memory requirement
+        quantization_type: Filter by quantization (Q4_K_M, Q8_0, F16, etc.)
+        sort_by: Field to sort by (created_at, size_gb, name, etc.)
+        sort_order: Sort order (asc, desc)
+        limit: Maximum results to return
+        offset: Offset for pagination
+
+    Returns:
+        List of models matching criteria
+    """
+    # Start with base query
+    query_obj = db.query(ModelRegistry)
+
+    # Text search
+    if query:
+        search_pattern = f"%{query}%"
+        query_obj = query_obj.filter(
+            (ModelRegistry.model_id.ilike(search_pattern)) |
+            (ModelRegistry.name.ilike(search_pattern)) |
+            (ModelRegistry.installation_notes.ilike(search_pattern))
+        )
+
+    # Status filter
+    if status:
+        query_obj = query_obj.filter(ModelRegistry.status == status)
+
+    # RTX 4080 compatibility
+    if rtx4080_compatible is not None:
+        query_obj = query_obj.filter(ModelRegistry.rtx4080_compatible == rtx4080_compatible)
+
+    # Size filters
+    if min_size_gb is not None:
+        query_obj = query_obj.filter(ModelRegistry.size_gb >= min_size_gb)
+    if max_size_gb is not None:
+        query_obj = query_obj.filter(ModelRegistry.size_gb <= max_size_gb)
+
+    # Memory filters
+    if min_memory_gb is not None:
+        query_obj = query_obj.filter(ModelRegistry.estimated_memory_gb >= min_memory_gb)
+    if max_memory_gb is not None:
+        query_obj = query_obj.filter(ModelRegistry.estimated_memory_gb <= max_memory_gb)
+
+    # Quantization filter
+    if quantization_type:
+        query_obj = query_obj.filter(ModelRegistry.quantization_type == quantization_type)
+
+    # Sorting
+    sort_field = getattr(ModelRegistry, sort_by, ModelRegistry.created_at)
+    if sort_order == 'desc':
+        query_obj = query_obj.order_by(sort_field.desc())
+    else:
+        query_obj = query_obj.order_by(sort_field.asc())
+
+    # Pagination
+    query_obj = query_obj.limit(limit).offset(offset)
+
+    # Execute
+    models = query_obj.all()
+
+    # Get total count (without pagination)
+    total_query = db.query(ModelRegistry)
+    if query:
+        search_pattern = f"%{query}%"
+        total_query = total_query.filter(
+            (ModelRegistry.model_id.ilike(search_pattern)) |
+            (ModelRegistry.name.ilike(search_pattern)) |
+            (ModelRegistry.installation_notes.ilike(search_pattern))
+        )
+    if status:
+        total_query = total_query.filter(ModelRegistry.status == status)
+    if rtx4080_compatible is not None:
+        total_query = total_query.filter(ModelRegistry.rtx4080_compatible == rtx4080_compatible)
+    if min_size_gb is not None:
+        total_query = total_query.filter(ModelRegistry.size_gb >= min_size_gb)
+    if max_size_gb is not None:
+        total_query = total_query.filter(ModelRegistry.size_gb <= max_size_gb)
+    if min_memory_gb is not None:
+        total_query = total_query.filter(ModelRegistry.estimated_memory_gb >= min_memory_gb)
+    if max_memory_gb is not None:
+        total_query = total_query.filter(ModelRegistry.estimated_memory_gb <= max_memory_gb)
+    if quantization_type:
+        total_query = total_query.filter(ModelRegistry.quantization_type == quantization_type)
+
+    total_count = total_query.count()
+
+    return {
+        'models': models,
+        'total': total_count,
+        'limit': limit,
+        'offset': offset,
+        'has_more': (offset + len(models)) < total_count
+    }
+
+
+def get_model_usage_analytics(db: Session, model_id: Optional[str] = None):
+    """
+    Get usage analytics for models.
+
+    Args:
+        db: Database session
+        model_id: Optional model ID to filter by
+
+    Returns:
+        Usage analytics including job counts, success rates, avg throughput
+    """
+    from core.batch_app.database import Benchmark
+
+    # Build query
+    query = db.query(Benchmark)
+    if model_id:
+        query = query.filter(Benchmark.model_id == model_id)
+
+    benchmarks = query.all()
+
+    if not benchmarks:
+        return {
+            'model_id': model_id,
+            'total_jobs': 0,
+            'total_requests': 0,
+            'success_rate': 0.0,
+            'avg_throughput': 0.0,
+            'total_runtime_seconds': 0.0
+        }
+
+    # Calculate metrics
+    total_jobs = len(benchmarks)
+    completed_jobs = sum(1 for b in benchmarks if b.status == 'completed')
+    failed_jobs = sum(1 for b in benchmarks if b.status == 'failed')
+    total_requests = sum(b.total for b in benchmarks if b.total)
+    completed_requests = sum(b.completed for b in benchmarks if b.completed)
+
+    # Calculate throughput
+    throughputs = [b.throughput for b in benchmarks if b.throughput and b.throughput > 0]
+    avg_throughput = sum(throughputs) / len(throughputs) if throughputs else 0.0
+
+    # Calculate runtime
+    total_runtime = 0.0
+    for b in benchmarks:
+        if b.started_at and b.completed_at:
+            runtime = (b.completed_at - b.started_at).total_seconds()
+            total_runtime += runtime
+
+    # Success rate
+    success_rate = completed_jobs / total_jobs if total_jobs > 0 else 0.0
+
+    # Group by model if no specific model requested
+    if not model_id:
+        # Get analytics per model
+        model_stats = {}
+        for b in benchmarks:
+            if b.model_id not in model_stats:
+                model_stats[b.model_id] = {
+                    'jobs': 0,
+                    'completed': 0,
+                    'failed': 0,
+                    'requests': 0,
+                    'throughputs': [],
+                    'runtime': 0.0
+                }
+
+            stats = model_stats[b.model_id]
+            stats['jobs'] += 1
+            if b.status == 'completed':
+                stats['completed'] += 1
+            elif b.status == 'failed':
+                stats['failed'] += 1
+            if b.total:
+                stats['requests'] += b.total
+            if b.throughput and b.throughput > 0:
+                stats['throughputs'].append(b.throughput)
+            if b.started_at and b.completed_at:
+                stats['runtime'] += (b.completed_at - b.started_at).total_seconds()
+
+        # Format results
+        by_model = {}
+        for mid, stats in model_stats.items():
+            avg_tp = sum(stats['throughputs']) / len(stats['throughputs']) if stats['throughputs'] else 0.0
+            success = stats['completed'] / stats['jobs'] if stats['jobs'] > 0 else 0.0
+
+            by_model[mid] = {
+                'total_jobs': stats['jobs'],
+                'completed_jobs': stats['completed'],
+                'failed_jobs': stats['failed'],
+                'success_rate': success,
+                'total_requests': stats['requests'],
+                'avg_throughput': avg_tp,
+                'total_runtime_seconds': stats['runtime']
+            }
+
+        return {
+            'total_jobs': total_jobs,
+            'total_requests': total_requests,
+            'overall_success_rate': success_rate,
+            'by_model': by_model
+        }
+
+    return {
+        'model_id': model_id,
+        'total_jobs': total_jobs,
+        'completed_jobs': completed_jobs,
+        'failed_jobs': failed_jobs,
+        'success_rate': success_rate,
+        'total_requests': total_requests,
+        'completed_requests': completed_requests,
+        'avg_throughput': avg_throughput,
+        'total_runtime_seconds': total_runtime
+    }
+
+
+def batch_install_models(db: Session, model_ids: list[str]):
+    """
+    Install multiple models in sequence.
+
+    Args:
+        db: Database session
+        model_ids: List of model IDs to install
+
+    Returns:
+        Installation status for each model
+    """
+    from core.batch_app.model_installer import ModelInstaller
+
+    installer = ModelInstaller()
+    results = []
+
+    for model_id in model_ids:
+        # Check if model exists
+        model = db.query(ModelRegistry).filter(ModelRegistry.model_id == model_id).first()
+        if not model:
+            results.append({
+                'model_id': model_id,
+                'status': 'error',
+                'message': 'Model not found in registry'
+            })
+            continue
+
+        # Check if already installed
+        if model.status == 'ready':
+            results.append({
+                'model_id': model_id,
+                'status': 'skipped',
+                'message': 'Already installed'
+            })
+            continue
+
+        # Validate pre-installation
+        try:
+            validation = installer.validate_pre_installation(model_id, db)
+            if not validation['can_install']:
+                results.append({
+                    'model_id': model_id,
+                    'status': 'error',
+                    'message': f"Validation failed: {', '.join(validation['errors'])}"
+                })
+                continue
+        except Exception as e:
+            results.append({
+                'model_id': model_id,
+                'status': 'error',
+                'message': f'Validation error: {str(e)}'
+            })
+            continue
+
+        # Start installation
+        try:
+            installer.install_model(model_id, db)
+            results.append({
+                'model_id': model_id,
+                'status': 'installing',
+                'message': 'Installation started'
+            })
+        except Exception as e:
+            results.append({
+                'model_id': model_id,
+                'status': 'error',
+                'message': f'Installation error: {str(e)}'
+            })
+
+    return {
+        'total': len(model_ids),
+        'results': results,
+        'summary': {
+            'installing': sum(1 for r in results if r['status'] == 'installing'),
+            'skipped': sum(1 for r in results if r['status'] == 'skipped'),
+            'errors': sum(1 for r in results if r['status'] == 'error')
+        }
+    }
+
+
+def compare_models_dashboard(db: Session, model_ids: list[str]):
+    """
+    Generate comparison dashboard for multiple models.
+
+    Compares models across:
+    - Specifications (size, memory, quantization)
+    - Performance (throughput, latency)
+    - Usage (job count, success rate)
+    - Cost (estimated per request)
+
+    Args:
+        db: Database session
+        model_ids: List of model IDs to compare
+
+    Returns:
+        Comparison data for dashboard
+    """
+    from core.batch_app.database import Benchmark
+    from core.batch_app.cost_tracking import get_model_tier
+
+    comparisons = []
+
+    for model_id in model_ids:
+        # Get model info
+        model = db.query(ModelRegistry).filter(ModelRegistry.model_id == model_id).first()
+        if not model:
+            continue
+
+        # Get benchmarks for this model
+        benchmarks = db.query(Benchmark).filter(Benchmark.model_id == model_id).all()
+
+        # Calculate performance metrics
+        throughputs = [b.throughput for b in benchmarks if b.throughput and b.throughput > 0]
+        avg_throughput = sum(throughputs) / len(throughputs) if throughputs else 0.0
+        max_throughput = max(throughputs) if throughputs else 0.0
+        min_throughput = min(throughputs) if throughputs else 0.0
+
+        # Calculate success rate
+        total_jobs = len(benchmarks)
+        completed_jobs = sum(1 for b in benchmarks if b.status == 'completed')
+        success_rate = completed_jobs / total_jobs if total_jobs > 0 else 0.0
+
+        # Calculate average latency (inverse of throughput)
+        avg_latency = 1.0 / avg_throughput if avg_throughput > 0 else 0.0
+
+        # Get cost tier
+        tier = get_model_tier(model_id)
+
+        # Estimate cost per 1K requests (assuming 250 input, 150 output tokens)
+        from core.batch_app.cost_tracking import DEFAULT_PRICING
+        pricing = DEFAULT_PRICING[tier]
+        cost_per_request = (250 * pricing['input_per_1m'] / 1_000_000) + (150 * pricing['output_per_1m'] / 1_000_000)
+        cost_per_1k = cost_per_request * 1000
+
+        comparisons.append({
+            'model_id': model_id,
+            'name': model.name,
+            'specifications': {
+                'size_gb': model.size_gb,
+                'estimated_memory_gb': model.estimated_memory_gb,
+                'quantization_type': model.quantization_type,
+                'max_model_len': model.max_model_len,
+                'rtx4080_compatible': model.rtx4080_compatible
+            },
+            'performance': {
+                'avg_throughput': round(avg_throughput, 2),
+                'max_throughput': round(max_throughput, 2),
+                'min_throughput': round(min_throughput, 2),
+                'avg_latency_seconds': round(avg_latency, 3)
+            },
+            'usage': {
+                'total_jobs': total_jobs,
+                'completed_jobs': completed_jobs,
+                'success_rate': round(success_rate, 3)
+            },
+            'cost': {
+                'tier': tier,
+                'cost_per_request': round(cost_per_request, 6),
+                'cost_per_1k_requests': round(cost_per_1k, 4),
+                'pricing': pricing
+            },
+            'status': model.status
+        })
+
+    # Calculate rankings
+    if comparisons:
+        # Rank by throughput (higher is better)
+        sorted_by_throughput = sorted(comparisons, key=lambda x: x['performance']['avg_throughput'], reverse=True)
+        for i, comp in enumerate(sorted_by_throughput):
+            comp['rankings'] = comp.get('rankings', {})
+            comp['rankings']['throughput'] = i + 1
+
+        # Rank by cost (lower is better)
+        sorted_by_cost = sorted(comparisons, key=lambda x: x['cost']['cost_per_request'])
+        for i, comp in enumerate(sorted_by_cost):
+            comp['rankings']['cost'] = i + 1
+
+        # Rank by success rate (higher is better)
+        sorted_by_success = sorted(comparisons, key=lambda x: x['usage']['success_rate'], reverse=True)
+        for i, comp in enumerate(sorted_by_success):
+            comp['rankings']['reliability'] = i + 1
+
+        # Calculate overall score (lower is better - sum of ranks)
+        for comp in comparisons:
+            ranks = comp['rankings']
+            comp['rankings']['overall_score'] = ranks['throughput'] + ranks['cost'] + ranks['reliability']
+
+        # Sort by overall score
+        comparisons.sort(key=lambda x: x['rankings']['overall_score'])
+
+    return {
+        'total_models': len(comparisons),
+        'comparisons': comparisons,
+        'summary': {
+            'fastest': comparisons[0]['model_id'] if comparisons else None,
+            'cheapest': min(comparisons, key=lambda x: x['cost']['cost_per_request'])['model_id'] if comparisons else None,
+            'most_reliable': max(comparisons, key=lambda x: x['usage']['success_rate'])['model_id'] if comparisons else None,
+            'best_overall': comparisons[0]['model_id'] if comparisons else None
+        }
+    }
+
+
 class AddModelRequest(BaseModel):
     """Request to add a new model."""
     model_id: str = Field(..., description="HuggingFace model ID (e.g., 'allenai/OLMo-2-1124-7B-Instruct')")
@@ -560,6 +997,32 @@ def get_benchmark_status(benchmark_id: str, db: Session) -> dict:
             benchmark.total_time_seconds = time.time() - proc_info["start_time"]
             benchmark.progress = 100
             benchmark.completed = benchmark.total
+
+            # Calculate final throughput
+            if benchmark.total_time_seconds > 0:
+                benchmark.throughput = benchmark.total / benchmark.total_time_seconds
+
+            # Save metadata file
+            metadata_path = Path(f"benchmarks/metadata/{benchmark_id}.json")
+            metadata_path.parent.mkdir(parents=True, exist_ok=True)
+
+            metadata = {
+                "benchmark_id": benchmark_id,
+                "model_id": benchmark.model_id,
+                "dataset_id": benchmark.dataset_id,
+                "total_requests": benchmark.total,
+                "completed_requests": benchmark.completed,
+                "total_time_seconds": benchmark.total_time_seconds,
+                "throughput_req_per_sec": benchmark.throughput,
+                "started_at": benchmark.started_at.isoformat(),
+                "completed_at": benchmark.completed_at.isoformat(),
+                "results_file": benchmark.results_file
+            }
+
+            with open(metadata_path, "w") as f:
+                json.dump(metadata, f, indent=2)
+
+            benchmark.metadata_file = str(metadata_path)
             db.commit()
         else:
             # Parse log for progress
@@ -610,4 +1073,42 @@ def get_benchmark_status(benchmark_id: str, db: Session) -> dict:
         "throughput": benchmark.throughput,
         "eta_seconds": benchmark.eta_seconds
     }
+
+
+def cancel_benchmark(benchmark_id: str):
+    """
+    Cancel a running benchmark.
+
+    Terminates the background process and cleans up resources.
+    """
+    if benchmark_id not in _active_benchmarks:
+        logger.warning(f"Benchmark {benchmark_id} not in active benchmarks")
+        return
+
+    proc_info = _active_benchmarks[benchmark_id]
+    process = proc_info["process"]
+
+    # Terminate process
+    if process.poll() is None:
+        logger.info(f"Terminating benchmark process {benchmark_id}")
+        process.terminate()
+
+        # Wait up to 5 seconds for graceful shutdown
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Benchmark {benchmark_id} did not terminate gracefully, killing")
+            process.kill()
+            process.wait()
+
+    # Close log file
+    if "log_file" in proc_info and proc_info["log_file"]:
+        try:
+            proc_info["log_file"].close()
+        except:
+            pass
+
+    # Remove from active benchmarks
+    _active_benchmarks.pop(benchmark_id)
+    logger.info(f"Cancelled benchmark {benchmark_id}")
 

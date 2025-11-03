@@ -1,0 +1,22 @@
+[Unit]
+Description=vLLM Batch Server - Worker Watchdog
+After=network.target vllm-batch-server.service vllm-batch-worker.service
+Requires=vllm-batch-server.service
+
+[Service]
+Type=simple
+User=vllm
+Group=vllm
+WorkingDirectory=/opt/vllm-batch-server
+Environment="PATH=/opt/vllm-batch-server/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONPATH=/opt/vllm-batch-server"
+ExecStart=/opt/vllm-batch-server/venv/bin/python -m core.batch_app.watchdog
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vllm-batch-watchdog
+
+[Install]
+WantedBy=multi-user.target
+

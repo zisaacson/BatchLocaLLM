@@ -14,6 +14,7 @@ import time
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from typing import Dict, Any, List, Optional
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi import File as FastAPIFile
@@ -753,6 +754,23 @@ async def job_history():
         return HTMLResponse(content=f.read())
 
 
+@app.get("/add-model", response_class=HTMLResponse)
+async def add_model_page():
+    """Serve the add model UI."""
+    # Check both locations: static/ and root static/
+    add_model_paths = [
+        Path(__file__).parent / "static" / "add-model.html",
+        Path(__file__).parent.parent.parent / "static" / "add-model.html"
+    ]
+
+    for add_model_path in add_model_paths:
+        if add_model_path.exists():
+            with open(add_model_path) as f:
+                return HTMLResponse(content=f.read())
+
+    raise HTTPException(status_code=404, detail="Add model page not found")
+
+
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_panel():
     """Serve the admin panel UI."""
@@ -762,6 +780,69 @@ async def admin_panel():
 
     with open(admin_html_path) as f:
         return HTMLResponse(content=f.read())
+
+
+@app.get("/admin/worker-logs", response_class=HTMLResponse)
+async def worker_logs_page():
+    """Serve the worker logs viewer UI."""
+    logs_html_path = Path(__file__).parent / "static" / "worker-logs.html"
+    if not logs_html_path.exists():
+        raise HTTPException(status_code=404, detail="Worker logs page not found")
+
+    with open(logs_html_path) as f:
+        return HTMLResponse(content=f.read())
+
+
+@app.get("/admin/worker-logs/content")
+async def worker_logs_content(tail: int = 500):
+    """
+    Get worker log content.
+
+    Args:
+        tail: Number of lines to return from end of log (default: 500)
+
+    Returns:
+        JSON with logs array and statistics
+    """
+    try:
+        # Find project root
+        project_root = Path(__file__).parent.parent.parent
+        log_file = project_root / "logs" / "worker.log"
+
+        if not log_file.exists():
+            return {
+                "logs": ["Worker log file not found. Worker may not have started yet."],
+                "total_lines": 0,
+                "error_count": 0,
+                "warning_count": 0
+            }
+
+        # Read log file
+        with open(log_file, 'r') as f:
+            all_lines = f.readlines()
+
+        # Get last N lines
+        lines = all_lines[-tail:] if len(all_lines) > tail else all_lines
+
+        # Count errors and warnings
+        error_count = sum(1 for line in lines if 'ERROR' in line or '❌' in line or 'Failed' in line)
+        warning_count = sum(1 for line in lines if 'WARNING' in line or '⚠️' in line)
+
+        return {
+            "logs": [line.rstrip() for line in lines],
+            "total_lines": len(lines),
+            "error_count": error_count,
+            "warning_count": warning_count
+        }
+
+    except Exception as e:
+        logger.error(f"Error reading worker logs: {e}")
+        return {
+            "logs": [f"Error reading logs: {str(e)}"],
+            "total_lines": 0,
+            "error_count": 0,
+            "warning_count": 0
+        }
 
 
 @app.get("/static/{filename}")
@@ -1238,6 +1319,105 @@ async def get_batch(batch_id: str, db: Session = Depends(get_db)):
     return response
 
 
+@app.post("/v1/inference")
+async def single_inference(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Single inference endpoint for real-time predictions.
+
+    Used by Label Studio ML Backend for interactive labeling.
+
+    Request body:
+        {
+            "model_id": "google/gemma-3-4b-it",  # Optional, defaults to first available
+            "prompt": "Your prompt here",         # For simple prompts
+            "messages": [...],                    # For chat format (alternative to prompt)
+            "max_tokens": 500,                    # Optional
+            "temperature": 0.7,                   # Optional
+            "top_p": 0.9,                         # Optional
+            "stop": ["</s>"]                      # Optional
+        }
+
+    Returns:
+        {
+            "text": "Generated response",
+            "model": "model_id",
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "total_tokens": 150
+            },
+            "latency_ms": 1234
+        }
+    """
+    from core.batch_app.inference import get_inference_engine
+
+    try:
+        body = await request.json()
+
+        # Get model ID (default to first available model)
+        model_id = body.get('model_id')
+        if not model_id:
+            # Get default model from registry
+            models = db.query(ModelRegistry).filter(
+                ModelRegistry.status == 'ready'
+            ).order_by(ModelRegistry.created_at.desc()).all()
+
+            if not models:
+                raise HTTPException(status_code=400, detail="No models available. Please install a model first.")
+
+            model_id = models[0].model_id
+            logger.info(f"No model_id specified, using default: {model_id}")
+
+        # Get prompt or messages
+        prompt = body.get('prompt')
+        messages = body.get('messages')
+
+        if not prompt and not messages:
+            raise HTTPException(status_code=400, detail="Missing 'prompt' or 'messages' field")
+
+        # Get parameters
+        max_tokens = body.get('max_tokens', 500)
+        temperature = body.get('temperature', 0.7)
+        top_p = body.get('top_p', 0.9)
+        stop = body.get('stop')
+
+        # Get inference engine
+        engine = get_inference_engine()
+
+        # Generate response
+        if messages:
+            result = engine.generate_chat(
+                messages=messages,
+                model_id=model_id,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop=stop
+            )
+        else:
+            result = engine.generate(
+                prompt=prompt,
+                model_id=model_id,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop=stop
+            )
+
+        logger.info(f"Single inference complete: model={model_id}, latency={result['latency_ms']}ms")
+
+        return result
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    except Exception as e:
+        logger.error(f"Error in single inference: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/v1/batches")
 async def list_batches(
     limit: int = 20,
@@ -1516,24 +1696,123 @@ async def delete_model_admin(model_id: str, db: Session = Depends(get_db)):
 # WORKBENCH API ENDPOINTS
 # ============================================================================
 
+def validate_dataset(file_path: Path) -> Dict[str, Any]:
+    """
+    Validate JSONL dataset before accepting upload.
+
+    Checks:
+    - Valid JSONL format
+    - Required fields present
+    - OpenAI batch format compliance
+    - Reasonable file size
+
+    Returns:
+        {
+            'valid': bool,
+            'errors': List[str],
+            'warnings': List[str],
+            'count': int,
+            'preview': List[dict]  # First 3 requests
+        }
+    """
+    errors = []
+    warnings = []
+    count = 0
+    preview = []
+
+    try:
+        with open(file_path, 'r') as f:
+            for i, line in enumerate(f, 1):
+                if not line.strip():
+                    continue
+
+                try:
+                    data = json.loads(line)
+                    count += 1
+
+                    # Check required fields
+                    if 'custom_id' not in data:
+                        errors.append(f"Line {i}: Missing 'custom_id'")
+                    if 'method' not in data:
+                        errors.append(f"Line {i}: Missing 'method'")
+                    if 'url' not in data:
+                        errors.append(f"Line {i}: Missing 'url'")
+                    if 'body' not in data:
+                        errors.append(f"Line {i}: Missing 'body'")
+
+                    # Check OpenAI format
+                    if data.get('method') != 'POST':
+                        warnings.append(f"Line {i}: Method should be POST (got {data.get('method')})")
+
+                    if data.get('url') != '/v1/chat/completions':
+                        warnings.append(f"Line {i}: URL should be /v1/chat/completions")
+
+                    # Check body structure
+                    body = data.get('body', {})
+                    if 'model' not in body:
+                        errors.append(f"Line {i}: Missing 'model' in body")
+                    if 'messages' not in body:
+                        errors.append(f"Line {i}: Missing 'messages' in body")
+
+                    # Add to preview (first 3)
+                    if len(preview) < 3:
+                        preview.append({
+                            'custom_id': data.get('custom_id', 'unknown'),
+                            'model': body.get('model', 'unknown'),
+                            'prompt_preview': str(body.get('messages', []))[:100] + '...'
+                        })
+
+                    # Stop after 100 errors
+                    if len(errors) >= 100:
+                        errors.append("Too many errors, stopping validation")
+                        break
+
+                except json.JSONDecodeError as e:
+                    errors.append(f"Line {i}: Invalid JSON - {str(e)}")
+
+    except Exception as e:
+        errors.append(f"Failed to read file: {str(e)}")
+
+    # Check file size
+    if count == 0:
+        errors.append("No valid requests found in file")
+    elif count > 50000:
+        warnings.append(f"Large dataset ({count:,} requests). Processing may take a long time.")
+
+    return {
+        'valid': len(errors) == 0,
+        'errors': errors[:20],  # Limit to first 20 errors
+        'warnings': warnings[:10],  # Limit to first 10 warnings
+        'count': count,
+        'preview': preview
+    }
+
+
 @app.post("/admin/datasets/upload")
 async def upload_dataset(file: UploadFile, db: Session = Depends(get_db)):
     """
-    Upload a dataset (JSONL file) for benchmarking.
+    Upload a dataset (JSONL file) for benchmarking with validation.
 
     Args:
         file: JSONL file with batch requests
 
     Returns:
-        Dataset metadata
+        Dataset metadata with validation results
     """
     import uuid
     from pathlib import Path
 
+    # Validate file extension
+    if not file.filename.endswith('.jsonl'):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file format. Only .jsonl files are supported."
+        )
+
     # Generate dataset ID
     dataset_id = f"ds_{uuid.uuid4().hex[:12]}"
 
-    # Save file
+    # Save file temporarily
     datasets_dir = Path("data/datasets")
     datasets_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1543,12 +1822,20 @@ async def upload_dataset(file: UploadFile, db: Session = Depends(get_db)):
     with open(file_path, "wb") as f:
         f.write(content)
 
-    # Count requests
-    count = 0
-    with open(file_path, "r") as f:
-        for line in f:
-            if line.strip():
-                count += 1
+    # Validate dataset
+    validation = validate_dataset(file_path)
+
+    if not validation['valid']:
+        # Delete invalid file
+        file_path.unlink()
+        raise HTTPException(
+            status_code=400,
+            detail={
+                'message': 'Dataset validation failed',
+                'errors': validation['errors'],
+                'warnings': validation['warnings']
+            }
+        )
 
     # Create dataset record
     from core.batch_app.database import Dataset
@@ -1557,20 +1844,24 @@ async def upload_dataset(file: UploadFile, db: Session = Depends(get_db)):
         id=dataset_id,
         name=file.filename,
         file_path=str(file_path),
-        count=count,
+        count=validation['count'],
         uploaded_at=datetime.now(timezone.utc)
     )
 
     db.add(dataset)
     db.commit()
 
-    logger.info(f"Uploaded dataset {file.filename} ({count} requests)")
+    logger.info(f"Uploaded dataset {file.filename} ({validation['count']} requests)")
 
     return {
         "dataset_id": dataset_id,
         "name": file.filename,
-        "count": count,
-        "uploaded_at": dataset.uploaded_at.isoformat()
+        "count": validation['count'],
+        "uploaded_at": dataset.uploaded_at.isoformat(),
+        "validation": {
+            'warnings': validation['warnings'],
+            'preview': validation['preview']
+        }
     }
 
 
@@ -1717,6 +2008,51 @@ async def list_active_benchmarks(db: Session = Depends(get_db)):
         })
 
     return {"jobs": jobs}
+
+
+@app.post("/admin/benchmarks/{benchmark_id}/cancel")
+async def cancel_benchmark(benchmark_id: str, db: Session = Depends(get_db)):
+    """
+    Cancel a running benchmark.
+
+    Args:
+        benchmark_id: Benchmark ID to cancel
+
+    Returns:
+        Updated benchmark status
+    """
+    from core.batch_app.database import Benchmark
+    from core.batch_app.model_manager import cancel_benchmark as cancel_benchmark_process
+
+    benchmark = db.query(Benchmark).filter(Benchmark.id == benchmark_id).first()
+    if not benchmark:
+        raise HTTPException(status_code=404, detail=f"Benchmark '{benchmark_id}' not found")
+
+    if benchmark.status != 'running':
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel benchmark with status '{benchmark.status}'"
+        )
+
+    # Cancel the background process
+    try:
+        cancel_benchmark_process(benchmark_id)
+    except Exception as e:
+        logger.error(f"Error cancelling benchmark process: {e}")
+
+    # Update status
+    benchmark.status = 'cancelled'
+    benchmark.completed_at = datetime.now(timezone.utc)
+    db.commit()
+
+    logger.info(f"Cancelled benchmark {benchmark_id}")
+
+    return {
+        "benchmark_id": benchmark_id,
+        "status": "cancelled",
+        "completed": benchmark.completed,
+        "total": benchmark.total
+    }
 
 
 @app.get("/admin/workbench/results")
@@ -1960,6 +2296,757 @@ async def mark_wrong(dataset_id: str, candidate_id: str, model_id: str, db: Sess
         "candidate_id": candidate_id,
         "is_wrong": annotation.is_wrong
     }
+
+
+# ============================================================================
+# Workbench Comparison Endpoints
+# ============================================================================
+
+class CompareModelsRequest(BaseModel):
+    """Request to compare two models."""
+    benchmark_id_a: str = Field(..., description="First benchmark ID")
+    benchmark_id_b: str = Field(..., description="Second benchmark ID")
+
+
+@app.post("/admin/workbench/compare")
+async def compare_models(request: CompareModelsRequest, db: Session = Depends(get_db)):
+    """
+    Compare responses from two models.
+
+    Provides:
+    - Diff viewer for responses
+    - Agreement rate
+    - Unique answers
+
+    Returns detailed comparison analysis.
+    """
+    from core.batch_app.database import Benchmark
+    from core.batch_app.result_comparison import compare_responses
+
+    # Get benchmarks
+    bm_a = db.query(Benchmark).filter(Benchmark.id == request.benchmark_id_a).first()
+    bm_b = db.query(Benchmark).filter(Benchmark.id == request.benchmark_id_b).first()
+
+    if not bm_a or not bm_b:
+        raise HTTPException(status_code=404, detail="Benchmark not found")
+
+    # Load results
+    if not bm_a.results_file or not Path(bm_a.results_file).exists():
+        raise HTTPException(status_code=404, detail=f"Results file not found for benchmark {request.benchmark_id_a}")
+
+    if not bm_b.results_file or not Path(bm_b.results_file).exists():
+        raise HTTPException(status_code=404, detail=f"Results file not found for benchmark {request.benchmark_id_b}")
+
+    with open(bm_a.results_file, 'r') as f:
+        results_a = [json.loads(line) for line in f if line.strip()]
+
+    with open(bm_b.results_file, 'r') as f:
+        results_b = [json.loads(line) for line in f if line.strip()]
+
+    # Get model names
+    model_a = db.query(ModelRegistry).filter(ModelRegistry.model_id == bm_a.model_id).first()
+    model_b = db.query(ModelRegistry).filter(ModelRegistry.model_id == bm_b.model_id).first()
+
+    model_a_name = model_a.name if model_a else bm_a.model_id
+    model_b_name = model_b.name if model_b else bm_b.model_id
+
+    # Compare
+    comparison = compare_responses(results_a, results_b, model_a_name, model_b_name)
+
+    return comparison
+
+
+class FindUniqueAnswersRequest(BaseModel):
+    """Request to find unique answers across models."""
+    benchmark_ids: List[str] = Field(..., description="List of benchmark IDs to compare")
+
+
+@app.post("/admin/workbench/unique-answers")
+async def find_unique_answers(request: FindUniqueAnswersRequest, db: Session = Depends(get_db)):
+    """
+    Find unique answers across multiple models.
+
+    Identifies cases where one model gives a different answer than all others.
+    Useful for finding interesting examples for in-context learning.
+
+    Returns analysis of unique answers.
+    """
+    from core.batch_app.database import Benchmark
+    from core.batch_app.result_comparison import find_unique_answers as find_unique
+
+    if len(request.benchmark_ids) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 benchmarks to compare")
+
+    # Load all benchmarks and results
+    results_list = []
+    model_names = []
+
+    for benchmark_id in request.benchmark_ids:
+        bm = db.query(Benchmark).filter(Benchmark.id == benchmark_id).first()
+        if not bm:
+            raise HTTPException(status_code=404, detail=f"Benchmark {benchmark_id} not found")
+
+        if not bm.results_file or not Path(bm.results_file).exists():
+            raise HTTPException(status_code=404, detail=f"Results file not found for benchmark {benchmark_id}")
+
+        with open(bm.results_file, 'r') as f:
+            results = [json.loads(line) for line in f if line.strip()]
+
+        model = db.query(ModelRegistry).filter(ModelRegistry.model_id == bm.model_id).first()
+        model_name = model.name if model else bm.model_id
+
+        results_list.append(results)
+        model_names.append(model_name)
+
+    # Find unique answers
+    analysis = find_unique(results_list, model_names)
+
+    return analysis
+
+
+@app.get("/admin/workbench/quality-metrics/{benchmark_id}")
+async def get_quality_metrics(benchmark_id: str, db: Session = Depends(get_db)):
+    """
+    Get quality metrics for a benchmark.
+
+    Metrics include:
+    - Average response length
+    - Token usage
+    - Error rate
+
+    Returns quality metrics.
+    """
+    from core.batch_app.database import Benchmark
+    from core.batch_app.result_comparison import calculate_quality_metrics
+
+    bm = db.query(Benchmark).filter(Benchmark.id == benchmark_id).first()
+    if not bm:
+        raise HTTPException(status_code=404, detail="Benchmark not found")
+
+    if not bm.results_file or not Path(bm.results_file).exists():
+        raise HTTPException(status_code=404, detail="Results file not found")
+
+    with open(bm.results_file, 'r') as f:
+        results = [json.loads(line) for line in f if line.strip()]
+
+    model = db.query(ModelRegistry).filter(ModelRegistry.model_id == bm.model_id).first()
+    model_name = model.name if model else bm.model_id
+
+    metrics = calculate_quality_metrics(results, model_name)
+
+    return metrics
+
+
+# ============================================================================
+# Cost Tracking Endpoints
+# ============================================================================
+
+@app.get("/admin/workbench/cost/{benchmark_id}")
+async def get_benchmark_cost(benchmark_id: str, db: Session = Depends(get_db)):
+    """
+    Get cost analysis for a benchmark.
+
+    Returns:
+        Cost breakdown with token usage
+    """
+    from core.batch_app.database import Benchmark
+    from core.batch_app.cost_tracking import calculate_batch_cost
+
+    bm = db.query(Benchmark).filter(Benchmark.id == benchmark_id).first()
+    if not bm:
+        raise HTTPException(status_code=404, detail="Benchmark not found")
+
+    if not bm.results_file or not Path(bm.results_file).exists():
+        raise HTTPException(status_code=404, detail="Results file not found")
+
+    with open(bm.results_file, 'r') as f:
+        results = [json.loads(line) for line in f if line.strip()]
+
+    cost_analysis = calculate_batch_cost(results, bm.model_id)
+
+    return {
+        'benchmark_id': benchmark_id,
+        'model_id': bm.model_id,
+        **cost_analysis
+    }
+
+
+class EstimateCostRequest(BaseModel):
+    """Request to estimate batch cost."""
+    num_requests: int = Field(..., description="Number of requests")
+    avg_prompt_tokens: int = Field(..., description="Average prompt tokens per request")
+    avg_completion_tokens: int = Field(..., description="Average completion tokens per request")
+    model_id: str = Field(..., description="Model identifier")
+
+
+@app.post("/admin/workbench/estimate-cost")
+async def estimate_cost(request: EstimateCostRequest):
+    """
+    Estimate cost for a batch before running.
+
+    Returns:
+        Cost estimate
+    """
+    from core.batch_app.cost_tracking import estimate_batch_cost
+
+    estimate = estimate_batch_cost(
+        num_requests=request.num_requests,
+        avg_prompt_tokens=request.avg_prompt_tokens,
+        avg_completion_tokens=request.avg_completion_tokens,
+        model_id=request.model_id
+    )
+
+    return estimate
+
+
+@app.get("/admin/workbench/usage-summary")
+async def get_usage_summary(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    model_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get usage summary for a time period.
+
+    Args:
+        start_date: Start date (ISO format, optional)
+        end_date: End date (ISO format, optional)
+        model_id: Filter by model (optional)
+
+    Returns:
+        Usage summary with costs
+    """
+    from core.batch_app.cost_tracking import get_usage_summary as get_summary
+    from datetime import datetime
+
+    start_dt = datetime.fromisoformat(start_date) if start_date else None
+    end_dt = datetime.fromisoformat(end_date) if end_date else None
+
+    summary = get_summary(db, start_dt, end_dt, model_id)
+
+    return summary
+
+
+class BudgetAlertRequest(BaseModel):
+    """Request to check budget alert."""
+    budget_limit: float = Field(..., description="Budget limit in dollars")
+    alert_threshold: float = Field(default=0.8, description="Alert threshold (0-1)")
+
+
+@app.post("/admin/workbench/budget-alert")
+async def check_budget_alert(request: BudgetAlertRequest, db: Session = Depends(get_db)):
+    """
+    Check budget alert status.
+
+    Returns:
+        Alert status and remaining budget
+    """
+    from core.batch_app.cost_tracking import get_usage_summary as get_summary, check_budget_alert as check_alert
+
+    # Get current spending
+    summary = get_summary(db)
+    current_cost = summary['total_cost']
+
+    # Check alert
+    alert = check_alert(current_cost, request.budget_limit, request.alert_threshold)
+
+    return alert
+
+
+# ============================================================================
+# Label Studio Integration Endpoints
+# ============================================================================
+
+@app.get("/admin/label-studio/export/{project_id}")
+async def export_label_studio_annotations(
+    project_id: int,
+    only_completed: bool = True
+):
+    """
+    Export annotations from Label Studio.
+
+    Args:
+        project_id: Label Studio project ID
+        only_completed: Only export completed annotations
+
+    Returns:
+        List of exported annotations
+    """
+    from core.result_handlers.label_studio import LabelStudioHandler
+
+    handler = LabelStudioHandler()
+    annotations = handler.export_annotations(project_id, only_completed)
+
+    return {
+        'project_id': project_id,
+        'total_annotations': len(annotations),
+        'annotations': annotations
+    }
+
+
+@app.get("/admin/label-studio/export-curated/{project_id}")
+async def export_curated_data(project_id: int):
+    """
+    Export curated training data from Label Studio.
+
+    Converts Label Studio annotations back to training-ready format.
+
+    Args:
+        project_id: Label Studio project ID
+
+    Returns:
+        List of curated training examples
+    """
+    from core.result_handlers.label_studio import LabelStudioHandler
+
+    handler = LabelStudioHandler()
+    curated = handler.export_curated_data(project_id)
+
+    return {
+        'project_id': project_id,
+        'total_examples': len(curated),
+        'examples': curated
+    }
+
+
+class MultiModelComparisonRequest(BaseModel):
+    """Request to create multi-model comparison task."""
+    project_id: int = Field(..., description="Label Studio project ID")
+    custom_id: str = Field(..., description="Request custom ID")
+    benchmark_ids: List[str] = Field(..., description="List of benchmark IDs to compare")
+
+
+@app.post("/admin/label-studio/multi-model-comparison")
+async def create_multi_model_comparison(
+    request: MultiModelComparisonRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a Label Studio task with predictions from multiple models.
+
+    Useful for comparing model outputs side-by-side.
+
+    Args:
+        project_id: Label Studio project ID
+        custom_id: Request custom ID to compare
+        benchmark_ids: List of benchmark IDs
+
+    Returns:
+        Task ID
+    """
+    from core.batch_app.database import Benchmark
+    from core.result_handlers.label_studio import LabelStudioHandler
+
+    if len(request.benchmark_ids) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 benchmarks to compare")
+
+    # Load results from each benchmark
+    model_responses = {}
+    input_data = None
+
+    for benchmark_id in request.benchmark_ids:
+        bm = db.query(Benchmark).filter(Benchmark.id == benchmark_id).first()
+        if not bm:
+            raise HTTPException(status_code=404, detail=f"Benchmark {benchmark_id} not found")
+
+        if not bm.results_file or not Path(bm.results_file).exists():
+            raise HTTPException(status_code=404, detail=f"Results file not found for benchmark {benchmark_id}")
+
+        # Find result for this custom_id
+        with open(bm.results_file, 'r') as f:
+            for line in f:
+                if not line.strip():
+                    continue
+
+                result = json.loads(line)
+                if result.get('custom_id') == request.custom_id:
+                    # Extract response
+                    response = result.get('response', {}).get('body', {}).get('choices', [{}])[0].get('message', {}).get('content', '')
+
+                    # Get model name
+                    model = db.query(ModelRegistry).filter(ModelRegistry.model_id == bm.model_id).first()
+                    model_name = model.name if model else bm.model_id
+
+                    model_responses[model_name] = response
+
+                    # Save input data (same for all models)
+                    if not input_data:
+                        input_data = result.get('input', {})
+
+                    break
+
+    if not model_responses:
+        raise HTTPException(status_code=404, detail=f"No results found for custom_id {request.custom_id}")
+
+    # Create multi-model task
+    handler = LabelStudioHandler()
+    task_id = handler.create_multi_model_task(
+        project_id=request.project_id,
+        input_data=input_data,
+        model_responses=model_responses
+    )
+
+    return {
+        'task_id': task_id,
+        'project_id': request.project_id,
+        'custom_id': request.custom_id,
+        'models': list(model_responses.keys())
+    }
+
+
+# ============================================================================
+# Model Management Advanced Endpoints (Sprint 3)
+# ============================================================================
+
+@app.get("/api/models/search")
+async def search_models_endpoint(
+    query: Optional[str] = None,
+    status: Optional[str] = None,
+    rtx4080_compatible: Optional[bool] = None,
+    min_size_gb: Optional[float] = None,
+    max_size_gb: Optional[float] = None,
+    min_memory_gb: Optional[float] = None,
+    max_memory_gb: Optional[float] = None,
+    quantization_type: Optional[str] = None,
+    sort_by: str = 'created_at',
+    sort_order: str = 'desc',
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """
+    Search and filter models with advanced criteria.
+
+    Query Parameters:
+        query: Text search in model_id, name, or notes
+        status: Filter by status (downloading, ready, failed, etc.)
+        rtx4080_compatible: Filter by RTX 4080 compatibility
+        min_size_gb: Minimum model size in GB
+        max_size_gb: Maximum model size in GB
+        min_memory_gb: Minimum GPU memory requirement
+        max_memory_gb: Maximum GPU memory requirement
+        quantization_type: Filter by quantization (Q4_K_M, Q8_0, F16, etc.)
+        sort_by: Field to sort by (created_at, size_gb, name, etc.)
+        sort_order: Sort order (asc, desc)
+        limit: Maximum results to return
+        offset: Offset for pagination
+
+    Returns:
+        Paginated list of models matching criteria
+    """
+    from core.batch_app.model_manager import search_models
+
+    result = search_models(
+        db=db,
+        query=query,
+        status=status,
+        rtx4080_compatible=rtx4080_compatible,
+        min_size_gb=min_size_gb,
+        max_size_gb=max_size_gb,
+        min_memory_gb=min_memory_gb,
+        max_memory_gb=max_memory_gb,
+        quantization_type=quantization_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit,
+        offset=offset
+    )
+
+    return result
+
+
+@app.get("/api/models/usage-analytics")
+async def get_model_usage_analytics_endpoint(
+    model_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get usage analytics for models.
+
+    Query Parameters:
+        model_id: Optional model ID to filter by (if not provided, returns analytics for all models)
+
+    Returns:
+        Usage analytics including job counts, success rates, avg throughput
+    """
+    from core.batch_app.model_manager import get_model_usage_analytics
+
+    analytics = get_model_usage_analytics(db, model_id)
+    return analytics
+
+
+class BatchInstallRequest(BaseModel):
+    """Request to install multiple models."""
+    model_ids: List[str] = Field(..., description="List of model IDs to install")
+
+
+@app.post("/api/models/batch-install")
+async def batch_install_models_endpoint(
+    request: BatchInstallRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Install multiple models in sequence.
+
+    Args:
+        model_ids: List of model IDs to install
+
+    Returns:
+        Installation status for each model
+    """
+    from core.batch_app.model_manager import batch_install_models
+
+    result = batch_install_models(db, request.model_ids)
+    return result
+
+
+class CompareModelsRequest(BaseModel):
+    """Request to compare multiple models."""
+    model_ids: List[str] = Field(..., description="List of model IDs to compare (2-10 models)")
+
+
+@app.post("/api/models/compare-dashboard")
+async def compare_models_dashboard_endpoint(
+    request: CompareModelsRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate comparison dashboard for multiple models.
+
+    Compares models across:
+    - Specifications (size, memory, quantization)
+    - Performance (throughput, latency)
+    - Usage (job count, success rate)
+    - Cost (estimated per request)
+
+    Args:
+        model_ids: List of model IDs to compare (2-10 models)
+
+    Returns:
+        Comparison data with rankings
+    """
+    from core.batch_app.model_manager import compare_models_dashboard
+
+    if len(request.model_ids) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 models to compare")
+    if len(request.model_ids) > 10:
+        raise HTTPException(status_code=400, detail="Can compare maximum 10 models at once")
+
+    comparison = compare_models_dashboard(db, request.model_ids)
+    return comparison
+
+
+# ============================================================================
+# Workbench Analytics Endpoints (Sprint 3)
+# ============================================================================
+
+@app.get("/admin/workbench/benchmark-history")
+async def get_benchmark_history_endpoint(
+    model_id: Optional[str] = None,
+    dataset_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """
+    Get benchmark history with filtering and pagination.
+
+    Query Parameters:
+        model_id: Filter by model ID
+        dataset_id: Filter by dataset ID
+        start_date: Filter by start date (ISO format)
+        end_date: Filter by end date (ISO format)
+        status: Filter by status (running, completed, failed, cancelled)
+        limit: Maximum results to return
+        offset: Offset for pagination
+
+    Returns:
+        Paginated benchmark history
+    """
+    from core.batch_app.workbench_analytics import get_benchmark_history
+    from datetime import datetime
+
+    # Parse dates
+    start_dt = datetime.fromisoformat(start_date) if start_date else None
+    end_dt = datetime.fromisoformat(end_date) if end_date else None
+
+    history = get_benchmark_history(
+        db=db,
+        model_id=model_id,
+        dataset_id=dataset_id,
+        start_date=start_dt,
+        end_date=end_dt,
+        status=status,
+        limit=limit,
+        offset=offset
+    )
+
+    return history
+
+
+class QualityDashboardRequest(BaseModel):
+    """Request for quality metrics dashboard."""
+    benchmark_ids: List[str] = Field(..., description="List of benchmark IDs to analyze")
+
+
+@app.post("/admin/workbench/quality-dashboard")
+async def get_quality_dashboard_endpoint(
+    request: QualityDashboardRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate quality metrics dashboard for multiple benchmarks.
+
+    Compares quality across benchmarks:
+    - Response quality scores
+    - Consistency metrics
+    - Error analysis
+    - Token efficiency
+
+    Args:
+        benchmark_ids: List of benchmark IDs to analyze
+
+    Returns:
+        Quality metrics dashboard data
+    """
+    from core.batch_app.workbench_analytics import get_quality_metrics_dashboard
+
+    dashboard = get_quality_metrics_dashboard(db, request.benchmark_ids)
+    return dashboard
+
+
+class ExportReportRequest(BaseModel):
+    """Request to export comparison report."""
+    benchmark_ids: List[str] = Field(..., description="List of benchmark IDs to compare")
+    format: str = Field(default='json', description="Export format (json, csv, markdown)")
+
+
+@app.post("/admin/workbench/export-report")
+async def export_comparison_report_endpoint(
+    request: ExportReportRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Export detailed comparison report for benchmarks.
+
+    Args:
+        benchmark_ids: List of benchmark IDs to compare
+        format: Export format (json, csv, markdown)
+
+    Returns:
+        Comparison report in requested format
+    """
+    from core.batch_app.workbench_analytics import export_comparison_report
+
+    if request.format not in ['json', 'csv', 'markdown']:
+        raise HTTPException(status_code=400, detail="Format must be json, csv, or markdown")
+
+    report = export_comparison_report(db, request.benchmark_ids, request.format)
+
+    # Return appropriate content type
+    if request.format == 'markdown':
+        return Response(content=report, media_type='text/markdown')
+    elif request.format == 'csv':
+        return Response(content=report, media_type='text/csv')
+    else:
+        return report
+
+
+# ============================================================================
+# Label Studio Advanced Endpoints (Sprint 3)
+# ============================================================================
+
+@app.get("/admin/label-studio/suggest-tasks/{project_id}")
+async def suggest_next_tasks_endpoint(
+    project_id: int,
+    strategy: str = 'uncertainty',
+    limit: int = 10
+):
+    """
+    Active learning: Suggest next tasks to label.
+
+    Strategies:
+    - uncertainty: Tasks with lowest prediction confidence
+    - disagreement: Tasks where models disagree most
+    - random: Random unlabeled tasks
+
+    Args:
+        project_id: Label Studio project ID
+        strategy: Selection strategy (uncertainty, disagreement, random)
+        limit: Number of tasks to suggest
+
+    Returns:
+        List of suggested tasks
+    """
+    from core.result_handlers.label_studio import LabelStudioHandler
+
+    if strategy not in ['uncertainty', 'disagreement', 'random']:
+        raise HTTPException(status_code=400, detail="Strategy must be uncertainty, disagreement, or random")
+
+    handler = LabelStudioHandler()
+    suggestions = handler.suggest_next_tasks(project_id, strategy, limit)
+
+    return {
+        'project_id': project_id,
+        'strategy': strategy,
+        'total_suggested': len(suggestions),
+        'tasks': suggestions
+    }
+
+
+@app.get("/admin/label-studio/quality-metrics/{project_id}")
+async def get_annotation_quality_metrics_endpoint(project_id: int):
+    """
+    Get annotation quality metrics for a project.
+
+    Metrics:
+    - Inter-annotator agreement
+    - Annotation speed
+    - Completion rate
+    - Quality scores
+
+    Args:
+        project_id: Label Studio project ID
+
+    Returns:
+        Quality metrics
+    """
+    from core.result_handlers.label_studio import LabelStudioHandler
+
+    handler = LabelStudioHandler()
+    metrics = handler.get_annotation_quality_metrics(project_id)
+
+    return metrics
+
+
+class BulkImportRequest(BaseModel):
+    """Request to bulk import tasks."""
+    project_id: int = Field(..., description="Label Studio project ID")
+    tasks_data: List[Dict[str, Any]] = Field(..., description="List of task data dictionaries")
+
+
+@app.post("/admin/label-studio/bulk-import")
+async def bulk_import_tasks_endpoint(request: BulkImportRequest):
+    """
+    Bulk import tasks to Label Studio.
+
+    Args:
+        project_id: Label Studio project ID
+        tasks_data: List of task data dictionaries
+
+    Returns:
+        Import results
+    """
+    from core.result_handlers.label_studio import LabelStudioHandler
+
+    handler = LabelStudioHandler()
+    result = handler.bulk_import_tasks(request.project_id, request.tasks_data)
+
+    return result
 
 
 # ============================================================================
@@ -2413,6 +3500,99 @@ class InstallModelRequest(BaseModel):
     gguf_file: str = Field(..., description="Specific GGUF file to download")
 
 
+class ValidateModelRequest(BaseModel):
+    """Request to validate model before installation."""
+    model_id: str = Field(..., description="HuggingFace model ID")
+    gguf_file: str = Field(..., description="Specific GGUF file to download")
+    estimated_size_gb: float = Field(..., description="Estimated file size in GB")
+
+
+@app.post("/api/models/validate")
+async def validate_model_endpoint(request: ValidateModelRequest):
+    """
+    Validate model before installation.
+
+    Checks:
+    - Disk space available
+    - Model not already installed
+    - GGUF format supported
+
+    Returns validation result with errors/warnings.
+    """
+    try:
+        installer = ModelInstaller()
+        result = installer.validate_pre_installation(
+            model_id=request.model_id,
+            gguf_file=request.gguf_file,
+            estimated_size_gb=request.estimated_size_gb
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error validating model: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/models/{model_id}/verify")
+async def verify_model_endpoint(model_id: str, gguf_file: str):
+    """
+    Verify model installation after download.
+
+    Runs comprehensive verification:
+    - File integrity check
+    - Load test
+    - Inference test
+    - Mini-benchmark
+
+    Returns verification results.
+    """
+    try:
+        installer = ModelInstaller()
+        result = installer.verify_installation(
+            model_id=model_id,
+            gguf_file=gguf_file
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error verifying model: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RecommendQuantizationRequest(BaseModel):
+    """Request to get quantization recommendation."""
+    model_id: str = Field(..., description="HuggingFace model ID")
+    gpu_memory_gb: float = Field(default=16.0, description="Available GPU memory in GB")
+    use_case: str = Field(default='balanced', description="Use case: 'speed', 'balanced', or 'quality'")
+
+
+@app.post("/api/models/recommend-quantization")
+async def recommend_quantization_endpoint(request: RecommendQuantizationRequest):
+    """
+    Get quantization recommendation for a model.
+
+    Analyzes model size and hardware constraints to recommend
+    optimal quantization level.
+
+    Args:
+        model_id: HuggingFace model ID
+        gpu_memory_gb: Available GPU memory (default: 16 GB for RTX 4080)
+        use_case: Optimization target ('speed', 'balanced', 'quality')
+
+    Returns:
+        Recommended quantization with reasoning and alternatives
+    """
+    try:
+        installer = ModelInstaller()
+        result = installer.recommend_quantization(
+            model_id=request.model_id,
+            gpu_memory_gb=request.gpu_memory_gb,
+            use_case=request.use_case
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error recommending quantization: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/models/analyze")
 async def analyze_model_endpoint(request: AnalyzeModelRequest):
     """
@@ -2444,8 +3624,8 @@ async def install_model_endpoint(request: InstallModelRequest):
     try:
         installer = ModelInstaller()
 
-        # Start installation in background
-        # For now, run synchronously (TODO: make async)
+        # Install model synchronously
+        # Future: Could be made async for large downloads
         result = installer.install_model(
             model_id=request.model_id,
             gguf_file=request.gguf_file
@@ -2599,6 +3779,143 @@ async def list_failed_webhooks(
     }
 
 
+@app.post("/v1/webhooks/label-studio")
+async def label_studio_webhook(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Receive webhooks from Label Studio.
+
+    Handles events:
+    - TASK_CREATED: New task added
+    - TASK_DELETED: Task removed
+    - ANNOTATION_CREATED: New annotation submitted
+    - ANNOTATION_UPDATED: Annotation modified
+    - ANNOTATION_DELETED: Annotation removed
+    - PROJECT_CREATED: New project created
+    - PROJECT_UPDATED: Project settings changed
+    - START_TRAINING: Training initiated
+
+    Automated actions:
+    - Validation on ANNOTATION_CREATED
+    - Training trigger on 100th annotation
+    - Data export on project completion
+    """
+    try:
+        payload = await request.json()
+        event_type = payload.get('action')
+
+        logger.info(f"Received Label Studio webhook: {event_type}")
+
+        # Store event in database for audit trail
+        # TODO: Create LabelStudioEvent table
+
+        # Handle different event types
+        if event_type == 'ANNOTATION_CREATED':
+            # Run validation checks
+            annotation = payload.get('annotation', {})
+            task = payload.get('task', {})
+            project_id = payload.get('project', {}).get('id')
+
+            logger.info(f"New annotation created: task_id={task.get('id')}, annotation_id={annotation.get('id')}")
+
+            # Validation: Check if annotation is complete
+            result = annotation.get('result', [])
+            is_complete = len(result) > 0
+
+            if not is_complete:
+                logger.warning(f"Annotation {annotation.get('id')} is incomplete (no results)")
+
+            # Check annotation count for training trigger
+            if project_id:
+                from core.result_handlers.label_studio import LabelStudioHandler
+                ls_handler = LabelStudioHandler()
+
+                try:
+                    # Get annotation count
+                    annotations = ls_handler.get_annotations(project_id)
+                    annotation_count = len(annotations)
+
+                    logger.info(f"Project {project_id} now has {annotation_count} annotations")
+
+                    # Trigger training at milestones (100, 500, 1000, etc.)
+                    if annotation_count in [100, 500, 1000, 5000, 10000]:
+                        logger.info(f"🎯 Milestone reached: {annotation_count} annotations! Consider training.")
+                        # Note: Actual training would be triggered manually or via START_TRAINING event
+
+                except Exception as e:
+                    logger.error(f"Failed to check annotation count: {e}")
+
+        elif event_type == 'ANNOTATION_UPDATED':
+            annotation = payload.get('annotation', {})
+            logger.info(f"Annotation updated: annotation_id={annotation.get('id')}")
+
+            # Recalculate quality metrics if this is a ground truth annotation
+            if annotation.get('ground_truth'):
+                logger.info(f"Ground truth annotation updated: {annotation.get('id')}")
+
+        elif event_type == 'TASK_CREATED':
+            task = payload.get('task', {})
+            logger.info(f"New task created: task_id={task.get('id')}")
+
+        elif event_type == 'PROJECT_CREATED':
+            project = payload.get('project', {})
+            logger.info(f"New project created: project_id={project.get('id')}")
+
+        elif event_type == 'PROJECT_UPDATED':
+            project = payload.get('project', {})
+            logger.info(f"Project updated: project_id={project.get('id')}")
+
+        elif event_type == 'START_TRAINING':
+            project = payload.get('project', {})
+            project_id = project.get('id')
+            logger.info(f"Training requested for project: project_id={project_id}")
+
+            # Export annotations for training
+            if project_id:
+                from core.result_handlers.label_studio import LabelStudioHandler
+                ls_handler = LabelStudioHandler()
+
+                try:
+                    # Export curated data
+                    export_data = ls_handler.export_curated_data(
+                        project_id=project_id,
+                        format='json',
+                        only_completed=True
+                    )
+
+                    # Save to file
+                    export_path = Path(settings.DATA_DIR) / "training" / f"project_{project_id}_export.json"
+                    export_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    with open(export_path, 'w') as f:
+                        json.dump(export_data, f, indent=2)
+
+                    logger.info(f"✅ Exported {len(export_data)} annotations to {export_path}")
+
+                    return {
+                        "status": "training_data_exported",
+                        "event": event_type,
+                        "export_path": str(export_path),
+                        "annotation_count": len(export_data)
+                    }
+
+                except Exception as e:
+                    logger.error(f"Failed to export training data: {e}")
+                    return {
+                        "status": "export_failed",
+                        "event": event_type,
+                        "error": str(e)
+                    }
+
+        return {"status": "received", "event": event_type}
+
+    except Exception as e:
+        logger.error(f"Error processing Label Studio webhook: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/v1/webhooks/dead-letter/{dead_letter_id}/retry")
 async def retry_failed_webhook(
     dead_letter_id: int,
@@ -2750,10 +4067,15 @@ async def get_job_history(
         elif job.failed_at and job.created_at:
             duration = job.failed_at - job.created_at
 
-        # Calculate throughput
-        throughput = None
+        # Calculate request throughput
+        request_throughput = None
         if duration and duration > 0 and job.completed_requests > 0:
-            throughput = job.completed_requests / duration
+            request_throughput = job.completed_requests / duration
+
+        # Calculate token throughput (use stored value or calculate)
+        token_throughput = job.throughput_tokens_per_sec
+        if not token_throughput and duration and duration > 0 and job.total_tokens:
+            token_throughput = job.total_tokens / duration
 
         job_list.append({
             "batch_id": job.batch_id,
@@ -2767,7 +4089,9 @@ async def get_job_history(
             "completed_requests": job.completed_requests,
             "failed_requests": job.failed_requests,
             "duration": duration,
-            "throughput": throughput,
+            "request_throughput": request_throughput,
+            "total_tokens": job.total_tokens,
+            "token_throughput": token_throughput,
             "priority": job.priority,
             "webhook_url": job.webhook_url is not None,
             "has_errors": job.errors is not None
@@ -2867,6 +4191,20 @@ async def get_job_stats(
         BatchJob.created_at <= end_date if end_date else True
     ).scalar() or 0
 
+    # Total tokens
+    total_tokens = db.query(func.sum(BatchJob.total_tokens)).filter(
+        BatchJob.created_at >= start_date if start_date else True,
+        BatchJob.created_at <= end_date if end_date else True,
+        BatchJob.total_tokens.isnot(None)
+    ).scalar() or 0
+
+    # Average token throughput
+    avg_token_throughput = db.query(func.avg(BatchJob.throughput_tokens_per_sec)).filter(
+        BatchJob.created_at >= start_date if start_date else True,
+        BatchJob.created_at <= end_date if end_date else True,
+        BatchJob.throughput_tokens_per_sec.isnot(None)
+    ).scalar() or 0
+
     # Timeline (jobs per hour for last 24 hours)
     import time
     now = int(time.time())
@@ -2896,6 +4234,8 @@ async def get_job_stats(
         "avg_duration": round(avg_duration, 2),
         "total_requests": total_requests,
         "completed_requests": completed_requests,
+        "total_tokens": total_tokens,
+        "avg_token_throughput": round(avg_token_throughput, 2),
         "timeline": timeline
     }
 

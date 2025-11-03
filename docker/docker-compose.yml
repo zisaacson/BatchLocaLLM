@@ -6,6 +6,7 @@
 # 40xx = vLLM Batch Server Core
 #   4080 - Main API Server (native Python)
 #   4081 - Docs/Config Server (native Python)
+#   4082 - Label Studio ML Backend (native Python)
 #
 # 41xx = Label Studio
 #   4115 - Label Studio
@@ -88,6 +89,26 @@ services:
     restart: unless-stopped
     ports:
       - "4115:8080"
+    environment:
+      # PostgreSQL Database Configuration
+      DJANGO_DB: default
+      POSTGRE_NAME: labelstudio
+      POSTGRE_USER: labelstudio
+      POSTGRE_PASSWORD: labelstudio
+      POSTGRE_PORT: 5432
+      POSTGRE_HOST: label-studio-db
+      # Label Studio Configuration
+      LABEL_STUDIO_HOST: 0.0.0.0
+      LABEL_STUDIO_PORT: 8080
+      LABEL_STUDIO_USERNAME: admin@vllm-batch.local
+      LABEL_STUDIO_PASSWORD: vllm_batch_2024
+      LABEL_STUDIO_DISABLE_SIGNUP_WITHOUT_LINK: "false"
+    command: >
+      bash -c "
+        label-studio reset_password --username admin@vllm-batch.local --password vllm_batch_2024 ||
+        label-studio init --username admin@vllm-batch.local --password vllm_batch_2024 &&
+        label-studio start
+      "
     volumes:
       - label-studio-data:/label-studio/data
     depends_on:
@@ -101,6 +122,23 @@ services:
       start_period: 60s
     networks:
       - vllm-network
+
+  # ===========================================================================
+  # vLLM BATCH SERVER CORE (40xx) - Run on Host (not in Docker)
+  # ===========================================================================
+  # NOTE: The main API server, worker, and ML Backend run on the host machine
+  # (not in Docker) because they need direct GPU access via CUDA.
+  #
+  # To start these services:
+  #   python -m core.batch_app.api_server          # Port 4080
+  #   python -m core.batch_app.worker              # Background worker
+  #   python -m core.label_studio_ml_backend       # Port 4082
+  #
+  # Or use the CLI:
+  #   vllm-batch worker start
+  #   vllm-batch worker status
+  #
+  # ===========================================================================
 
   # ===========================================================================
   # MONITORING (42xx)

@@ -247,7 +247,28 @@
                     <span class="stat-label">Active Job</span>
                     <span class="stat-value" id="active-job">None</span>
                 </div>
-                <button class="btn" onclick="window.location.href='/queue-monitor.html'">📊 View Queue Monitor</button>
+                <button class="btn" onclick="window.location.href='/queue'">📊 View Queue Monitor</button>
+            </div>
+
+            <!-- Worker Heartbeat Card -->
+            <div class="card">
+                <h2>
+                    <span class="status-indicator" id="heartbeat-status"></span>
+                    Worker Heartbeat
+                </h2>
+                <div class="stat">
+                    <span class="stat-label">Status</span>
+                    <span class="stat-value" id="heartbeat-text">Loading...</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Current Model</span>
+                    <span class="stat-value" id="current-model">None</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Last Seen</span>
+                    <span class="stat-value" id="last-seen">Unknown</span>
+                </div>
+                <button class="btn" onclick="viewLogs()">📄 View Worker Logs</button>
             </div>
         </div>
         
@@ -285,7 +306,7 @@
                 // Update GPU status
                 if (data.gpu && !data.gpu.error) {
                     const memPercent = data.gpu.memory_percent.toFixed(1);
-                    document.getElementById('gpu-memory').textContent = 
+                    document.getElementById('gpu-memory').textContent =
                         `${data.gpu.memory_used_mb}MB / ${data.gpu.memory_total_mb}MB (${memPercent}%)`;
                     document.getElementById('gpu-memory-bar').style.width = memPercent + '%';
                     document.getElementById('gpu-temp').textContent = `${data.gpu.temperature_c}°C`;
@@ -295,9 +316,37 @@
                     document.getElementById('gpu-temp').textContent = 'N/A';
                     document.getElementById('gpu-util').textContent = 'N/A';
                 }
-                
+
             } catch (error) {
                 console.error('Error fetching status:', error);
+            }
+
+            // Fetch worker heartbeat
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+
+                const worker = data.worker || {};
+                const heartbeatIndicator = document.getElementById('heartbeat-status');
+
+                if (worker.status === 'healthy') {
+                    heartbeatIndicator.className = 'status-indicator running';
+                    document.getElementById('heartbeat-text').textContent = '✅ Healthy';
+                    document.getElementById('current-model').textContent = worker.loaded_model || 'None';
+                    document.getElementById('last-seen').textContent = new Date(worker.last_seen).toLocaleString();
+                } else if (worker.status === 'dead') {
+                    heartbeatIndicator.className = 'status-indicator stopped';
+                    document.getElementById('heartbeat-text').textContent = '❌ Dead';
+                    document.getElementById('current-model').textContent = 'N/A';
+                    document.getElementById('last-seen').textContent = worker.last_seen ? new Date(worker.last_seen).toLocaleString() : 'Unknown';
+                } else {
+                    heartbeatIndicator.className = 'status-indicator stopped';
+                    document.getElementById('heartbeat-text').textContent = '❓ Unknown';
+                    document.getElementById('current-model').textContent = 'N/A';
+                    document.getElementById('last-seen').textContent = 'Unknown';
+                }
+            } catch (error) {
+                console.error('Error fetching heartbeat:', error);
             }
             
             // Fetch queue status
@@ -364,10 +413,14 @@
         function refreshStatus() {
             fetchStatus();
         }
-        
+
+        function viewLogs() {
+            window.open('/admin/worker-logs', '_blank');
+        }
+
         // Initial fetch
         fetchStatus();
-        
+
         // Auto-refresh every 5 seconds
         setInterval(fetchStatus, 5000);
     </script>

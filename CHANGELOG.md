@@ -1,206 +1,87 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to vLLM Batch Server will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [1.0.0] - 2025-01-15
 
-## [1.0.0] - 2025-01-01
+### 🎉 Initial Open Source Release
 
-### 🎉 Initial Public Release
+First public release of vLLM Batch Server - a production-ready OpenAI-compatible batch inference server for local LLMs.
 
-First production-ready release of vLLM Batch Server!
+### ✨ Core Features
 
-### Added
+#### Batch Processing
+- OpenAI-Compatible API - Drop-in replacement for OpenAI Batch API
+- Model Hot-Swapping - Automatic model loading/unloading between jobs
+- Crash-Resistant Processing - Incremental saves every 100 requests
+- Queue Management - Priority queue with position and ETA visibility
 
-#### Core Features
-- **OpenAI-Compatible Batch API** - Drop-in replacement for OpenAI Batch API
-  - `/v1/batches` - Create and manage batch jobs
-  - `/v1/files` - Upload and manage batch files
-  - `/v1/models` - List and manage models
-  - JSONL format support matching OpenAI specification
+#### Real-Time Inference
+- Single Inference Endpoint (/v1/inference) - Real-time predictions
+- Supports both simple prompts and chat format
+- Low latency (<2s) with model caching
+- Used by Label Studio ML Backend
 
-- **Model Hot-Swapping** - Automatic model loading/unloading
-  - Queue jobs for different models
-  - Worker automatically switches models between jobs
-  - Prevents OOM on consumer GPUs (RTX 3060, 3090, 4080, 4090)
+#### Label Studio Integration
+- ML Backend Server (Port 4082) - 50-70% faster labeling
+- Webhook Automation - 8 event types with automatic triggers
+- Ground Truth Tracking - Mark and track high-quality annotations
+- Accuracy Calculation - Compare predictions vs human annotations
 
-- **Incremental Saves** - Checkpoint every 100 requests
-  - Prevents data loss from crashes
-  - Resume from last checkpoint
-  - Configurable save interval
+#### Monitoring & Observability
+- Real-Time Monitoring - Grafana, Prometheus, Loki
+- Worker Heartbeat - Health monitoring with auto-recovery
+- Log Rotation - Prevent disk fill (10MB max, 7 backups)
 
-- **Real-Time Monitoring** - Grafana + Prometheus + Loki
-  - Pre-configured dashboards for batch processing
-  - GPU metrics (utilization, memory, temperature)
-  - System health monitoring
-  - Log aggregation and search
+#### Model Management
+- Model Registry - Database-driven model configs
+- Model Installer - Automated HuggingFace downloads
+- GGUF Support - Quantized models for consumer GPUs
 
-#### Web UI
-- **Queue Monitor** - Real-time job status and progress
-- **Model Management** - Add, remove, and configure models
-- **Workbench** - Interactive prompt testing
-- **Benchmark Runner** - Compare models on test datasets
+#### Benchmarking & Comparison
+- Dataset Workbench - Interactive result exploration
+- Benchmark Runner - Scientific model comparison
+- Quality vs speed vs cost analysis
 
 #### Developer Experience
-- **Docker Support** - One-command setup with docker-compose
-- **Python Examples** - Simple batch processing examples
-- **TypeScript Examples** - Integration examples for web apps
-- **Comprehensive Documentation** - Getting started, API reference, troubleshooting
+- CLI Tool (vllm-batch) - Command-line interface
+- Startup Scripts - Easy service management
+- Docker Compose - One-command setup
 
-#### Testing & Quality
-- **Unit Tests** - Core functionality coverage
-- **Integration Tests** - End-to-end workflow testing
-- **CI/CD Pipeline** - GitHub Actions for automated testing
-- **Pre-commit Hooks** - Code quality checks (black, ruff, mypy)
-- **Makefile** - Common development tasks
+### 📚 Documentation
+- README.md - Quick start, features, architecture
+- docs/ML_BACKEND_SETUP.md - Label Studio integration guide
+- docs/API.md - Complete API reference
+- docs/WEBHOOKS.md - Webhook configuration guide
 
-#### Documentation
-- **README.md** - Project overview and quick start
-- **GETTING_STARTED.md** - Step-by-step installation guide
-- **API.md** - Complete API reference
-- **ARCHITECTURE.md** - System design and architecture
-- **DEPLOYMENT.md** - Production deployment guide
-- **TROUBLESHOOTING.md** - Common issues and solutions
-- **DOCKER_QUICKSTART.md** - Docker setup in under 5 minutes
-- **CONTRIBUTING.md** - Contribution guidelines
-- **SECURITY.md** - Security policy and best practices
-- **ROADMAP.md** - Future plans and feature requests
+### 🐛 Bug Fixes
+- Fixed validation errors preventing job submission
+- Fixed progress tracking not updating
+- Fixed crash recovery not resuming from checkpoint
+- Fixed missing import causing API server crash
+- Fixed Pydantic deprecation warning
+- Fixed log rotation not preventing disk fill
 
-### Performance
-
-- **Throughput**: 450-620 tok/s on RTX 4080 16GB (model-dependent)
-- **Batch Size**: Support for 50,000+ requests per batch
-- **Memory Efficiency**: 90% GPU memory utilization
-- **Reliability**: Automatic error recovery and retry logic
-
-### Supported Models
-
-Out-of-the-box support for:
-- **Gemma 3** (2B, 4B, 7B, 12B)
-- **Llama 3.2** (1B, 3B)
-- **Llama 3.1** (8B)
-- **Qwen 2.5** (3B, 7B)
-- **OLMo 2** (7B, 13B)
-- **IBM Granite** (3B, 8B)
-
-### Supported GPUs
-
-Tested and optimized for:
-- **RTX 3060** 12GB (budget option)
-- **RTX 3090** 24GB
-- **RTX 4080** 16GB
-- **RTX 4090** 24GB
-
-### Infrastructure
-
-- **PostgreSQL** - Durable job queue and model registry
-- **FastAPI** - High-performance async API server
-- **vLLM 0.11.0** - State-of-the-art inference engine
-- **SQLAlchemy 2.0** - Type-safe ORM
-- **Prometheus** - Metrics collection
-- **Grafana** - Visualization and dashboards
-- **Loki** - Log aggregation
-
-### Security
-
-- **Apache 2.0 License** - Open source and permissive
-- **Security Policy** - Vulnerability reporting process
-- **Input Validation** - Comprehensive request validation
-- **Error Handling** - Secure error messages (no sensitive data leaks)
-- **Dependency Scanning** - Automated security checks in CI
-
-### Community
-
-- **GitHub Issues** - Bug reports and feature requests
-- **GitHub Discussions** - Community support and Q&A
-- **Contributing Guidelines** - Clear contribution process
-- **Code of Conduct** - Inclusive community standards
+### 📦 Dependencies
+- Python 3.10+
+- vLLM 0.11.0
+- FastAPI 0.104.1
+- SQLAlchemy 2.0.23
+- PostgreSQL 16
+- Label Studio (latest)
 
 ---
 
 ## [Unreleased]
 
-### Planned for v1.1.0
-
-- Quantization support (Q8, Q4 GGUF)
-- Python SDK
-- TypeScript SDK
-- CLI tool
-- Batch size auto-tuning
-- More model families (OLMo 2, IBM Granite, DeepSeek)
-
-See [ROADMAP.md](ROADMAP.md) for full roadmap.
+### Planned Features
+- v1.1.0 - Multi-GPU Support
+- v1.2.0 - Advanced Model Support (GGUF, llama.cpp)
+- v1.3.0 - Enhanced Monitoring
+- v1.4.0 - Multi-stage Pipelines
 
 ---
 
-## Version Numbering
+## License
 
-We follow [Semantic Versioning](https://semver.org/):
-
-- **MAJOR** version for incompatible API changes
-- **MINOR** version for new functionality in a backwards compatible manner
-- **PATCH** version for backwards compatible bug fixes
-
----
-
-## How to Upgrade
-
-### From Source
-
-```bash
-git pull origin main
-pip install -r requirements.txt --upgrade
-python -c "from core.batch_app.database import init_db; init_db()"
-```
-
-### With Docker
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
----
-
-## Migration Guides
-
-### Migrating to v1.0.0
-
-This is the initial release, no migration needed.
-
----
-
-## Deprecation Notices
-
-None yet.
-
----
-
-## Breaking Changes
-
-None yet.
-
----
-
-## Contributors
-
-Thank you to all contributors who made this release possible!
-
-- [@zisaacson](https://github.com/zisaacson) - Project creator and maintainer
-
-Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md)!
-
----
-
-## Links
-
-- **GitHub Repository**: https://github.com/zisaacson/vllm-batch-server
-- **Documentation**: [docs/](docs/)
-- **Issue Tracker**: https://github.com/zisaacson/vllm-batch-server/issues
-- **Discussions**: https://github.com/zisaacson/vllm-batch-server/discussions
-
----
-
-**Note**: This changelog is automatically updated with each release. For the latest changes, see the [commit history](https://github.com/zisaacson/vllm-batch-server/commits/main).
-
+Apache 2.0 - See LICENSE for details.

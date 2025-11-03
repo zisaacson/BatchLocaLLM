@@ -57,6 +57,8 @@ async function loadStats() {
         document.getElementById('successRate').textContent = (data.success_rate * 100).toFixed(1) + '%';
         document.getElementById('avgDuration').textContent = data.avg_duration.toFixed(1);
         document.getElementById('totalRequests').textContent = data.total_requests.toLocaleString();
+        document.getElementById('totalTokens').textContent = data.total_tokens.toLocaleString();
+        document.getElementById('avgTokenThroughput').textContent = data.avg_token_throughput.toFixed(0);
 
         // Populate model filter
         const modelSelect = document.getElementById('filterModel');
@@ -121,8 +123,9 @@ function renderJobs(jobs) {
             <td><span class="status-badge status-${job.status}">${job.status}</span></td>
             <td>${job.model || 'N/A'}</td>
             <td>${job.completed_requests}/${job.total_requests}</td>
+            <td>${job.total_tokens ? job.total_tokens.toLocaleString() : '-'}</td>
             <td>${job.duration ? job.duration.toFixed(1) + 's' : '-'}</td>
-            <td>${job.throughput ? job.throughput.toFixed(2) + ' req/s' : '-'}</td>
+            <td>${job.token_throughput ? job.token_throughput.toFixed(0) + ' tok/s' : '-'}</td>
             <td>${formatTimestamp(job.created_at)}</td>
         `;
 
@@ -158,8 +161,12 @@ async function showJobDetails(batchId) {
             ? job.completed_at - job.created_at 
             : null;
 
-        const throughput = duration && duration > 0 && job.request_counts?.completed > 0
+        const request_throughput = duration && duration > 0 && job.request_counts?.completed > 0
             ? (job.request_counts.completed / duration).toFixed(2)
+            : null;
+
+        const token_throughput = duration && duration > 0 && job.total_tokens > 0
+            ? (job.total_tokens / duration).toFixed(0)
             : null;
 
         details.innerHTML = `
@@ -209,8 +216,16 @@ async function showJobDetails(batchId) {
                     <div class="value">${duration ? duration.toFixed(1) + 's' : '-'}</div>
                 </div>
                 <div class="detail-item">
-                    <label>Throughput</label>
-                    <div class="value">${throughput ? throughput + ' req/s' : '-'}</div>
+                    <label>Request Throughput</label>
+                    <div class="value">${request_throughput ? request_throughput + ' req/s' : '-'}</div>
+                </div>
+                <div class="detail-item">
+                    <label>Total Tokens</label>
+                    <div class="value">${job.total_tokens ? job.total_tokens.toLocaleString() : '-'}</div>
+                </div>
+                <div class="detail-item">
+                    <label>Token Throughput</label>
+                    <div class="value">${token_throughput ? token_throughput + ' tok/s' : '-'}</div>
                 </div>
                 <div class="detail-item">
                     <label>Input File</label>

@@ -484,7 +484,7 @@ async def health():
     """Health check"""
     return {
         "status": "healthy",
-        "service": "aristotle-docs-and-integration",
+        "service": "vllm-batch-docs-and-integration",
         "port": 4081,
         "docs_available": True,
         "files_available": [

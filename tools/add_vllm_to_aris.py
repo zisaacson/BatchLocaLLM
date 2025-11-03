@@ -2,8 +2,9 @@
 """Add vLLM Batch API service to Aris docker-compose.yml"""
 
 import sys
+import os
 
-DOCKER_COMPOSE_PATH = "/home/zack/Documents/augment-projects/Local/aris/docker-compose.yml"
+DOCKER_COMPOSE_PATH = os.getenv("ARIS_DOCKER_COMPOSE_PATH", "./docker-compose.yml")
 
 VLLM_SERVICE = """
   # vLLM Batch API - OpenAI Compatible Batch Processing

@@ -34,14 +34,22 @@ def parse_huggingface_content(content: str) -> Dict[str, Any]:
         "quantization_type": None,
         "estimated_size_gb": None
     }
-    
+
+    # Check if content is just a URL
+    url_pattern = r'https?://huggingface\.co/([a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)'
+    url_match = re.search(url_pattern, content.strip())
+    if url_match:
+        result["model_id"] = url_match.group(1)
+        result["vllm_serve_command"] = f'vllm serve "{url_match.group(1)}"'
+
     # Extract vLLM serve command
-    vllm_serve_pattern = r'vllm serve\s+"([^"]+)"'
-    vllm_match = re.search(vllm_serve_pattern, content)
-    if vllm_match:
-        result["model_id"] = vllm_match.group(1)
-        result["vllm_serve_command"] = f'vllm serve "{vllm_match.group(1)}"'
-    
+    if not result["model_id"]:
+        vllm_serve_pattern = r'vllm serve\s+"([^"]+)"'
+        vllm_match = re.search(vllm_serve_pattern, content)
+        if vllm_match:
+            result["model_id"] = vllm_match.group(1)
+            result["vllm_serve_command"] = f'vllm serve "{vllm_match.group(1)}"'
+
     # Alternative: look for model ID in quotes
     if not result["model_id"]:
         model_id_pattern = r'"([a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)"'

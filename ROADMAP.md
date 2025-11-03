@@ -263,7 +263,7 @@ We'd love to hear from you! Share your thoughts:
 
 - **GitHub Discussions**: [Start a discussion](https://github.com/zisaacson/vllm-batch-server/discussions)
 - **GitHub Issues**: [Open an issue](https://github.com/zisaacson/vllm-batch-server/issues)
-- **Email**: [Contact maintainers](mailto:zisaacson@gmail.com)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/zisaacson/vllm-batch-server/issues)
 
 ---
 

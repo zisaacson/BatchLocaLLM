@@ -136,14 +136,21 @@ def setup_logging(
     console_handler.addFilter(RequestContextFilter())
     root_logger.addHandler(console_handler)
 
-    # File handler (if specified)
+    # File handler with rotation (if specified)
     if log_file_path:
         from pathlib import Path
+        from logging.handlers import RotatingFileHandler
 
         # Create log directory if needed
         Path(log_file_path).parent.mkdir(parents=True, exist_ok=True)
 
-        file_handler = logging.FileHandler(log_file_path)
+        # Use RotatingFileHandler for automatic log rotation
+        # Max 10MB per file, keep 7 backup files (7 days of logs)
+        file_handler = RotatingFileHandler(
+            log_file_path,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=7  # Keep 7 old files
+        )
         file_handler.setLevel(log_level_int)
         file_handler.setFormatter(formatter)
         file_handler.addFilter(RequestContextFilter())

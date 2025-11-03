@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 from typing import Optional
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
+from pydantic import field_validator, ConfigDict
 
 
 class Settings(BaseSettings):
@@ -61,8 +61,9 @@ class Settings(BaseSettings):
     # ========================================================================
     # Label Studio
     # ========================================================================
-    LABEL_STUDIO_URL: str = "http://localhost:8080"
+    LABEL_STUDIO_URL: str = "http://localhost:4115"
     LABEL_STUDIO_API_KEY: Optional[str] = None
+    LABEL_STUDIO_PROJECT_ID: Optional[int] = None
     LABEL_STUDIO_TIMEOUT: int = 30  # Request timeout in seconds
     LABEL_STUDIO_MAX_RETRIES: int = 3
     LABEL_STUDIO_RETRY_BACKOFF: int = 1  # Backoff factor (1s, 2s, 4s, ...)
@@ -230,14 +231,15 @@ class Settings(BaseSettings):
         if self.CORS_ALLOW_HEADERS == "*":
             return ["*"]
         return [x.strip() for x in self.CORS_ALLOW_HEADERS.split(",")]
-    
-    class Config:
-        """Pydantic settings configuration"""
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
-        extra = "ignore"  # Ignore extra fields from .env file
-        
+
+    # Pydantic V2 configuration
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",  # Ignore extra fields from .env file
+    )
+
     def create_directories(self) -> None:
         """Create all required directories"""
         dirs = [
