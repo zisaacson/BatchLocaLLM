@@ -1,0 +1,59 @@
+# vLLM Batch Server Documentation
+
+> Production-ready OpenAI-compatible batch inference for local LLMs
+> Process 50,000+ requests on consumer GPUs with automatic model hot-swapping
+
+## Quick Start
+
+- [5-Minute Quick Start](docs/quick-start/5-minute-quickstart.md): Get running in 5 minutes with Docker
+- [Getting Started Guide](docs/guides/getting-started.md): Complete installation and setup
+
+## Core Concepts
+
+- [Architecture Overview](docs/architecture/ARCHITECTURE.md): How the system works
+- [API Reference](docs/reference/api.md): Complete API documentation
+- [Batch Processing](docs/guides/batch-processing.md): Submit and manage batch jobs
+- [Model Management](docs/guides/model-management.md): Install and configure models
+
+## Features
+
+- [Label Studio Integration](docs/guides/label-studio.md): Data labeling and curation
+- [Webhooks](docs/reference/webhooks.md): Event-driven automation
+- [Benchmarking](docs/guides/benchmarking.md): Compare models scientifically
+- [Monitoring](docs/guides/monitoring.md): Grafana, Prometheus, Loki setup
+
+## Integration Guides
+
+- [FastAPI Integration](docs/guides/integrations/fastapi.md): Use with FastAPI apps
+- [Django Integration](docs/guides/integrations/django.md): Use with Django apps
+- [Flask Integration](docs/guides/integrations/flask.md): Use with Flask apps
+- [Next.js Integration](docs/guides/integrations/nextjs.md): Use with Next.js apps
+
+## Deployment
+
+- [Docker Deployment](docs/guides/deployment.md): Deploy with Docker Compose
+- [Production Setup](docs/guides/production.md): Production best practices
+- [GCP Secrets](docs/guides/gcp-secrets.md): Manage secrets in GCP
+
+## Reference
+
+- [API Endpoints](docs/reference/api.md): All endpoints and parameters
+- [Webhook Events](docs/reference/webhooks.md): Event types and payloads
+- [CLI Commands](docs/reference/cli.md): Command-line interface
+- [Environment Variables](docs/reference/environment.md): Configuration options
+
+## Troubleshooting
+
+- [Common Issues](docs/TROUBLESHOOTING.md): Debug common problems
+- [FAQ](docs/FAQ.md): Frequently asked questions
+
+## Community
+
+- GitHub: https://github.com/zisaacson/vllm-batch-server
+- Issues: https://github.com/zisaacson/vllm-batch-server/issues
+- Discussions: https://github.com/zisaacson/vllm-batch-server/discussions
+
+## License
+
+Apache 2.0 - See [LICENSE](LICENSE) for details
+
