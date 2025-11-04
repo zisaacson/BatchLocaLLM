@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-unit test-integration lint format clean run-api run-worker run-all docker-up docker-down pre-commit docs
+.PHONY: help install install-dev test test-unit test-integration lint format clean run-api run-worker run-curation-api run-all docker-up docker-down pre-commit docs
 
 help:
 	@echo "vLLM Batch Server - Available Commands"
@@ -19,6 +19,7 @@ help:
 	@echo "Run Services:"
 	@echo "  make run-api          Start batch API server (port 4080)"
 	@echo "  make run-worker       Start batch worker"
+	@echo "  make run-curation-api Start curation API server (port 8001)"
 	@echo "  make run-all          Start all services"
 	@echo ""
 	@echo "Docker:"
@@ -81,6 +82,10 @@ run-api:
 run-worker:
 	@echo "Starting Batch Worker..."
 	python -m core.batch_app.worker
+
+run-curation-api:
+	@echo "Starting Curation API on http://localhost:8001"
+	./scripts/run-curation-api.sh
 
 run-all:
 	@echo "Starting all services..."
