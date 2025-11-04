@@ -283,28 +283,59 @@
         <!-- Add Model Form -->
         <div class="actions">
             <h2>➕ Add New Model</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Enter a HuggingFace model ID and we'll automatically fetch model info.
+                <a href="https://huggingface.co/models?pipeline_tag=text-generation&sort=trending" target="_blank" style="color: #667eea;">Browse models →</a>
+            </p>
             <form id="add-model-form">
                 <div class="form-grid">
                     <div class="form-group">
-                        <label for="model-id">HuggingFace Model ID *</label>
-                        <input type="text" id="model-id" placeholder="allenai/OLMo-2-1124-7B-Instruct" required>
+                        <label for="model-id">
+                            HuggingFace Model ID *
+                            <span style="color: #888; font-weight: normal; font-size: 0.9em;">(format: username/model-name)</span>
+                        </label>
+                        <input
+                            type="text"
+                            id="model-id"
+                            placeholder="google/gemma-3-4b-it"
+                            required
+                            pattern="[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+"
+                            title="Format: username/model-name (e.g., google/gemma-3-4b-it)"
+                        >
+                        <small style="color: #888; font-size: 0.85em;">
+                            💡 Model info will auto-fill when you click outside this field
+                        </small>
                     </div>
                     <div class="form-group">
                         <label for="model-name">Display Name *</label>
-                        <input type="text" id="model-name" placeholder="OLMo 2 7B" required>
+                        <input type="text" id="model-name" placeholder="Gemma 3 4B" required>
+                        <small style="color: #888; font-size: 0.85em;">
+                            Friendly name for the UI
+                        </small>
                     </div>
                     <div class="form-group">
-                        <label for="size-gb">Size (GB) *</label>
-                        <input type="number" id="size-gb" step="0.1" placeholder="14.0" required>
+                        <label for="size-gb">Model Size (GB) *</label>
+                        <input type="number" id="size-gb" step="0.1" placeholder="8.5" required min="0.1" max="200">
+                        <small style="color: #888; font-size: 0.85em;">
+                            Download size (auto-filled from HuggingFace)
+                        </small>
                     </div>
                     <div class="form-group">
-                        <label for="memory-gb">Est. GPU Memory (GB) *</label>
-                        <input type="number" id="memory-gb" step="0.1" placeholder="16.0" required>
+                        <label for="memory-gb">GPU Memory Required (GB) *</label>
+                        <input type="number" id="memory-gb" step="0.1" placeholder="10.2" required min="0.1" max="80">
+                        <small style="color: #888; font-size: 0.85em;">
+                            VRAM needed (typically 1.2x model size)
+                        </small>
                     </div>
                     <div class="form-group">
-                        <label for="cpu-offload-gb">CPU Offload (GB)</label>
-                        <input type="number" id="cpu-offload-gb" step="0.5" placeholder="0" value="0" min="0" max="32">
-                        <small style="color: #888; font-size: 0.85em;">Offload model weights to CPU RAM (0 = no offload). Use 8GB for 7B models on 16GB VRAM.</small>
+                        <label for="cpu-offload-gb">
+                            CPU Offload (GB)
+                            <span style="color: #888; font-weight: normal; font-size: 0.9em;">(optional)</span>
+                        </label>
+                        <input type="number" id="cpu-offload-gb" step="0.5" placeholder="0" value="0" min="0" max="64">
+                        <small style="color: #888; font-size: 0.85em;">
+                            💡 For RTX 4080 (16GB): Use 8GB for 7B models, 12GB for 12B models
+                        </small>
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary">Add Model</button>

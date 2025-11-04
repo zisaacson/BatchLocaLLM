@@ -114,15 +114,114 @@ function renderModels() {
 }
 
 /**
+ * Validate HuggingFace model ID format
+ */
+function validateModelId(modelId) {
+    // Format: username/model-name or organization/model-name
+    const pattern = /^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/;
+    return pattern.test(modelId);
+}
+
+/**
+ * Fetch model info from HuggingFace API
+ */
+async function fetchModelInfo(modelId) {
+    try {
+        const response = await fetch(`https://huggingface.co/api/models/${modelId}`);
+        if (!response.ok) {
+            throw new Error('Model not found on HuggingFace');
+        }
+        const data = await response.json();
+        return {
+            exists: true,
+            size_gb: data.safetensors?.total || 0,
+            tags: data.tags || [],
+            pipeline_tag: data.pipeline_tag
+        };
+    } catch (error) {
+        return { exists: false, error: error.message };
+    }
+}
+
+/**
+ * Auto-fill model info from HuggingFace
+ */
+async function autoFillModelInfo() {
+    const modelIdInput = document.getElementById('model-id');
+    const modelId = modelIdInput.value.trim();
+
+    if (!modelId) {
+        return;
+    }
+
+    // Validate format
+    if (!validateModelId(modelId)) {
+        showToast('Invalid model ID format. Use: username/model-name', 'error');
+        return;
+    }
+
+    // Show loading state
+    const submitBtn = document.querySelector('#add-model-form button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Fetching model info...';
+    submitBtn.disabled = true;
+
+    try {
+        const info = await fetchModelInfo(modelId);
+
+        if (!info.exists) {
+            showToast(`Model not found: ${info.error}`, 'error');
+            return;
+        }
+
+        // Auto-fill name if empty
+        const nameInput = document.getElementById('model-name');
+        if (!nameInput.value) {
+            nameInput.value = modelId.split('/')[1];
+        }
+
+        // Auto-fill size if available
+        if (info.size_gb > 0) {
+            const sizeGb = (info.size_gb / (1024 ** 3)).toFixed(2);
+            document.getElementById('size-gb').value = sizeGb;
+
+            // Estimate memory (rough: 1.2x model size)
+            const estimatedMemory = (parseFloat(sizeGb) * 1.2).toFixed(2);
+            document.getElementById('memory-gb').value = estimatedMemory;
+        }
+
+        showToast('Model info loaded from HuggingFace!', 'success');
+    } catch (error) {
+        showToast(`Failed to fetch model info: ${error.message}`, 'error');
+    } finally {
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+    }
+}
+
+/**
  * Setup add model form handler
  */
 function setupFormHandler() {
     const form = document.getElementById('add-model-form');
+    const modelIdInput = document.getElementById('model-id');
+
+    // Add blur event to auto-fill model info
+    modelIdInput.addEventListener('blur', autoFillModelInfo);
+
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
+
+        const modelId = document.getElementById('model-id').value.trim();
+
+        // Validate model ID
+        if (!validateModelId(modelId)) {
+            showToast('Invalid model ID format. Use: username/model-name', 'error');
+            return;
+        }
+
         const modelData = {
-            model_id: document.getElementById('model-id').value,
+            model_id: modelId,
             name: document.getElementById('model-name').value,
             size_gb: parseFloat(document.getElementById('size-gb').value),
             estimated_memory_gb: parseFloat(document.getElementById('memory-gb').value),
@@ -134,25 +233,34 @@ function setupFormHandler() {
             rtx4080_compatible: true,
             requires_hf_auth: false
         };
-        
+
+        // Show loading state
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Adding model...';
+        submitBtn.disabled = true;
+
         try {
             const response = await fetch(`${API_BASE}/models`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(modelData)
             });
-            
+
             if (!response.ok) {
                 const error = await response.json();
                 throw new Error(error.detail || 'Failed to add model');
             }
-            
-            showToast('Model added successfully!', 'success');
+
+            showToast('Model added successfully! Download will start automatically.', 'success');
             form.reset();
             loadModels();
         } catch (error) {
             showToast(error.message, 'error');
             console.error(error);
+        } finally {
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
         }
     });
 }
@@ -186,24 +294,35 @@ async function testModel(modelId, numRequests) {
  * Delete a model
  */
 async function deleteModel(modelId) {
-    if (!confirm(`Delete model ${modelId}?`)) {
+    // Better confirmation dialog
+    const modelName = models.find(m => m.model_id === modelId)?.name || modelId;
+    const confirmed = confirm(
+        `⚠️ Delete model "${modelName}"?\n\n` +
+        `This will:\n` +
+        `• Remove the model from the registry\n` +
+        `• Delete all downloaded model files\n` +
+        `• Remove all benchmark results\n\n` +
+        `This action cannot be undone.`
+    );
+
+    if (!confirmed) {
         return;
     }
-    
+
     try {
         const response = await fetch(`${API_BASE}/models/${encodeURIComponent(modelId)}`, {
             method: 'DELETE'
         });
-        
+
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Failed to delete model');
         }
-        
-        showToast('Model deleted', 'success');
+
+        showToast(`Model "${modelName}" deleted successfully`, 'success');
         loadModels();
     } catch (error) {
-        showToast(error.message, 'error');
+        showToast(`Failed to delete model: ${error.message}`, 'error');
         console.error(error);
     }
 }
