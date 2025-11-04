@@ -756,12 +756,42 @@ class BatchWorker:
             # Prepare metadata
             metadata = json.loads(job.metadata_json) if job.metadata_json else {}
             metadata['label_studio_project_id'] = settings.LABEL_STUDIO_PROJECT_ID
+
+            # ✅ NEW: Extract conquest metadata from job metadata or first result
+            # This is critical for bidirectional sync to work!
+            metadata['schema_type'] = metadata.get('conquest_type') or metadata.get('schema_type', 'generic')
+
+            # Try to get conquest_id from metadata first, then from batch_id
+            metadata['conquest_id'] = metadata.get('conquest_id') or job.batch_id
+
+            # Try to get philosopher and domain from metadata
+            metadata['philosopher'] = metadata.get('philosopher', 'unknown@example.com')
+            metadata['domain'] = metadata.get('domain', 'default')
+
+            # If not in metadata, try to extract from first result's custom_id
+            # Format: conquest_{conquest_id}_{philosopher}_{domain}
+            if results and (metadata['philosopher'] == 'unknown@example.com' or metadata['domain'] == 'default'):
+                first_result = results[0]
+                custom_id = first_result.get('custom_id', '')
+
+                # Try to parse custom_id for metadata
+                # Expected format: conquest_{id} or {philosopher}_{domain}_{id}
+                parts = custom_id.split('_')
+                if len(parts) >= 3:
+                    # Assume format: philosopher_domain_id
+                    if '@' in parts[0]:  # Looks like email
+                        metadata['philosopher'] = parts[0]
+                        metadata['domain'] = parts[1]
+                        metadata['conquest_id'] = '_'.join(parts[2:])
+
             # completed_at is a Unix timestamp (int), not datetime
             if job.completed_at:
                 from datetime import datetime, timezone
                 metadata['completed_at'] = datetime.fromtimestamp(job.completed_at, tz=timezone.utc).isoformat()
             else:
                 metadata['completed_at'] = None
+
+            self.log(log_file, f"📋 Conquest metadata: type={metadata['schema_type']}, id={metadata['conquest_id']}, philosopher={metadata['philosopher']}, domain={metadata['domain']}")
 
             # Import to Label Studio
             success = handler.handle(job.batch_id, results, metadata)

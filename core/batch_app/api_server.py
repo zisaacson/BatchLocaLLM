@@ -1181,9 +1181,11 @@ async def create_batch(
         content = input_file_path.read_text()
         lines = content.strip().split('\n')
 
-        # Count requests and extract model from first request
+        # Count requests and extract model + conquest metadata from first request
         num_requests = 0
         model = None
+        conquest_metadata = {}  # ✅ NEW: Extract conquest metadata
+
         for i, line in enumerate(lines):
             if line.strip():
                 try:
@@ -1193,6 +1195,46 @@ async def create_batch(
                     # Extract model from first request
                     if model is None and 'body' in req and 'model' in req['body']:
                         model = req['body']['model']
+
+                    # ✅ NEW: Extract conquest metadata from first request
+                    if not conquest_metadata and 'custom_id' in req:
+                        custom_id = req['custom_id']
+
+                        # Try to parse custom_id for metadata
+                        # Expected formats:
+                        # - conquest_{id}
+                        # - {philosopher}_{domain}_{id}
+                        # - candidate_{id}
+                        parts = custom_id.split('_')
+
+                        # Check if first part looks like email (philosopher)
+                        if '@' in parts[0]:
+                            conquest_metadata['philosopher'] = parts[0]
+                            if len(parts) > 1:
+                                conquest_metadata['domain'] = parts[1]
+                            if len(parts) > 2:
+                                conquest_metadata['conquest_id'] = '_'.join(parts[2:])
+                        elif parts[0] == 'conquest' and len(parts) > 1:
+                            conquest_metadata['conquest_id'] = '_'.join(parts[1:])
+                        elif parts[0] == 'candidate' and len(parts) > 1:
+                            conquest_metadata['conquest_type'] = 'candidate_evaluation'
+                            conquest_metadata['conquest_id'] = '_'.join(parts[1:])
+
+                        # Try to infer conquest_type from messages
+                        if 'body' in req and 'messages' in req['body']:
+                            messages = req['body']['messages']
+                            if messages:
+                                # Check system prompt for hints
+                                system_msg = next((m for m in messages if m.get('role') == 'system'), None)
+                                if system_msg:
+                                    content_lower = system_msg.get('content', '').lower()
+                                    if 'candidate' in content_lower or 'recruiter' in content_lower:
+                                        conquest_metadata['conquest_type'] = 'candidate_evaluation'
+                                    elif 'cartographer' in content_lower:
+                                        conquest_metadata['conquest_type'] = 'cartographer'
+                                    elif 'cv' in content_lower or 'resume' in content_lower:
+                                        conquest_metadata['conquest_type'] = 'cv_parsing'
+
                 except json.JSONDecodeError as e:
                     raise HTTPException(
                         status_code=400,
@@ -1244,6 +1286,27 @@ async def create_batch(
     # Create log file path
     log_file_path = LOGS_DIR / f"{batch_id}.log"
 
+    # ✅ NEW: Merge conquest metadata with user-provided metadata
+    # This ensures conquest_id, philosopher, domain, conquest_type are available for Label Studio sync
+    merged_metadata = batch_request.metadata.copy() if batch_request.metadata else {}
+
+    # Add extracted conquest metadata (don't overwrite user-provided values)
+    for key, value in conquest_metadata.items():
+        if key not in merged_metadata:
+            merged_metadata[key] = value
+
+    # Ensure we have defaults for critical fields
+    if 'conquest_id' not in merged_metadata:
+        merged_metadata['conquest_id'] = batch_id  # Use batch_id as fallback
+    if 'philosopher' not in merged_metadata:
+        merged_metadata['philosopher'] = 'unknown@example.com'
+    if 'domain' not in merged_metadata:
+        merged_metadata['domain'] = 'default'
+    if 'conquest_type' not in merged_metadata and 'schema_type' not in merged_metadata:
+        merged_metadata['schema_type'] = 'generic'
+
+    logger.info(f"Batch metadata: {merged_metadata}")
+
     # Create batch job in database
     batch_job = BatchJob(
         batch_id=batch_id,
@@ -1267,7 +1330,7 @@ async def create_batch(
         completed_requests=0,
         failed_requests=0,
         errors=None,
-        metadata_json=json.dumps(batch_request.metadata) if batch_request.metadata else None,
+        metadata_json=json.dumps(merged_metadata),  # ✅ CHANGED: Use merged metadata
         model=model,
         log_file=str(log_file_path),
         throughput_tokens_per_sec=None,

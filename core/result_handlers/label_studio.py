@@ -120,20 +120,38 @@ class LabelStudioHandler(ResultHandler):
             # Get LLM response text
             llm_response = body.get('choices', [{}])[0].get('message', {}).get('content', '')
 
-            # Build task data
+            # ✅ NEW: Parse conquest data from messages
+            conquest_data = self._parse_conquest_from_messages(input_messages, metadata.get('schema_type', 'generic'))
+
+            # ✅ NEW: Extract conquest metadata
+            conquest_id = metadata.get('conquest_id') or custom_id
+            philosopher = metadata.get('philosopher', 'unknown@example.com')
+            domain = metadata.get('domain', 'default')
+
+            # Build task data with STRUCTURED conquest data
             task_data = {
                 "custom_id": custom_id,
                 "batch_id": batch_id,
-                "input_messages": input_messages,
-                "llm_response": llm_response,
-                "model": body.get('model', 'unknown'),
+                "conquest_id": conquest_id,  # ✅ ADDED for bidirectional sync
+                "philosopher": philosopher,   # ✅ ADDED for bidirectional sync
+                "domain": domain,             # ✅ ADDED for bidirectional sync
                 "schema_type": metadata.get('schema_type', 'generic'),
+                "model": body.get('model', 'unknown'),
+
+                # ✅ ADDED: Structured conquest data
+                **conquest_data,  # name, role, location, work_history, education, etc.
+
+                # LLM response
+                "llm_response": llm_response,
             }
 
             # Add metadata
             task_meta = {
                 "batch_id": batch_id,
                 "custom_id": custom_id,
+                "conquest_id": conquest_id,  # ✅ ADDED
+                "philosopher": philosopher,   # ✅ ADDED
+                "domain": domain,             # ✅ ADDED
                 "source": metadata.get('source', 'vllm_batch'),
                 "created_at": metadata.get('completed_at'),
             }
@@ -340,6 +358,121 @@ class LabelStudioHandler(ResultHandler):
             }],
             "score": 0.7
         }
+
+    def _parse_conquest_from_messages(self, messages: List[Dict[str, Any]], schema_type: str) -> Dict[str, Any]:
+        """
+        Parse conquest data from messages array.
+
+        Extracts structured data based on schema type.
+        This is critical for:
+        - Displaying questions in curation UI
+        - Showing candidate/entity information
+        - Enabling bidirectional sync (needs conquest_id, philosopher, domain)
+
+        Args:
+            messages: Array of chat messages (system, user, assistant)
+            schema_type: Type of schema (e.g., 'candidate_evaluation', 'generic')
+
+        Returns:
+            Dictionary with parsed conquest data
+        """
+        result = {
+            "name": "Unknown",
+            "role": "",
+            "location": "",
+            "work_history": [],
+            "education": [],
+            "system_prompt": "",
+            "user_prompt": ""
+        }
+
+        if not messages or len(messages) < 2:
+            return result
+
+        # Extract system prompt
+        if messages[0].get("role") == "system":
+            result["system_prompt"] = messages[0].get("content", "")
+
+        # Extract user prompt
+        user_message_idx = 1 if messages[0].get("role") == "system" else 0
+        if len(messages) > user_message_idx and messages[user_message_idx].get("role") == "user":
+            user_content = messages[user_message_idx].get("content", "")
+            result["user_prompt"] = user_content
+
+            # Parse candidate data from user prompt based on schema type
+            if schema_type == "candidate_evaluation":
+                result.update(self._parse_candidate_from_prompt(user_content))
+            elif schema_type == "cartographer":
+                result.update(self._parse_cartographer_from_prompt(user_content))
+            elif schema_type == "cv_parsing":
+                result.update(self._parse_cv_from_prompt(user_content))
+            # Add more schema types as needed
+
+        return result
+
+    def _parse_candidate_from_prompt(self, user_content: str) -> Dict[str, Any]:
+        """
+        Parse candidate data from user prompt.
+
+        Extracts:
+        - Name
+        - Current role
+        - Location
+        - Work history
+        - Education
+        """
+        result = {}
+
+        # Extract name
+        name_match = re.search(r"(?:Name|Candidate):\s*(.+?)(?:\n|$)", user_content, re.IGNORECASE)
+        if name_match:
+            result["name"] = name_match.group(1).strip()
+
+        # Extract role
+        role_match = re.search(r"(?:Current Role|Role|Title):\s*(.+?)(?:\n|$)", user_content, re.IGNORECASE)
+        if role_match:
+            result["role"] = role_match.group(1).strip()
+
+        # Extract location
+        location_match = re.search(r"Location:\s*(.+?)(?:\n|$)", user_content, re.IGNORECASE)
+        if location_match:
+            result["location"] = location_match.group(1).strip()
+
+        # Extract work history (look for section between "Work History:" and next section)
+        work_match = re.search(
+            r"Work History:\s*(.+?)(?:\n\n|Education:|Skills:|$)",
+            user_content,
+            re.DOTALL | re.IGNORECASE
+        )
+        if work_match:
+            work_text = work_match.group(1).strip()
+            # Split by newlines and filter empty lines
+            work_lines = [line.strip() for line in work_text.split("\n") if line.strip()]
+            result["work_history"] = work_lines[:10]  # Limit to 10 positions
+
+        # Extract education (look for section after "Education:")
+        edu_match = re.search(
+            r"Education:\s*(.+?)(?:\n\n|Skills:|$)",
+            user_content,
+            re.DOTALL | re.IGNORECASE
+        )
+        if edu_match:
+            edu_text = edu_match.group(1).strip()
+            # Split by newlines and filter empty lines
+            edu_lines = [line.strip() for line in edu_text.split("\n") if line.strip()]
+            result["education"] = edu_lines[:5]  # Limit to 5 entries
+
+        return result
+
+    def _parse_cartographer_from_prompt(self, user_content: str) -> Dict[str, Any]:
+        """Parse cartographer conquest data from user prompt."""
+        # Implement cartographer-specific parsing
+        return {}
+
+    def _parse_cv_from_prompt(self, user_content: str) -> Dict[str, Any]:
+        """Parse CV parsing conquest data from user prompt."""
+        # Implement CV parsing-specific parsing
+        return {}
 
     def export_annotations(
         self,
