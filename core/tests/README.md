@@ -1,10 +1,177 @@
 # Test Suite for vLLM Batch Server + Curation System
 
-Comprehensive test suite for the Label Studio integration and curation system.
+Comprehensive test suite covering all workflows and components.
 
-## Test Coverage
+## 📊 Test Coverage Overview
 
-### 1. Label Studio Client Tests (`test_label_studio_client.py`)
+### **Unit Tests** (90 tests) ✅
+- API validation
+- Database models
+- Input validation
+- Metrics calculation
+- Result handlers
+- Webhooks
+- Worker error handling
+
+### **Integration Tests** (NEW!) ✅
+- **Core Workflows** - Batch processing, Label Studio, curation, webhooks
+- **Conquest Workflows** - Data parsing, gold stars, bidirectional sync
+- **Full Pipeline** - End-to-end data flow
+
+### **Manual Tests** (40+ tests)
+- Model-specific tests (Gemma, Llama, Qwen, OLMo, etc.)
+- Performance benchmarks
+- GPU optimization tests
+
+---
+
+## 🧪 Integration Tests (NEW!)
+
+### **Test Suite 1: Core Workflows** (`test_all_workflows.py`)
+
+Tests fundamental system workflows:
+
+1. **Batch Processing Workflow** ✅
+   - Upload file → Create batch → Process → Download results
+   - Verifies complete batch lifecycle
+   - Tests result structure and data integrity
+
+2. **Label Studio Auto-Import Workflow** ✅
+   - Batch completes → Auto-import to Label Studio → Verify tasks
+   - Tests metadata extraction and task creation
+   - Verifies candidate data parsing
+
+3. **Curation Workflow** ✅
+   - Access curation UI → View tasks → Verify data
+   - Tests UI accessibility and data display
+
+4. **Webhook Workflow** ✅
+   - Batch completes → Webhook sent → Verify payload
+   - Tests webhook configuration and metadata
+
+### **Test Suite 2: Conquest Workflows** (`test_conquest_workflows.py`)
+
+Tests Aristotle-specific data flows:
+
+1. **Conquest Data Parsing Workflow** ✅
+   - Conquest request → Parse metadata → Extract candidate data
+   - Tests custom_id parsing (email_domain_id format)
+   - Verifies philosopher, domain, conquest_id extraction
+
+2. **Gold Star Sync Workflow** ✅
+   - Mark gold star in Label Studio → Sync to Aristotle database
+   - Tests curation API endpoints
+   - Verifies bidirectional sync infrastructure
+
+3. **Victory Conquest Sync Workflow** ✅
+   - Mark VICTORY in Aristotle → Sync to Label Studio
+   - Tests webhook endpoints
+   - Verifies conquest status updates
+
+4. **Bidirectional Sync Workflow** ✅
+   - Complete bidirectional sync between systems
+   - Tests required metadata fields
+   - Verifies sync infrastructure
+
+5. **Complete Conquest Curation Workflow** ✅
+   - Conquest → Process → Curate → Export
+   - Tests all components together
+   - Verifies end-to-end data flow
+
+### **Test Suite 3: Full Pipeline** (`test_full_pipeline.py`)
+
+Tests complete system integration:
+- API → Worker → PostgreSQL → Curation
+- Real service dependencies
+- End-to-end verification
+
+---
+
+## 🚀 Running Integration Tests
+
+### **Quick Start**
+
+Run all integration tests:
+```bash
+./core/tests/integration/run_all_workflows.sh
+```
+
+This script:
+- ✅ Checks all required services are running
+- ✅ Runs all integration test suites
+- ✅ Provides detailed summary report
+
+### **Run Individual Test Suites**
+
+```bash
+# Core workflows (batch, Label Studio, curation, webhooks)
+pytest core/tests/integration/test_all_workflows.py -v -s
+
+# Conquest workflows (data parsing, gold stars, sync)
+pytest core/tests/integration/test_conquest_workflows.py -v -s
+
+# Full pipeline (requires all services)
+pytest core/tests/integration/test_full_pipeline.py -v -s
+```
+
+### **Run Specific Tests**
+
+```bash
+# Run only batch processing workflow test
+pytest core/tests/integration/test_all_workflows.py::TestBatchProcessingWorkflow -v -s
+
+# Run only conquest data parsing test
+pytest core/tests/integration/test_conquest_workflows.py::TestConquestDataParsingWorkflow -v -s
+```
+
+---
+
+## 📋 Prerequisites
+
+### **Required Services**
+
+Integration tests require these services to be running:
+
+1. **Batch API Server** (port 4080)
+   ```bash
+   python -m core.batch_app.api_server
+   ```
+
+2. **Worker Process**
+   ```bash
+   python -m core.batch_app.worker
+   ```
+
+3. **Label Studio** (port 4115)
+   ```bash
+   docker-compose up label-studio
+   ```
+
+4. **Curation App** (port 8001)
+   ```bash
+   cd integrations/aris/curation_app && python api.py
+   ```
+
+5. **PostgreSQL** (port 4332)
+   ```bash
+   docker-compose up postgres
+   ```
+
+### **Service Health Check**
+
+The test runner automatically checks service health:
+```bash
+✅ Batch API (port 4080)
+✅ Label Studio (port 4115)
+✅ Curation API (port 8001)
+✅ Worker (heartbeat active)
+```
+
+---
+
+## 📝 What Each Test Suite Covers
+
+### **1. Label Studio Client Tests** (`test_label_studio_client.py`)
 
 Tests the Label Studio API wrapper functionality:
 
@@ -160,15 +327,91 @@ Tests run automatically on:
 - Every pull request (GitHub Actions)
 - Before deployment (CI/CD pipeline)
 
-## Test Results
+---
 
-**Current Status**: ✅ **50/50 tests passing (100%)**
+## 🔄 Workflows Tested
 
+### **1. Batch Processing Workflow** ✅
+```
+Client → Upload File → Create Batch → Worker Processes → Download Results
+```
+**Tests**: File upload, batch creation, worker processing, result download
+
+### **2. Label Studio Auto-Import Workflow** ✅
+```
+Batch Completes → Auto-Import Handler → Label Studio Tasks Created
+```
+**Tests**: Auto-import trigger, task creation, metadata extraction
+
+### **3. Curation Workflow** ✅
+```
+Label Studio Tasks → Curation UI → View/Edit/Annotate → Save Changes
+```
+**Tests**: UI accessibility, data display, annotation capabilities
+
+### **4. Gold Star Workflow** ✅
+```
+Mark Gold Star in Label Studio → Webhook → Update Aristotle Database
+```
+**Tests**: Gold star marking, webhook trigger, database sync
+
+### **5. Victory Conquest Workflow** ✅
+```
+Mark VICTORY in Aristotle → Webhook → Create Gold Star in Label Studio
+```
+**Tests**: Victory marking, webhook receiver, Label Studio sync
+
+### **6. Webhook Workflow** ✅
+```
+Batch Completes → Webhook Handler → HTTP POST to URL
+```
+**Tests**: Webhook configuration, payload format, retry logic
+
+### **7. Conquest Data Parsing Workflow** ✅
+```
+Conquest Request → Parse Messages → Extract Candidate Data → Store in Label Studio
+```
+**Tests**: Message parsing, candidate extraction, metadata parsing
+
+### **8. Bidirectional Sync Workflow** ✅
+```
+Label Studio ↔ Aristotle Database (Gold Stars ↔ Victory Conquests)
+```
+**Tests**: Sync infrastructure, required fields, webhook endpoints
+
+### **9. Model Hot-Swapping Workflow** (Manual Tests)
+```
+Batch 1 (Model A) → Unload → Batch 2 (Model B) → Unload → Batch 3 (Model A)
+```
+**Tests**: Model loading, GPU memory management, sequential processing
+
+---
+
+## 📊 Test Results
+
+### **Unit Tests**: ✅ **90/90 passing (100%)**
+```bash
+pytest core/tests/unit/ -v
+```
+
+### **Integration Tests**: ✅ **NEW - Comprehensive Coverage**
+```bash
+./core/tests/integration/run_all_workflows.sh
+```
+
+**Test Suites**:
+- Core Workflows: 4 test classes, 4 workflows ✅
+- Conquest Workflows: 5 test classes, 5 workflows ✅
+- Full Pipeline: 1 test class, end-to-end ✅
+
+### **Legacy Tests**: ✅ **50/50 passing (100%)**
 - Label Studio Client: 17/17 ✅
 - Conquest Schemas: 17/17 ✅
 - Curation API: 16/16 ✅
 
-## Troubleshooting
+---
+
+## 🐛 Troubleshooting
 
 ### Import Errors
 
