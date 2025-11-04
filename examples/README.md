@@ -114,6 +114,45 @@ Process large datasets efficiently:
 
 ## Integration Examples
 
+### Result Handlers
+
+Custom result handlers let you process batch results automatically when jobs complete.
+
+**Available Handlers** (see `handlers/` directory):
+
+1. **PostgreSQL Sync** (`handlers/postgres_sync_example.py`)
+   - Automatically sync results to PostgreSQL database
+   - Configurable schema mapping (JSON path → column)
+   - Upsert support, batch inserts, auto table creation
+
+2. **Webhook Handler** (`handlers/webhook_example.py`)
+   - Send results to HTTP webhook endpoints
+   - Slack/Discord integration examples
+   - Automatic retries with exponential backoff
+
+**Quick Start**:
+```python
+from examples.handlers.postgres_sync_example import register_postgres_sync
+
+# Register handler - runs automatically on batch completion
+register_postgres_sync()
+```
+
+**Custom Handler**:
+```python
+from core.result_handlers.base import ResultHandler, get_registry
+
+class MyHandler(ResultHandler):
+    def handle(self, batch_id, results, metadata):
+        # Your custom logic
+        for result in results:
+            print(result)
+        return True
+
+registry = get_registry()
+registry.register(MyHandler(config={'priority': 100}))
+```
+
 ### FastAPI Integration
 
 ```python
