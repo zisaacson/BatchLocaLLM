@@ -86,6 +86,12 @@ Built for teams who need:
   - View results side-by-side
   - Export curated datasets
 
+- **🔌 Plugin System** - Extensible result handlers
+  - Process batch results with custom logic
+  - Built-in handlers: Label Studio, webhooks, database sync
+  - Create your own handlers for custom integrations
+  - Type-safe plugin interface
+
 - **🐳 Production-Ready Deployment**
   - Docker Compose for one-command setup
   - PostgreSQL for durable job storage
@@ -124,7 +130,7 @@ docker compose -f docker-compose.postgres.yml up -d
 python -c "from core.batch_app.database import init_db; init_db()"
 
 # 6. Start services
-./scripts/start_gemma3_conquest.sh
+./scripts/start_worker.sh  # Or use Docker Compose (see below)
 ```
 
 ### Verify Installation
@@ -425,6 +431,78 @@ This server adds all of that.
 - **GGUF support limited** - vLLM 0.11.0 doesn't support OLMo2/GPT-OSS GGUF
 - **No streaming** - Batch-only (by design)
 - **Local only** - No distributed workers (yet)
+
+---
+
+## 🔌 Plugin Development
+
+The vLLM Batch Server uses a **plugin system** for processing batch results. This allows you to add custom integrations (database sync, webhooks, data transformation) without modifying core code.
+
+### Creating a Custom Handler
+
+```python
+from core.result_handlers.base import ResultHandler
+from typing import List, Dict, Any, Optional
+
+class MyCustomHandler(ResultHandler):
+    """Custom result handler example."""
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        super().__init__(config)
+        self.webhook_url = self.config.get('webhook_url')
+
+    def name(self) -> str:
+        """Return handler name."""
+        return "my_custom_handler"
+
+    def enabled(self, metadata: Optional[Dict[str, Any]] = None) -> bool:
+        """Check if handler should run."""
+        return bool(self.webhook_url)
+
+    def handle(
+        self,
+        batch_id: str,
+        results: List[Dict[str, Any]],
+        metadata: Dict[str, Any]
+    ) -> bool:
+        """Process batch results."""
+        # Your custom logic here
+        # Example: Send results to webhook
+        import requests
+        response = requests.post(self.webhook_url, json={
+            'batch_id': batch_id,
+            'results': results,
+            'metadata': metadata
+        })
+        return response.status_code == 200
+```
+
+### Registering Your Handler
+
+```python
+from core.result_handlers.base import get_registry
+from my_handlers import MyCustomHandler
+
+# Get global registry
+registry = get_registry()
+
+# Register your handler
+handler = MyCustomHandler(config={
+    'webhook_url': 'https://my-app.com/webhook',
+    'priority': 100  # Lower = runs first
+})
+registry.register(handler)
+```
+
+### Built-in Handlers
+
+- **`LabelStudioHandler`** - Auto-import results to Label Studio for annotation
+- **`WebhookHandler`** - Send results to HTTP webhook
+- **`PostgresHandler`** - Insert results into PostgreSQL (example)
+- **`S3Handler`** - Upload results to S3 (example)
+
+See `core/result_handlers/` and `integrations/examples/` for more examples.
+
 ---
 
 ## Repository Structure
