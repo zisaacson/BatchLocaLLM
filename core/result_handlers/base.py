@@ -53,10 +53,13 @@ class ResultHandler(ABC):
         pass
     
     @abstractmethod
-    def enabled(self) -> bool:
+    def enabled(self, metadata: Optional[Dict[str, Any]] = None) -> bool:
         """
         Check if this handler is enabled.
-        
+
+        Args:
+            metadata: Optional metadata to determine if handler should run
+
         Returns:
             True if handler should run, False otherwise
         """
@@ -116,7 +119,7 @@ class ResultHandlerRegistry:
             handler: Handler instance to register
         """
         self.handlers.append(handler)
-        logger.info(f"Registered result handler: {handler.name}")
+        logger.info(f"Registered result handler: {handler.name()}")
     
     def process_results(
         self,
@@ -135,27 +138,27 @@ class ResultHandlerRegistry:
         Returns:
             Dictionary mapping handler names to success status
         """
-        handler_results = {}
+        handler_results: Dict[str, bool] = {}
 
         for handler in self.handlers:
             if not handler.enabled(metadata):
-                logger.debug(f"Handler {handler.name} is disabled, skipping")
+                logger.debug(f"Handler {handler.name()} is disabled, skipping")
                 continue
 
             try:
-                logger.info(f"Running handler: {handler.name}")
+                logger.info(f"Running handler: {handler.name()}")
                 success = handler.handle(batch_id, results, metadata)
-                handler_results[handler.name] = success
+                handler_results[handler.name()] = success
 
                 if success:
-                    logger.info(f"✅ Handler {handler.name} completed successfully")
+                    logger.info(f"✅ Handler {handler.name()} completed successfully")
                 else:
-                    logger.warning(f"⚠️  Handler {handler.name} returned False")
-                    
+                    logger.warning(f"⚠️  Handler {handler.name()} returned False")
+
             except Exception as e:
-                logger.error(f"❌ Handler {handler.name} failed: {e}")
+                logger.error(f"❌ Handler {handler.name()} failed: {e}")
                 handler.on_error(e)
-                handler_results[handler.name] = False
+                handler_results[handler.name()] = False
         
         return handler_results
 

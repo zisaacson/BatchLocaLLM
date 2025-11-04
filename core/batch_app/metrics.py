@@ -28,6 +28,7 @@ Usage:
 """
 
 from prometheus_client import Counter, Gauge, Histogram, Summary
+from typing import Optional
 
 # ============================================================================
 # Request Metrics
@@ -253,14 +254,14 @@ batch_latency_summary = Summary(
 # Helper Functions
 # ============================================================================
 
-def track_request(endpoint: str, method: str, status_code: int, duration: float):
+def track_request(endpoint: str, method: str, status_code: int, duration: float) -> None:
     """Track a request with all relevant metrics."""
     request_duration.labels(endpoint=endpoint, method=method, status_code=status_code).observe(duration)
     request_count.labels(endpoint=endpoint, method=method, status_code=status_code).inc()
     request_latency_summary.labels(endpoint=endpoint).observe(duration)
 
 
-def track_batch_job(status: str, model: str = None, duration: float = None):
+def track_batch_job(status: str, model: Optional[str] = None, duration: Optional[float] = None) -> None:
     """Track a batch job status change."""
     batch_jobs_total.labels(status=status).inc()
 
@@ -269,7 +270,7 @@ def track_batch_job(status: str, model: str = None, duration: float = None):
         batch_latency_summary.labels(model=model).observe(duration)
 
 
-def track_error(error_type: str, component: str, endpoint: str = None, method: str = None):
+def track_error(error_type: str, component: str, endpoint: Optional[str] = None, method: Optional[str] = None) -> None:
     """Track an error."""
     errors_total.labels(error_type=error_type, component=component).inc()
 
@@ -277,7 +278,7 @@ def track_error(error_type: str, component: str, endpoint: str = None, method: s
         request_errors.labels(endpoint=endpoint, method=method, error_type=error_type).inc()
 
 
-def update_queue_metrics(pending_count: int):
+def update_queue_metrics(pending_count: int) -> None:
     """Update queue depth metric."""
     queue_depth.set(pending_count)
 

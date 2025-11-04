@@ -18,10 +18,10 @@ Example use cases:
 """
 
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 
-from result_handlers.base import ResultHandler
+from core.result_handlers.base import ResultHandler
 
 logger = logging.getLogger(__name__)
 
@@ -45,15 +45,18 @@ class CustomHandler(ResultHandler):
         """
         return "custom_handler"  # Change this to your handler name
     
-    def enabled(self) -> bool:
+    def enabled(self, metadata: Optional[Dict[str, Any]] = None) -> bool:
         """
         Check if this handler should run.
-        
+
+        Args:
+            metadata: Optional metadata to determine if handler should run
+
         Return True if:
         - Required configuration is present
         - Dependencies are available
         - Handler should process this batch
-        
+
         Return False to skip this handler.
         """
         # Example: Check if API URL is configured

@@ -16,7 +16,7 @@ Configuration:
 """
 
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 from datetime import datetime
 
@@ -28,7 +28,7 @@ try:
 except ImportError:
     POSTGRES_AVAILABLE = False
 
-from result_handlers.base import ResultHandler
+from core.result_handlers.base import ResultHandler
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +55,12 @@ class PostgresInsertHandler(ResultHandler):
     def name(self) -> str:
         return "postgres_insert"
     
-    def enabled(self) -> bool:
+    def enabled(self, metadata: Optional[Dict[str, Any]] = None) -> bool:
         """Check if PostgreSQL is configured and available."""
         if not POSTGRES_AVAILABLE:
             logger.warning("psycopg2 not installed, PostgresInsertHandler disabled")
             return False
-        
+
         required_vars = ['POSTGRES_HOST', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD']
         return all(os.getenv(var) for var in required_vars)
     
@@ -82,19 +82,23 @@ class PostgresInsertHandler(ResultHandler):
             True if insert successful, False otherwise
         """
         # Get database configuration
-        db_config = {
-            'host': os.getenv('POSTGRES_HOST', 'localhost'),
-            'port': int(os.getenv('POSTGRES_PORT', '5432')),
-            'database': os.getenv('POSTGRES_DB'),
-            'user': os.getenv('POSTGRES_USER'),
-            'password': os.getenv('POSTGRES_PASSWORD')
-        }
-        
+        host = os.getenv('POSTGRES_HOST', 'localhost')
+        port_str = os.getenv('POSTGRES_PORT', '5432')
+        database = os.getenv('POSTGRES_DB')
+        user = os.getenv('POSTGRES_USER')
+        password = os.getenv('POSTGRES_PASSWORD')
+
         table_name = os.getenv('POSTGRES_TABLE', 'ml_results')
-        
+
         try:
             # Connect to database
-            conn = psycopg2.connect(**db_config)
+            conn = psycopg2.connect(
+                host=host,
+                port=int(port_str),
+                database=database,
+                user=user,
+                password=password
+            )
             cursor = conn.cursor()
             
             # Prepare insert data

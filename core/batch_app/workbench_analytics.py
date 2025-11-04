@@ -11,7 +11,7 @@ Provides advanced analytics and reporting for benchmark results:
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, cast
 
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
@@ -219,15 +219,19 @@ def get_quality_metrics_dashboard(db: Session, benchmark_ids: List[str]):
         })
     
     # Sort by quality score (descending)
-    dashboard.sort(key=lambda x: x['quality_score'], reverse=True)
+    def get_quality_score(item: Dict[str, Any]) -> float:
+        score = item.get('quality_score', 0)
+        return float(score) if isinstance(score, (int, float)) else 0.0
+
+    dashboard.sort(key=get_quality_score, reverse=True)
     
     return {
         'total_benchmarks': len(dashboard),
         'dashboard': dashboard,
         'summary': {
             'best_quality': dashboard[0]['model_name'] if dashboard else None,
-            'avg_quality_score': sum(d['quality_score'] for d in dashboard) / len(dashboard) if dashboard else 0,
-            'avg_error_rate': sum(d['response_metrics']['error_rate'] for d in dashboard) / len(dashboard) if dashboard else 0
+            'avg_quality_score': (sum([float(d.get('quality_score', 0)) if isinstance(d.get('quality_score'), (int, float)) else 0.0 for d in dashboard]) / len(dashboard)) if dashboard else 0,  # type: ignore[misc,arg-type]
+            'avg_error_rate': sum(float(cast(Dict[str, Any], d.get('response_metrics', {})).get('error_rate', 0)) if isinstance(cast(Dict[str, Any], d.get('response_metrics', {})).get('error_rate', 0), (int, float)) else 0 for d in dashboard) / len(dashboard) if dashboard else 0
         }
     }
 
@@ -265,23 +269,25 @@ def calculate_quality_score(
     
     # Response completeness score (30 points max)
     # Based on response length (200-500 chars is ideal)
+    completeness_score: float
     if avg_response_length >= 200 and avg_response_length <= 500:
-        completeness_score = 30
+        completeness_score = 30.0
     elif avg_response_length < 200:
         completeness_score = (avg_response_length / 200) * 30
     else:
         # Penalize overly long responses
-        completeness_score = max(0, 30 - ((avg_response_length - 500) / 100))
+        completeness_score = max(0.0, 30 - ((avg_response_length - 500) / 100))
     score += completeness_score
     
     # Token efficiency score (20 points max)
     # 0.5-1.5 ratio is ideal
+    efficiency_score: float
     if token_efficiency >= 0.5 and token_efficiency <= 1.5:
-        efficiency_score = 20
+        efficiency_score = 20.0
     elif token_efficiency < 0.5:
         efficiency_score = (token_efficiency / 0.5) * 20
     else:
-        efficiency_score = max(0, 20 - ((token_efficiency - 1.5) * 5))
+        efficiency_score = max(0.0, 20 - ((token_efficiency - 1.5) * 5))
     score += efficiency_score
     
     # Throughput score (10 points max)
@@ -350,10 +356,10 @@ def export_comparison_report(
 
             # Compare responses
             comparison = compare_responses(
-                results_a=bm_a['results'],
-                results_b=bm_b['results'],
-                model_a_name=bm_a['model_name'],
-                model_b_name=bm_b['model_name']
+                results_a=cast(List[Dict[str, Any]], bm_a['results']),
+                results_b=cast(List[Dict[str, Any]], bm_b['results']),
+                model_a_name=cast(str, bm_a['model_name']),
+                model_b_name=cast(str, bm_b['model_name'])
             )
 
             comparisons.append({
@@ -379,9 +385,9 @@ def export_comparison_report(
 
     # Format output
     if format == 'markdown':
-        return _format_report_markdown(report)
+        return cast(Dict[str, Any], _format_report_markdown(report))
     elif format == 'csv':
-        return _format_report_csv(report)
+        return cast(Dict[str, Any], _format_report_csv(report))
     else:
         return report
 

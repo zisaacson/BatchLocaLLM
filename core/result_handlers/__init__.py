@@ -13,6 +13,8 @@ Users can create custom handlers by subclassing ResultHandler.
 See examples/ directory for templates.
 """
 
+from typing import Optional
+
 from .base import ResultHandler, ResultHandlerRegistry, get_registry, register_handler
 from .webhook import WebhookHandler
 
@@ -30,11 +32,10 @@ __all__ = [
     'get_registry',
     'register_handler',
     'WebhookHandler',
-    'LabelStudioHandler' if LABEL_STUDIO_AVAILABLE else None,
-]
+] + (['LabelStudioHandler'] if LABEL_STUDIO_AVAILABLE else [])
 
 
-def setup_default_handlers(config: dict = None) -> None:
+def setup_default_handlers(config: Optional[dict] = None) -> None:
     """
     Register default result handlers.
     

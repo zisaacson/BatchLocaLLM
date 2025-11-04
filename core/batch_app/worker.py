@@ -15,6 +15,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Dict, List, Optional, Any, Callable, cast
 
 print("🔄 Worker starting...", flush=True)
 print("📦 Importing dependencies...", flush=True)
@@ -347,11 +348,11 @@ class BatchWorker:
 
             max_retries = 3
             retry_delay = 10  # seconds
-            last_error = None
+            last_error: Optional[Exception] = None
 
             for attempt in range(1, max_retries + 1):
                 try:
-                    self.current_llm = LLM(**vllm_config)
+                    self.current_llm = LLM(**cast(Any, vllm_config))
 
                     load_time = time.time() - start_time
                     self.current_model = model
@@ -420,7 +421,7 @@ class BatchWorker:
             # Set Sentry context for this batch
             set_batch_context(
                 batch_id=job.batch_id,
-                model=job.model,
+                model=job.model or "unknown",
                 requests=job.total_requests
             )
 

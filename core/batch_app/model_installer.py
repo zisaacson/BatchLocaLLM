@@ -322,43 +322,44 @@ class ModelInstaller:
             )
 
             # Monitor progress with enhanced parsing
-            last_progress = 0
-            for line in process.stdout:
-                if progress_callback:
-                    # Parse progress percentage
-                    progress_match = re.search(r'(\d+(?:\.\d+)?)%', line)
-                    if progress_match:
-                        pct = float(progress_match.group(1))
-                        if pct > last_progress:
-                            last_progress = pct
+            last_progress: float = 0.0
+            if process.stdout:
+                for line in process.stdout:
+                    if progress_callback:
+                        # Parse progress percentage
+                        progress_match = re.search(r'(\d+(?:\.\d+)?)%', line)
+                        if progress_match:
+                            pct = float(progress_match.group(1))
+                            if pct > last_progress:
+                                last_progress = pct
 
-                            # Try to parse speed and ETA
-                            speed_match = re.search(r'(\d+(?:\.\d+)?)\s*(MB|GB|KB)/s', line)
-                            eta_match = re.search(r'(\d+):(\d+):(\d+)', line)
+                                # Try to parse speed and ETA
+                                speed_match = re.search(r'(\d+(?:\.\d+)?)\s*(MB|GB|KB)/s', line)
+                                eta_match = re.search(r'(\d+):(\d+):(\d+)', line)
 
-                            update = {
-                                'status': 'downloading',
-                                'progress': pct,
-                                'attempt': attempt
-                            }
+                                update = {
+                                    'status': 'downloading',
+                                    'progress': pct,
+                                    'attempt': attempt
+                                }
 
-                            if speed_match:
-                                speed_val = float(speed_match.group(1))
-                                speed_unit = speed_match.group(2)
-                                # Convert to MB/s
-                                if speed_unit == 'GB':
-                                    speed_val *= 1024
-                                elif speed_unit == 'KB':
-                                    speed_val /= 1024
-                                update['speed_mbps'] = speed_val
+                                if speed_match:
+                                    speed_val = float(speed_match.group(1))
+                                    speed_unit = speed_match.group(2)
+                                    # Convert to MB/s
+                                    if speed_unit == 'GB':
+                                        speed_val *= 1024
+                                    elif speed_unit == 'KB':
+                                        speed_val /= 1024
+                                    update['speed_mbps'] = speed_val
 
-                            if eta_match:
-                                hours = int(eta_match.group(1))
-                                minutes = int(eta_match.group(2))
-                                seconds = int(eta_match.group(3))
-                                update['eta_seconds'] = hours * 3600 + minutes * 60 + seconds
+                                if eta_match:
+                                    hours = int(eta_match.group(1))
+                                    minutes = int(eta_match.group(2))
+                                    seconds = int(eta_match.group(3))
+                                    update['eta_seconds'] = hours * 3600 + minutes * 60 + seconds
 
-                            progress_callback(update)
+                                progress_callback(update)
 
             process.wait()
 
@@ -616,11 +617,12 @@ class ModelInstaller:
             base = 100   # 20B+ models
         
         # Apply offload penalty
+        base_float: float = float(base)
         if cpu_offload_gb > 0:
             penalty = min(0.95, cpu_offload_gb / 10)  # Up to 95% slower
-            base *= (1 - penalty)
-        
-        return base
+            base_float *= (1 - penalty)
+
+        return int(base_float)
     
     def _estimate_quality(self, model_size_gb: float) -> int:
         """Estimate quality tier (1-5 stars) based on model size."""
@@ -657,18 +659,20 @@ class ModelInstaller:
         finally:
             db.close()
     
-    def _get_recommended_gguf(self, gguf_files: list) -> str:
+    def _get_recommended_gguf(self, gguf_files: list) -> Optional[str]:
         """Get recommended GGUF file (prefer Q4_0)."""
         if not gguf_files:
             return None
 
         # Prefer Q4_0
         for f in gguf_files:
-            if 'Q4_0' in f or 'q4_0' in f:
+            if isinstance(f, str) and ('Q4_0' in f or 'q4_0' in f):
                 return f
 
         # Fallback to first file
-        return gguf_files[0]
+        if gguf_files and isinstance(gguf_files[0], str):
+            return gguf_files[0]
+        return None
 
     def recommend_quantization(
         self,
@@ -752,7 +756,11 @@ class ModelInstaller:
         # Calculate memory for each quantization
         recommendations = []
         for quant_name, quant_info in quantizations.items():
-            memory_gb = (param_count * 1e9 * quant_info['bits_per_param']) / 8 / (1024**3)
+            bits_per_param = quant_info['bits_per_param']
+            if isinstance(bits_per_param, (int, float)):
+                memory_gb = (param_count * 1e9 * float(bits_per_param)) / 8 / (1024**3)
+            else:
+                memory_gb = param_count * 2  # Rough estimate
 
             # Add 20% overhead for KV cache and activations
             total_memory_gb = memory_gb * 1.2
@@ -760,12 +768,18 @@ class ModelInstaller:
             fits = total_memory_gb <= gpu_memory_gb
 
             # Calculate score based on use case
+            speed_val = quant_info.get('speed', 0)
+            quality_val = quant_info.get('quality', 0)
+            speed_rating = float(speed_val) if isinstance(speed_val, (int, float)) else 0.0
+            quality_rating = float(quality_val) if isinstance(quality_val, (int, float)) else 0.0
+
+            score: float
             if use_case == 'speed':
-                score = quant_info['speed'] * 2 + quant_info['quality']
+                score = speed_rating * 2 + quality_rating
             elif use_case == 'quality':
-                score = quant_info['quality'] * 2 + quant_info['speed']
+                score = quality_rating * 2 + speed_rating
             else:  # balanced
-                score = quant_info['quality'] + quant_info['speed']
+                score = quality_rating + speed_rating
 
             recommendations.append({
                 'quantization': quant_name,
@@ -779,7 +793,11 @@ class ModelInstaller:
             })
 
         # Sort by score (highest first)
-        recommendations.sort(key=lambda x: x['score'], reverse=True)
+        def get_score(item: Dict[str, Any]) -> float:
+            score_val = item.get('score', 0)
+            return float(score_val) if isinstance(score_val, (int, float)) else 0.0
+
+        recommendations.sort(key=get_score, reverse=True)
 
         # Get top recommendation
         top_rec = recommendations[0] if recommendations else None

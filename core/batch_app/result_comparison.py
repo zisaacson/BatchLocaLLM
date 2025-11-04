@@ -10,7 +10,7 @@ Provides advanced comparison features:
 
 import json
 import difflib
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any, Set, cast
 from collections import Counter
 
 from core.batch_app.logging_config import get_logger
@@ -99,7 +99,7 @@ def compare_responses(
 
 
 def find_unique_answers(
-    results_list: List[Dict[str, Any]],
+    results_list: List[Any],
     model_names: List[str]
 ) -> Dict[str, Any]:
     """
@@ -119,13 +119,18 @@ def find_unique_answers(
         return {'error': 'Need at least 2 models to compare'}
     
     # Index all results by custom_id
-    results_by_id = {}
+    results_by_id: Dict[str, Dict[str, str]] = {}
     for i, results in enumerate(results_list):
+        if not isinstance(results, list):
+            continue
         for result in results:
+            if not isinstance(result, dict):
+                continue
             custom_id = result.get('custom_id')
-            if custom_id not in results_by_id:
+            if custom_id and custom_id not in results_by_id:
                 results_by_id[custom_id] = {}
-            results_by_id[custom_id][model_names[i]] = _extract_response_text(result)
+            if custom_id:
+                results_by_id[custom_id][model_names[i]] = _extract_response_text(result)
     
     # Find unique answers
     unique_cases = []
@@ -223,8 +228,24 @@ def calculate_quality_metrics(
 def _extract_response_text(result: Dict[str, Any]) -> str:
     """Extract response text from result."""
     try:
-        return result.get('response', {}).get('body', {}).get('choices', [{}])[0].get('message', {}).get('content', '')
-    except (KeyError, IndexError, TypeError):
+        response = result.get('response', {})
+        if not isinstance(response, dict):
+            return ''
+        body = response.get('body', {})
+        if not isinstance(body, dict):
+            return ''
+        choices = body.get('choices', [])
+        if not choices or not isinstance(choices, list):
+            return ''
+        first_choice = choices[0]
+        if not isinstance(first_choice, dict):
+            return ''
+        message = first_choice.get('message', {})
+        if not isinstance(message, dict):
+            return ''
+        content = message.get('content', '')
+        return str(content) if content else ''
+    except (KeyError, IndexError, TypeError, AttributeError):
         return ''
 
 
@@ -272,9 +293,17 @@ def calculate_agreement_matrix(
             if i == j:
                 agreement_matrix[i][j] = 1.0  # Perfect agreement with self
             else:
+                # Extract results for each model
+                model_i_results_raw = results_list[i] if isinstance(results_list[i], list) else []
+                model_j_results_raw = results_list[j] if isinstance(results_list[j], list) else []
+
+                # Ensure they are lists of dicts
+                model_i_results: List[Dict[str, Any]] = [r for r in model_i_results_raw if isinstance(r, dict)]  # type: ignore[misc,unreachable]
+                model_j_results: List[Dict[str, Any]] = [r for r in model_j_results_raw if isinstance(r, dict)]  # type: ignore[misc,unreachable]
+
                 comparison = compare_responses(
-                    results_list[i],
-                    results_list[j],
+                    model_i_results,
+                    model_j_results,
                     model_names[i],
                     model_names[j]
                 )

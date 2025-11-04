@@ -13,7 +13,7 @@ import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any, List, cast
 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -71,8 +71,7 @@ def search_models(
         search_pattern = f"%{query}%"
         query_obj = query_obj.filter(
             (ModelRegistry.model_id.ilike(search_pattern)) |
-            (ModelRegistry.name.ilike(search_pattern)) |
-            (ModelRegistry.installation_notes.ilike(search_pattern))
+            (ModelRegistry.name.ilike(search_pattern))
         )
 
     # Status filter
@@ -118,8 +117,7 @@ def search_models(
         search_pattern = f"%{query}%"
         total_query = total_query.filter(
             (ModelRegistry.model_id.ilike(search_pattern)) |
-            (ModelRegistry.name.ilike(search_pattern)) |
-            (ModelRegistry.installation_notes.ilike(search_pattern))
+            (ModelRegistry.name.ilike(search_pattern))
         )
     if status:
         total_query = total_query.filter(ModelRegistry.status == status)
@@ -201,7 +199,7 @@ def get_model_usage_analytics(db: Session, model_id: Optional[str] = None):
     # Group by model if no specific model requested
     if not model_id:
         # Get analytics per model
-        model_stats = {}
+        model_stats: Dict[str, Dict[str, Any]] = {}
         for b in benchmarks:
             if b.model_id not in model_stats:
                 model_stats[b.model_id] = {
@@ -214,23 +212,27 @@ def get_model_usage_analytics(db: Session, model_id: Optional[str] = None):
                 }
 
             stats = model_stats[b.model_id]
-            stats['jobs'] += 1
+            stats['jobs'] = int(stats['jobs']) + 1
             if b.status == 'completed':
-                stats['completed'] += 1
+                stats['completed'] = int(stats['completed']) + 1
             elif b.status == 'failed':
-                stats['failed'] += 1
+                stats['failed'] = int(stats['failed']) + 1
             if b.total:
-                stats['requests'] += b.total
+                stats['requests'] = int(stats['requests']) + b.total
             if b.throughput and b.throughput > 0:
-                stats['throughputs'].append(b.throughput)
+                throughputs_list = cast(List[float], stats['throughputs'])
+                throughputs_list.append(b.throughput)
             if b.started_at and b.completed_at:
-                stats['runtime'] += (b.completed_at - b.started_at).total_seconds()
+                stats['runtime'] = float(stats['runtime']) + (b.completed_at - b.started_at).total_seconds()
 
         # Format results
-        by_model = {}
+        by_model: Dict[str, Dict[str, Any]] = {}
         for mid, stats in model_stats.items():
-            avg_tp = sum(stats['throughputs']) / len(stats['throughputs']) if stats['throughputs'] else 0.0
-            success = stats['completed'] / stats['jobs'] if stats['jobs'] > 0 else 0.0
+            throughputs_list = cast(List[float], stats['throughputs'])
+            avg_tp = sum(throughputs_list) / len(throughputs_list) if throughputs_list else 0.0
+            jobs_count = int(stats['jobs'])
+            completed_count = int(stats['completed'])
+            success = completed_count / jobs_count if jobs_count > 0 else 0.0
 
             by_model[mid] = {
                 'total_jobs': stats['jobs'],
@@ -300,7 +302,11 @@ def batch_install_models(db: Session, model_ids: list[str]):
 
         # Validate pre-installation
         try:
-            validation = installer.validate_pre_installation(model_id, db)
+            # Use model registry data for validation
+            gguf_file = model.local_path or ''
+            estimated_size_gb = model.size_gb
+
+            validation = installer.validate_pre_installation(model_id, gguf_file, estimated_size_gb)
             if not validation['can_install']:
                 results.append({
                     'model_id': model_id,
@@ -318,7 +324,7 @@ def batch_install_models(db: Session, model_ids: list[str]):
 
         # Start installation
         try:
-            installer.install_model(model_id, db)
+            installer.install_model(model_id, gguf_file)
             results.append({
                 'model_id': model_id,
                 'status': 'installing',
@@ -429,37 +435,77 @@ def compare_models_dashboard(db: Session, model_ids: list[str]):
     # Calculate rankings
     if comparisons:
         # Rank by throughput (higher is better)
-        sorted_by_throughput = sorted(comparisons, key=lambda x: x['performance']['avg_throughput'], reverse=True)
+        def get_throughput(x: Dict[str, Any]) -> float:
+            perf = cast(Dict[str, Any], x.get('performance', {}))
+            return float(perf.get('avg_throughput', 0))
+
+        sorted_by_throughput = sorted(comparisons, key=get_throughput, reverse=True)
         for i, comp in enumerate(sorted_by_throughput):
-            comp['rankings'] = comp.get('rankings', {})
-            comp['rankings']['throughput'] = i + 1
+            comp_dict = cast(Dict[str, Any], comp)
+            comp_dict['rankings'] = comp_dict.get('rankings', {})
+            rankings = cast(Dict[str, Any], comp_dict['rankings'])
+            rankings['throughput'] = i + 1
 
         # Rank by cost (lower is better)
-        sorted_by_cost = sorted(comparisons, key=lambda x: x['cost']['cost_per_request'])
+        def get_cost(x: Dict[str, Any]) -> float:
+            cost_info = cast(Dict[str, Any], x.get('cost', {}))
+            return float(cost_info.get('cost_per_request', 0))
+
+        sorted_by_cost = sorted(comparisons, key=get_cost)
         for i, comp in enumerate(sorted_by_cost):
-            comp['rankings']['cost'] = i + 1
+            comp_dict = cast(Dict[str, Any], comp)
+            rankings = cast(Dict[str, Any], comp_dict['rankings'])
+            rankings['cost'] = i + 1
 
         # Rank by success rate (higher is better)
-        sorted_by_success = sorted(comparisons, key=lambda x: x['usage']['success_rate'], reverse=True)
+        def get_success_rate(x: Dict[str, Any]) -> float:
+            usage = cast(Dict[str, Any], x.get('usage', {}))
+            return float(usage.get('success_rate', 0))
+
+        sorted_by_success = sorted(comparisons, key=get_success_rate, reverse=True)
         for i, comp in enumerate(sorted_by_success):
-            comp['rankings']['reliability'] = i + 1
+            comp_dict = cast(Dict[str, Any], comp)
+            rankings = cast(Dict[str, Any], comp_dict['rankings'])
+            rankings['reliability'] = i + 1
 
         # Calculate overall score (lower is better - sum of ranks)
         for comp in comparisons:
-            ranks = comp['rankings']
-            comp['rankings']['overall_score'] = ranks['throughput'] + ranks['cost'] + ranks['reliability']
+            comp_dict = cast(Dict[str, Any], comp)
+            ranks = cast(Dict[str, Any], comp_dict['rankings'])
+            ranks['overall_score'] = int(ranks['throughput']) + int(ranks['cost']) + int(ranks['reliability'])
 
         # Sort by overall score
-        comparisons.sort(key=lambda x: x['rankings']['overall_score'])
+        def get_overall_score(x: Dict[str, Any]) -> int:
+            rankings = cast(Dict[str, Any], x.get('rankings', {}))
+            return int(rankings.get('overall_score', 0))
+
+        comparisons.sort(key=get_overall_score)
+
+    # Calculate summary
+    fastest_model = None
+    cheapest_model = None
+    most_reliable_model = None
+    best_overall_model = None
+
+    if comparisons:
+        fastest_model = cast(Dict[str, Any], comparisons[0]).get('model_id')
+
+        cheapest_comp = min(comparisons, key=get_cost)
+        cheapest_model = cast(Dict[str, Any], cheapest_comp).get('model_id')
+
+        most_reliable_comp = max(comparisons, key=get_success_rate)
+        most_reliable_model = cast(Dict[str, Any], most_reliable_comp).get('model_id')
+
+        best_overall_model = cast(Dict[str, Any], comparisons[0]).get('model_id')
 
     return {
         'total_models': len(comparisons),
         'comparisons': comparisons,
         'summary': {
-            'fastest': comparisons[0]['model_id'] if comparisons else None,
-            'cheapest': min(comparisons, key=lambda x: x['cost']['cost_per_request'])['model_id'] if comparisons else None,
-            'most_reliable': max(comparisons, key=lambda x: x['usage']['success_rate'])['model_id'] if comparisons else None,
-            'best_overall': comparisons[0]['model_id'] if comparisons else None
+            'fastest': fastest_model,
+            'cheapest': cheapest_model,
+            'most_reliable': most_reliable_model,
+            'best_overall': best_overall_model
         }
     }
 
@@ -566,11 +612,12 @@ def start_model_test(db: Session, model_id: str, num_requests: int = 1) -> dict:
     script_path.write_text(test_script)
 
     # Start background process
-    process = subprocess.Popen(
+    process: subprocess.Popen[str] = subprocess.Popen(
         ["python", str(script_path)],
         stdout=open(log_file, 'w'),
         stderr=subprocess.STDOUT,
-        cwd=Path.cwd()
+        cwd=Path.cwd(),
+        text=True
     )
 
     # Track active test
@@ -600,21 +647,24 @@ def get_test_status(db: Session, model_id: str) -> ModelTestStatus:
     # Check if test is active
     if model_id in _active_tests:
         test_info = _active_tests[model_id]
-        process = test_info['process']
-        log_file = test_info['log_file']
+        process = cast(subprocess.Popen[str], test_info['process'])
+        log_file = str(test_info['log_file'])
 
         # Check if process is still running
         if process.poll() is None:
             # Still running - read log tail
             log_tail = _read_log_tail(log_file, 20)
-            progress = _estimate_progress(log_tail, test_info['num_requests'])
+            num_requests_val = test_info['num_requests']
+            num_requests = int(num_requests_val) if isinstance(num_requests_val, (int, str)) else 0
+            progress = _estimate_progress(log_tail, num_requests)
+            start_time = cast(datetime, test_info['start_time'])
 
             return ModelTestStatus(
                 model_id=model_id,
                 status='testing',
                 progress=progress,
                 log_tail=log_tail,
-                started_at=test_info['start_time'].isoformat()
+                started_at=start_time.isoformat()
             )
         else:
             # Process finished - check exit code
@@ -641,7 +691,7 @@ def get_test_status(db: Session, model_id: str) -> ModelTestStatus:
                 status=status,
                 progress=1.0 if status == 'completed' else 0.0,
                 log_tail=log_tail,
-                started_at=test_info['start_time'].isoformat(),
+                started_at=cast(datetime, test_info['start_time']).isoformat(),
                 completed_at=datetime.now(timezone.utc).isoformat(),
                 error=error
             )
@@ -944,7 +994,7 @@ print(f"Results: {{results_file}}")
 
     # Start process
     log_file = open(log_path, "w")
-    process = subprocess.Popen(
+    process: subprocess.Popen[str] = subprocess.Popen(
         ["python", str(script_path)],
         stdout=log_file,
         stderr=subprocess.STDOUT,
@@ -984,17 +1034,19 @@ def get_benchmark_status(benchmark_id: str, db: Session) -> dict:
     # Check if process is still running
     if benchmark_id in _active_benchmarks:
         proc_info = _active_benchmarks[benchmark_id]
-        process = proc_info["process"]
+        process = cast(subprocess.Popen[str], proc_info["process"])
 
         if process.poll() is not None:
             # Process finished
             _active_benchmarks.pop(benchmark_id)
-            proc_info["log_file"].close()
+            log_file_obj = cast(Any, proc_info["log_file"])
+            log_file_obj.close()
 
             # Update benchmark status
             benchmark.status = "completed"
             benchmark.completed_at = datetime.now(timezone.utc)
-            benchmark.total_time_seconds = time.time() - proc_info["start_time"]
+            start_time_val = proc_info["start_time"]
+            benchmark.total_time_seconds = time.time() - (float(start_time_val) if isinstance(start_time_val, (int, float)) else 0.0)
             benchmark.progress = 100
             benchmark.completed = benchmark.total
 
@@ -1026,9 +1078,9 @@ def get_benchmark_status(benchmark_id: str, db: Session) -> dict:
             db.commit()
         else:
             # Parse log for progress
-            log_path = proc_info["log_path"]
+            log_path = cast(Path, proc_info["log_path"])
             if log_path.exists():
-                with open(log_path, "r") as f:
+                with open(str(log_path), "r") as f:
                     lines = f.readlines()
 
                 # Find last progress line
@@ -1086,7 +1138,7 @@ def cancel_benchmark(benchmark_id: str):
         return
 
     proc_info = _active_benchmarks[benchmark_id]
-    process = proc_info["process"]
+    process = cast(subprocess.Popen[str], proc_info["process"])
 
     # Terminate process
     if process.poll() is None:
@@ -1104,7 +1156,8 @@ def cancel_benchmark(benchmark_id: str):
     # Close log file
     if "log_file" in proc_info and proc_info["log_file"]:
         try:
-            proc_info["log_file"].close()
+            log_file_obj = cast(Any, proc_info["log_file"])
+            log_file_obj.close()
         except:
             pass
 

@@ -213,8 +213,9 @@ def get_usage_summary(
         job_tokens = job.total_tokens or 0
         job_prompt = int(job_tokens * 0.7)
         job_completion = int(job_tokens * 0.3)
-        
-        cost = calculate_cost(job_prompt, job_completion, job.model)
+
+        model_name = job.model if job.model else "unknown"
+        cost = calculate_cost(job_prompt, job_completion, model_name)
         
         costs_by_model[job.model]['jobs'] += 1
         costs_by_model[job.model]['requests'] += job.completed_requests

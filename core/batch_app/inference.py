@@ -9,7 +9,7 @@ This is separate from the batch worker to avoid conflicts.
 """
 
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, cast
 from vllm import LLM, SamplingParams
 from pathlib import Path
 
@@ -79,7 +79,7 @@ class InferenceEngine:
         
         # Load model
         try:
-            self.current_llm = LLM(**vllm_config)
+            self.current_llm = LLM(**cast(Any, vllm_config))
             self.current_model = model_id
             self.load_time = time.time() - start_time
             logger.info(f"Model loaded in {self.load_time:.1f}s")
@@ -133,6 +133,12 @@ class InferenceEngine:
         # Generate
         start_time = time.time()
         try:
+            if self.current_llm is None:
+                return {
+                    'error': 'Model not loaded',
+                    'model': model_id
+                }
+
             outputs = self.current_llm.generate([prompt], sampling_params)
             latency_ms = (time.time() - start_time) * 1000
             
@@ -141,7 +147,7 @@ class InferenceEngine:
             generated_text = output.outputs[0].text
             
             # Calculate token counts (approximate)
-            prompt_tokens = len(output.prompt_token_ids) if hasattr(output, 'prompt_token_ids') else 0
+            prompt_tokens = len(output.prompt_token_ids) if hasattr(output, 'prompt_token_ids') and output.prompt_token_ids is not None else 0
             completion_tokens = len(output.outputs[0].token_ids) if hasattr(output.outputs[0], 'token_ids') else 0
             
             return {

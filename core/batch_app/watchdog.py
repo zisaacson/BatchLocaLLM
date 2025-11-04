@@ -18,6 +18,7 @@ import time
 import logging
 import subprocess
 import signal
+from datetime import datetime, timezone, timedelta
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -99,7 +100,7 @@ class WorkerWatchdog:
             # Find processing jobs with no recent progress
             stuck_jobs = db.query(BatchJob).filter(
                 BatchJob.status == 'processing',
-                BatchJob.updated_at < datetime.now(timezone.utc) - timedelta(seconds=self.stuck_job_timeout)
+                BatchJob.last_progress_update < datetime.now(timezone.utc) - timedelta(seconds=self.stuck_job_timeout)
             ).all()
             
             if stuck_jobs:

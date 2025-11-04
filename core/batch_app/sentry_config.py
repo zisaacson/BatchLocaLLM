@@ -12,16 +12,14 @@ Usage:
 """
 
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any
 import sentry_sdk
+from sentry_sdk.types import Event
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
 
-try:
-    from core.config import settings
-except ImportError:
-    from config import settings
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +96,7 @@ def init_sentry() -> None:
         logger.error(f"Failed to initialize Sentry: {e}", exc_info=True)
 
 
-def before_send_filter(event: dict, hint: dict) -> Optional[dict]:
+def before_send_filter(event: Event, hint: Dict[str, Any]) -> Optional[Event]:
     """
     Filter and modify events before sending to Sentry.
     
@@ -136,9 +134,9 @@ def before_send_filter(event: dict, hint: dict) -> Optional[dict]:
         request = event["request"]
 
         # Add custom headers to context
-        if "headers" in request:
+        if isinstance(request, dict) and "headers" in request:
             headers = request["headers"]
-            if "X-Request-ID" in headers:
+            if isinstance(headers, dict) and "X-Request-ID" in headers:
                 event["tags"]["request_id"] = headers["X-Request-ID"]
 
     return event
@@ -287,7 +285,7 @@ def clear_context() -> None:
         return
 
     sentry_sdk.set_user(None)
-    sentry_sdk.set_context("batch", None)
+    sentry_sdk.set_context("batch", {})
 
 
 # Export main functions

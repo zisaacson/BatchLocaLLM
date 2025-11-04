@@ -16,7 +16,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect, Response
 from fastapi import File as FastAPIFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
@@ -62,7 +62,7 @@ app = FastAPI(
 # Add rate limit exception handler (only if rate limiting is enabled)
 if settings.ENABLE_RATE_LIMITING:
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 
 # ============================================================================
@@ -584,7 +584,7 @@ async def health_check(db: Session = Depends(get_db)):
             "reason": gpu_status.get('reason'),
             "warning": gpu_status.get('warning')
         },
-        "worker": heartbeat.to_dict() if heartbeat else {"status": "unknown"},
+        "worker": heartbeat.__dict__ if heartbeat else {"status": "unknown"},
         "queue": {
             "active_jobs": len(pending_jobs),
             "max_queue_depth": MAX_QUEUE_DEPTH,
@@ -613,7 +613,7 @@ async def get_queue_status(db: Session = Depends(get_db)):
     """
     # Get worker status
     worker_heartbeat = db.query(WorkerHeartbeat).filter(WorkerHeartbeat.id == 1).first()
-    worker_status = {
+    worker_status: Dict[str, Any] = {
         "status": "offline",
         "current_model": None,
         "last_seen": None
@@ -683,7 +683,13 @@ async def get_queue_status(db: Session = Depends(get_db)):
     ).order_by(BatchJob.created_at).all()
 
     queue_data = []
-    cumulative_eta_seconds = current_job_data["timing"]["eta_seconds"] if current_job_data and current_job_data["timing"]["eta_seconds"] else 0
+    cumulative_eta_seconds: float = 0.0
+    if current_job_data and isinstance(current_job_data, dict):
+        timing = current_job_data.get("timing")
+        if timing and isinstance(timing, dict):
+            eta = timing.get("eta_seconds")
+            if eta and isinstance(eta, (int, float)):
+                cumulative_eta_seconds = float(eta)
 
     for idx, job in enumerate(queued_jobs, start=1):
         # Estimate time for this job based on average throughput
@@ -1718,7 +1724,7 @@ def validate_dataset(file_path: Path) -> Dict[str, Any]:
     errors = []
     warnings = []
     count = 0
-    preview = []
+    preview: List[Dict[str, Any]] = []
 
     try:
         with open(file_path, 'r') as f:
@@ -1803,7 +1809,7 @@ async def upload_dataset(file: UploadFile, db: Session = Depends(get_db)):
     from pathlib import Path
 
     # Validate file extension
-    if not file.filename.endswith('.jsonl'):
+    if not file.filename or not file.filename.endswith('.jsonl'):
         raise HTTPException(
             status_code=400,
             detail="Invalid file format. Only .jsonl files are supported."
@@ -2681,6 +2687,8 @@ async def create_multi_model_comparison(
 
     # Create multi-model task
     handler = LabelStudioHandler()
+    if not input_data:
+        raise HTTPException(status_code=400, detail="input_data is required")
     task_id = handler.create_multi_model_task(
         project_id=request.project_id,
         input_data=input_data,
@@ -2801,14 +2809,14 @@ async def batch_install_models_endpoint(
     return result
 
 
-class CompareModelsRequest(BaseModel):
+class CompareModelsRequestDashboard(BaseModel):
     """Request to compare multiple models."""
     model_ids: List[str] = Field(..., description="List of model IDs to compare (2-10 models)")
 
 
 @app.post("/api/models/compare-dashboard")
 async def compare_models_dashboard_endpoint(
-    request: CompareModelsRequest,
+    request: CompareModelsRequestDashboard,
     db: Session = Depends(get_db)
 ):
     """
@@ -3834,7 +3842,7 @@ async def label_studio_webhook(
 
                 try:
                     # Get annotation count
-                    annotations = ls_handler.get_annotations(project_id)
+                    annotations = ls_handler.export_annotations(project_id)
                     annotation_count = len(annotations)
 
                     logger.info(f"Project {project_id} now has {annotation_count} annotations")
@@ -3880,9 +3888,7 @@ async def label_studio_webhook(
                 try:
                     # Export curated data
                     export_data = ls_handler.export_curated_data(
-                        project_id=project_id,
-                        format='json',
-                        only_completed=True
+                        project_id=project_id
                     )
 
                     # Save to file
@@ -4145,24 +4151,28 @@ async def get_job_stats(
     total_jobs = query.count()
 
     # Jobs by status
-    status_counts = db.query(
+    status_query = db.query(
         BatchJob.status,
         func.count(BatchJob.batch_id).label('count')
-    ).filter(
-        BatchJob.created_at >= start_date if start_date else True,
-        BatchJob.created_at <= end_date if end_date else True
-    ).group_by(BatchJob.status).all()
+    )
+    if start_date:
+        status_query = status_query.filter(BatchJob.created_at >= start_date)
+    if end_date:
+        status_query = status_query.filter(BatchJob.created_at <= end_date)
+    status_counts = status_query.group_by(BatchJob.status).all()
 
     by_status = {status: count for status, count in status_counts}
 
     # Jobs by model
-    model_counts = db.query(
+    model_query = db.query(
         BatchJob.model,
         func.count(BatchJob.batch_id).label('count')
-    ).filter(
-        BatchJob.created_at >= start_date if start_date else True,
-        BatchJob.created_at <= end_date if end_date else True
-    ).group_by(BatchJob.model).all()
+    )
+    if start_date:
+        model_query = model_query.filter(BatchJob.created_at >= start_date)
+    if end_date:
+        model_query = model_query.filter(BatchJob.created_at <= end_date)
+    model_counts = model_query.group_by(BatchJob.model).all()
 
     by_model = {model: count for model, count in model_counts if model}
 
@@ -4181,22 +4191,27 @@ async def get_job_stats(
     avg_duration = sum(durations) / len(durations) if durations else 0
 
     # Total requests
-    total_requests = db.query(func.sum(BatchJob.total_requests)).filter(
-        BatchJob.created_at >= start_date if start_date else True,
-        BatchJob.created_at <= end_date if end_date else True
-    ).scalar() or 0
+    total_requests_query = db.query(func.sum(BatchJob.total_requests))
+    if start_date:
+        total_requests_query = total_requests_query.filter(BatchJob.created_at >= start_date)
+    if end_date:
+        total_requests_query = total_requests_query.filter(BatchJob.created_at <= end_date)
+    total_requests = total_requests_query.scalar() or 0
 
-    completed_requests = db.query(func.sum(BatchJob.completed_requests)).filter(
-        BatchJob.created_at >= start_date if start_date else True,
-        BatchJob.created_at <= end_date if end_date else True
-    ).scalar() or 0
+    completed_requests_query = db.query(func.sum(BatchJob.completed_requests))
+    if start_date:
+        completed_requests_query = completed_requests_query.filter(BatchJob.created_at >= start_date)
+    if end_date:
+        completed_requests_query = completed_requests_query.filter(BatchJob.created_at <= end_date)
+    completed_requests = completed_requests_query.scalar() or 0
 
     # Total tokens
-    total_tokens = db.query(func.sum(BatchJob.total_tokens)).filter(
-        BatchJob.created_at >= start_date if start_date else True,
-        BatchJob.created_at <= end_date if end_date else True,
-        BatchJob.total_tokens.isnot(None)
-    ).scalar() or 0
+    total_tokens_query = db.query(func.sum(BatchJob.total_tokens)).filter(BatchJob.total_tokens.isnot(None))
+    if start_date:
+        total_tokens_query = total_tokens_query.filter(BatchJob.created_at >= start_date)
+    if end_date:
+        total_tokens_query = total_tokens_query.filter(BatchJob.created_at <= end_date)
+    total_tokens = total_tokens_query.scalar() or 0
 
     # Average token throughput
     avg_token_throughput = db.query(func.avg(BatchJob.throughput_tokens_per_sec)).filter(

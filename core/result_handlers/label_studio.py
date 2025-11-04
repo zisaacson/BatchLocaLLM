@@ -12,8 +12,10 @@ Use case:
 """
 
 import os
+import json
+import re
 import requests
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 
 from .base import ResultHandler
@@ -43,15 +45,31 @@ class LabelStudioHandler(ResultHandler):
         "source": "my_app"
     }
     """
-    
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """Initialize Label Studio handler with client."""
+        super().__init__(config)
+
+        # Initialize Label Studio client if configured
+        url = self.config.get('url') or os.getenv('LABEL_STUDIO_URL')
+        api_key = self.config.get('api_key') or os.getenv('LABEL_STUDIO_API_KEY')
+
+        self.client: Optional[Any] = None
+        if url and api_key:
+            try:
+                from core.batch_app.label_studio_integration import LabelStudioClient
+                self.client = LabelStudioClient(url, api_key)
+            except ImportError:
+                logger.warning("Label Studio integration not available")
+
     def name(self) -> str:
         return "label_studio"
     
-    def enabled(self) -> bool:
+    def enabled(self, metadata: Optional[Dict[str, Any]] = None) -> bool:
         """Check if Label Studio is configured."""
         url = self.config.get('url') or os.getenv('LABEL_STUDIO_URL')
         api_key = self.config.get('api_key') or os.getenv('LABEL_STUDIO_API_KEY')
-        
+
         return bool(url and api_key)
     
     def handle(
@@ -124,7 +142,7 @@ class LabelStudioHandler(ResultHandler):
             # Parse LLM response and create predictions for Label Studio
             predictions = self._create_predictions(llm_response, metadata.get('schema_type', 'generic'))
 
-            task = {
+            task: Dict[str, Any] = {
                 "data": task_data,
                 "meta": task_meta
             }
@@ -339,6 +357,10 @@ class LabelStudioHandler(ResultHandler):
             List of exported annotations
         """
         try:
+            if not self.client:
+                logger.error("Label Studio client not initialized")
+                return []
+
             # Get all tasks with annotations
             tasks = self.client.get_tasks(project_id)
 
@@ -418,21 +440,24 @@ class LabelStudioHandler(ResultHandler):
 
     def _reconstruct_output(self, annotation_result: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Reconstruct output from Label Studio annotation result."""
-        output = {}
+        output: Dict[str, Any] = {}
 
         for item in annotation_result:
             from_name = item.get('from_name')
+            if from_name is None:
+                continue
+
             value = item.get('value', {})
 
             # Extract value based on type
             if 'choices' in value:
-                output[from_name] = value['choices'][0] if value['choices'] else None
+                output[str(from_name)] = value['choices'][0] if value['choices'] else None
             elif 'rating' in value:
-                output[from_name] = value['rating']
+                output[str(from_name)] = value['rating']
             elif 'text' in value:
-                output[from_name] = value['text'][0] if value['text'] else None
+                output[str(from_name)] = value['text'][0] if value['text'] else None
             elif 'number' in value:
-                output[from_name] = value['number']
+                output[str(from_name)] = value['number']
 
         return output
 
@@ -458,6 +483,10 @@ class LabelStudioHandler(ResultHandler):
             Task ID
         """
         try:
+            if not self.client:
+                logger.error("Label Studio client not initialized")
+                return 0
+
             # Create task data with all model responses
             task_data = {
                 'input': input_data,
@@ -508,7 +537,8 @@ class LabelStudioHandler(ResultHandler):
                     )
 
             logger.info(f"Created multi-model task {task_id} with {len(model_responses)} model predictions")
-            return task_id
+            task_id_int: int = int(task_id) if isinstance(task_id, (int, str)) else 0
+            return task_id_int
 
         except Exception as e:
             logger.error(f"Error creating multi-model task: {e}")
@@ -537,6 +567,10 @@ class LabelStudioHandler(ResultHandler):
             List of suggested tasks
         """
         try:
+            if not self.client:
+                logger.error("Label Studio client not initialized")
+                return []
+
             # Get all unlabeled tasks
             tasks = self.client.get_tasks(project_id)
             unlabeled = [t for t in tasks if not t.get('is_labeled')]
@@ -606,6 +640,10 @@ class LabelStudioHandler(ResultHandler):
             Quality metrics
         """
         try:
+            if not self.client:
+                logger.error("Label Studio client not initialized")
+                return {}
+
             # Get all tasks
             tasks = self.client.get_tasks(project_id)
 
@@ -676,6 +714,10 @@ class LabelStudioHandler(ResultHandler):
             Import results
         """
         try:
+            if not self.client:
+                logger.error("Label Studio client not initialized")
+                return {"created": 0, "errors": ["Client not initialized"]}
+
             created_tasks = []
             errors = []
 
@@ -724,6 +766,10 @@ class LabelStudioHandler(ResultHandler):
             Updated annotation data
         """
         try:
+            if not self.client:
+                logger.error("Label Studio client not initialized")
+                return {}
+
             # Update annotation with ground_truth flag
             annotation = self.client.update_annotation(
                 annotation_id=annotation_id,
@@ -748,6 +794,10 @@ class LabelStudioHandler(ResultHandler):
             List of ground truth annotations
         """
         try:
+            if not self.client:
+                logger.error("Label Studio client not initialized")
+                return []
+
             # Get all annotations for project filtered by ground_truth
             annotations = self.client.get_annotations(
                 project_id=project_id,

@@ -167,7 +167,7 @@ def optimize_for_batch_size(
     available_vram_gb: float,
     target_batch_size: int = 100,
     context_length: int = 4096
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     """
     Optimize offload strategy for a specific batch size.
     
@@ -213,8 +213,8 @@ def optimize_for_batch_size(
                 'effective_throughput': effective_throughput,
                 'recommendation': f'Optimal: batch_size={batch_size}, offload={memory_est["cpu_offload_gb"]:.1f}GB'
             }
-    
-    return best_config
+
+    return best_config if best_config else None
 
 
 def generate_optimized_vllm_command(

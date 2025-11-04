@@ -16,7 +16,7 @@ Configuration:
 
 import os
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 from datetime import datetime
 
@@ -28,7 +28,7 @@ try:
 except ImportError:
     S3_AVAILABLE = False
 
-from result_handlers.base import ResultHandler
+from core.result_handlers.base import ResultHandler
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +51,12 @@ class S3UploadHandler(ResultHandler):
     def name(self) -> str:
         return "s3_upload"
     
-    def enabled(self) -> bool:
+    def enabled(self, metadata: Optional[Dict[str, Any]] = None) -> bool:
         """Check if S3 is configured and available."""
         if not S3_AVAILABLE:
             logger.warning("boto3 not installed, S3UploadHandler disabled")
             return False
-        
+
         bucket = os.getenv('S3_BUCKET')
         return bool(bucket)
     

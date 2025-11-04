@@ -85,7 +85,7 @@ def get_vllm_api_url() -> str:
     return f"http://{host}:{port}"
 
 
-def generate_prediction(task_data: Dict[str, Any], model_id: str = None) -> Dict[str, Any]:
+def generate_prediction(task_data: Dict[str, Any], model_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Generate prediction for a single task using vLLM.
     
@@ -182,7 +182,7 @@ Respond in JSON format with entity text, type, and position."""
     return prompt
 
 
-def predict_candidate_evaluation(prompt: str, model_id: str = None) -> Dict[str, Any]:
+def predict_candidate_evaluation(prompt: str, model_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Get candidate evaluation prediction from vLLM.
     
@@ -276,14 +276,14 @@ def predict_candidate_evaluation(prompt: str, model_id: str = None) -> Dict[str,
         return {"result": [], "score": 0.0}
 
 
-def predict_classification(prompt: str, model_id: str = None) -> Dict[str, Any]:
+def predict_classification(prompt: str, model_id: Optional[str] = None) -> Dict[str, Any]:
     """Get text classification prediction from vLLM."""
     # Similar to candidate evaluation but simpler
     # Implementation omitted for brevity
     return {"result": [], "score": 0.0}
 
 
-def predict_ner(prompt: str, model_id: str = None) -> Dict[str, Any]:
+def predict_ner(prompt: str, model_id: Optional[str] = None) -> Dict[str, Any]:
     """Get NER prediction from vLLM."""
     # Similar to candidate evaluation but for entities
     # Implementation omitted for brevity
@@ -315,7 +315,8 @@ async def predict(request: PredictRequest):
     
     results = []
     for task in request.tasks:
-        prediction = generate_prediction(task.data, request.model_version)
+        model_version: Optional[str] = request.model_version if hasattr(request, 'model_version') else None
+        prediction = generate_prediction(task.data, model_version)
         results.append(prediction)
     
     return PredictResponse(

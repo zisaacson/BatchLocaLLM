@@ -7,7 +7,7 @@ This is the default handler and is always enabled.
 
 import os
 import requests
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 
 from .base import ResultHandler
@@ -48,7 +48,7 @@ class WebhookHandler(ResultHandler):
     def name(self) -> str:
         return "webhook"
     
-    def enabled(self) -> bool:
+    def enabled(self, metadata: Optional[Dict[str, Any]] = None) -> bool:
         # Webhook handler is always enabled
         # Individual batches specify webhook_url in metadata
         return True

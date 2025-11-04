@@ -124,6 +124,7 @@ def setup_logging(
     root_logger.handlers.clear()
 
     # Choose formatter
+    formatter: logging.Formatter
     if structured:
         formatter = StructuredFormatter()
     else:

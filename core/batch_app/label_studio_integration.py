@@ -56,7 +56,8 @@ class LabelStudioClient:
             }
         )
         response.raise_for_status()
-        return response.json()
+        result: Dict[str, Any] = response.json()
+        return result
 
     def import_tasks(self, project_id: int, tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -75,7 +76,8 @@ class LabelStudioClient:
             json=tasks
         )
         response.raise_for_status()
-        return response.json()
+        result: Dict[str, Any] = response.json()
+        return result
 
     def create_prediction(
         self,
@@ -111,7 +113,8 @@ class LabelStudioClient:
             json=payload
         )
         response.raise_for_status()
-        return response.json()
+        prediction_result: Dict[str, Any] = response.json()
+        return prediction_result
 
     def get_tasks(self, project_id: int, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
@@ -131,7 +134,8 @@ class LabelStudioClient:
             params=params
         )
         response.raise_for_status()
-        return response.json()
+        result: List[Dict[str, Any]] = response.json()
+        return result
 
     def export_annotations(self, project_id: int, export_type: str = "JSON") -> List[Dict[str, Any]]:
         """
@@ -150,7 +154,8 @@ class LabelStudioClient:
             params={"exportType": export_type}
         )
         response.raise_for_status()
-        return response.json()
+        result: List[Dict[str, Any]] = response.json()
+        return result
 
 
 def create_candidate_evaluation_task(
@@ -169,7 +174,7 @@ def create_candidate_evaluation_task(
     Returns:
         Label Studio task format
     """
-    task = {
+    task: Dict[str, Any] = {
         "data": {
             "candidate_id": candidate_id,
             "name": candidate_data.get("name", ""),
@@ -182,12 +187,13 @@ def create_candidate_evaluation_task(
 
     # Add pre-labeling if model prediction provided
     if model_prediction:
-        task["predictions"] = [{
-            "result": [
-                {
-                    "from_name": "recommendation",
-                    "to_name": "candidate",
-                    "type": "choices",
+        predictions_list: List[Dict[str, Any]] = [
+            {
+                "result": [
+                    {
+                        "from_name": "recommendation",
+                        "to_name": "candidate",
+                        "type": "choices",
                     "value": {
                         "choices": [model_prediction.get("recommendation", "Maybe")]
                     }
@@ -220,6 +226,7 @@ def create_candidate_evaluation_task(
             "score": model_prediction.get("confidence", 0.5),
             "model_version": model_prediction.get("model_name", "unknown")
         }]
+        task["predictions"] = predictions_list
 
     return task
 
@@ -291,10 +298,19 @@ def select_tasks_for_review(
             })
 
         # Sort by uncertainty (highest first)
-        scored_results.sort(key=lambda x: x["score"], reverse=True)
+        def get_score(item: Dict[str, Any]) -> float:
+            score = item.get("score", 0.0)
+            return float(score) if isinstance(score, (int, float, str)) else 0.0
+
+        scored_results.sort(key=get_score, reverse=True)
 
         # Return top N
-        return [item["result"] for item in scored_results[:max_tasks]]
+        results_list: List[Dict[str, Any]] = []
+        for item in scored_results[:max_tasks]:
+            result_item = item.get("result")
+            if isinstance(result_item, dict):
+                results_list.append(result_item)
+        return results_list
 
     elif strategy == "random":
         import random
