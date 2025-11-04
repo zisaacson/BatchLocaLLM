@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Comparison - vLLM Batch Server</title>
+    <link rel="stylesheet" href="/static/css/shared.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f7fa;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            margin: 0 0 10px 0;
+            font-size: 28px;
+            color: #2d3748;
+        }
+
+        .breadcrumb {
+            font-size: 14px;
+            color: #718096;
+        }
+
+        .breadcrumb a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .model-selector {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .selector-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .selector-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .selector-item label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #2d3748;
+        }
+
+        .selector-item select {
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .model-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .model-card h2 {
+            margin: 0 0 20px 0;
+            font-size: 20px;
+            color: #2d3748;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .metric-value {
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 16px;
+        }
+
+        .metric-value.better {
+            color: #48bb78;
+        }
+
+        .metric-value.worse {
+            color: #f56565;
+        }
+
+        .chart-section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .chart-section h2 {
+            margin: 0 0 20px 0;
+            font-size: 20px;
+            color: #2d3748;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        .ab-test-section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .test-prompt {
+            background: #f7fafc;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+
+        .response-comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .response-box {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
+        }
+
+        .response-box h4 {
+            margin: 0 0 10px 0;
+            color: #2d3748;
+        }
+
+        .response-box pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 13px;
+            color: #4a5568;
+        }
+
+        .vote-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+
+        .vote-btn {
+            padding: 10px 20px;
+            border: 2px solid #e2e8f0;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .vote-btn:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+        }
+
+        .vote-btn.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        .winner-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #48bb78;
+            color: white;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .spinner {
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="breadcrumb">
+                <a href="/">Home</a> / <a href="/fine-tuning">Fine-Tuning</a> / Model Comparison
+            </div>
+            <h1>📊 Model Comparison</h1>
+        </div>
+
+        <!-- Model Selector -->
+        <div class="model-selector">
+            <h2>Select Models to Compare</h2>
+            <div class="selector-grid">
+                <div class="selector-item">
+                    <label>Base Model</label>
+                    <select id="baseModelSelect">
+                        <option value="">Select base model...</option>
+                    </select>
+                </div>
+                <div class="selector-item">
+                    <label>Fine-Tuned Model</label>
+                    <select id="fineTunedModelSelect">
+                        <option value="">Select fine-tuned model...</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="loadComparison()">Compare Models</button>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading comparison data...</p>
+        </div>
+
+        <!-- Comparison Results -->
+        <div id="comparisonResults" style="display: none;">
+            <!-- Metrics Comparison -->
+            <div class="comparison-grid">
+                <div class="model-card">
+                    <h2 id="baseModelName">Base Model</h2>
+                    <div id="baseModelMetrics"></div>
+                </div>
+                <div class="model-card">
+                    <h2 id="fineTunedModelName">Fine-Tuned Model</h2>
+                    <div id="fineTunedModelMetrics"></div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="chart-section">
+                <h2>Quality Metrics Comparison</h2>
+                <div class="chart-container">
+                    <canvas id="qualityChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-section">
+                <h2>Performance Metrics Comparison</h2>
+                <div class="chart-container">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+
+            <!-- A/B Testing -->
+            <div class="ab-test-section">
+                <h2>🧪 A/B Testing</h2>
+                <p style="color: #718096; margin-bottom: 20px;">
+                    Test both models with sample prompts and vote for the better response.
+                </p>
+                <button class="btn btn-primary" onclick="runABTest()">Run A/B Test</button>
+                <div id="abTestResults" style="margin-top: 20px;"></div>
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="empty-state">
+            <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+            <p>Select two models to compare their performance</p>
+        </div>
+    </div>
+
+    <script src="/static/js/model-comparison.js"></script>
+</body>
+</html>
+

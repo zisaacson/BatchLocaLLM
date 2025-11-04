@@ -96,6 +96,10 @@ if settings.ENABLE_RATE_LIMITING:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
+# Include fine-tuning router
+from core.batch_app.fine_tuning import router as fine_tuning_router
+app.include_router(fine_tuning_router)
+
 
 # ============================================================================
 # Request Tracing Middleware
@@ -788,6 +792,28 @@ async def add_model_page():
                 return HTMLResponse(content=f.read())
 
     raise HTTPException(status_code=404, detail="Add model page not found")
+
+
+@app.get("/fine-tuning", response_class=HTMLResponse)
+async def fine_tuning_dashboard():
+    """Serve the fine-tuning dashboard UI."""
+    fine_tuning_path = Path(__file__).parent.parent.parent / "static" / "fine-tuning.html"
+    if not fine_tuning_path.exists():
+        raise HTTPException(status_code=404, detail="Fine-tuning dashboard not found")
+
+    with open(fine_tuning_path) as f:
+        return HTMLResponse(content=f.read())
+
+
+@app.get("/model-comparison", response_class=HTMLResponse)
+async def model_comparison_page():
+    """Serve the model comparison UI."""
+    comparison_path = Path(__file__).parent.parent.parent / "static" / "model-comparison.html"
+    if not comparison_path.exists():
+        raise HTTPException(status_code=404, detail="Model comparison page not found")
+
+    with open(comparison_path) as f:
+        return HTMLResponse(content=f.read())
 
 
 @app.get("/admin", response_class=HTMLResponse)

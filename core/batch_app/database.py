@@ -24,10 +24,48 @@ from sqlalchemy import (
     Text,
     create_engine,
     ForeignKey,
+    ARRAY,
+    Numeric,
 )
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY as PG_ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship
+from sqlalchemy import JSON, TypeDecorator, PickleType
 
 from core.config import settings
+
+
+class JSONType(TypeDecorator):
+    """
+    JSON type that uses JSONB for PostgreSQL and JSON for SQLite.
+    This ensures compatibility across different database backends.
+    """
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(JSONB())
+        else:
+            return dialect.type_descriptor(JSON())
+
+
+class ArrayType(TypeDecorator):
+    """
+    Array type that uses ARRAY for PostgreSQL and PickleType for SQLite.
+    This ensures compatibility across different database backends.
+    """
+    impl = PickleType
+    cache_ok = True
+
+    def __init__(self, item_type=None):
+        self.item_type = item_type
+        super().__init__()
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(PG_ARRAY(self.item_type or String))
+        else:
+            return dialect.type_descriptor(PickleType())
 
 
 class Base(DeclarativeBase):
@@ -458,4 +496,309 @@ class WebhookDeadLetter(Base):
     )
     retried_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     retry_success: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+
+class FineTunedModel(Base):
+    """
+    Fine-tuned model registry.
+
+    Tracks all fine-tuned models with quality metrics, performance data,
+    and deployment status.
+    """
+    __tablename__ = "fine_tuned_models"
+
+    # Primary key
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+    # Model identification
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    base_model: Mapped[str] = mapped_column(String(255), nullable=False)
+    version: Mapped[str] = mapped_column(String(50), nullable=False)
+    philosopher: Mapped[str] = mapped_column(String(255), nullable=False)
+    domain: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Training info
+    training_job_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("training_jobs.id"), nullable=True
+    )
+    training_dataset_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    training_sample_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    training_config: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+
+    # Model files
+    model_path: Mapped[str] = mapped_column(Text, nullable=False)
+    model_size_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Quality metrics
+    win_rate: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    gold_star_rate: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    avg_rating: Mapped[float | None] = mapped_column(Numeric(3, 2), nullable=True)
+    consistency_score: Mapped[float | None] = mapped_column(Numeric(3, 2), nullable=True)
+
+    # Performance metrics
+    tokens_per_second: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vram_usage_gb: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+
+    # Deployment
+    status: Mapped[str] = mapped_column(String(50), default='trained')
+    # Status values: trained, deployed, archived
+    deployed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deployment_config: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc)
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to API response format."""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'base_model': self.base_model,
+            'version': self.version,
+            'philosopher': self.philosopher,
+            'domain': self.domain,
+            'training_job_id': self.training_job_id,
+            'training_sample_count': self.training_sample_count,
+            'model_path': self.model_path,
+            'model_size_mb': self.model_size_mb,
+            'win_rate': float(self.win_rate) if self.win_rate else None,
+            'gold_star_rate': float(self.gold_star_rate) if self.gold_star_rate else None,
+            'avg_rating': float(self.avg_rating) if self.avg_rating else None,
+            'consistency_score': float(self.consistency_score) if self.consistency_score else None,
+            'tokens_per_second': float(self.tokens_per_second) if self.tokens_per_second else None,
+            'latency_ms': self.latency_ms,
+            'vram_usage_gb': float(self.vram_usage_gb) if self.vram_usage_gb else None,
+            'status': self.status,
+            'deployed_at': self.deployed_at.isoformat() if self.deployed_at else None,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
+
+
+class TrainingJob(Base):
+    """
+    Training job tracking.
+
+    Monitors fine-tuning jobs with progress, metrics, and status.
+    """
+    __tablename__ = "training_jobs"
+
+    # Primary key
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+    # Job identification
+    job_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    philosopher: Mapped[str] = mapped_column(String(255), nullable=False)
+    domain: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Configuration
+    base_model: Mapped[str] = mapped_column(String(255), nullable=False)
+    backend: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Backend values: unsloth, axolotl, openai, huggingface
+    config: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+
+    # Dataset
+    dataset_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sample_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    conquest_types: Mapped[list[str] | None] = mapped_column(ArrayType(String), nullable=True)
+
+    # Progress
+    status: Mapped[str] = mapped_column(String(50), default='pending')
+    # Status values: pending, running, completed, failed, cancelled
+    progress: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
+    current_epoch: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_epochs: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    current_step: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_steps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Metrics
+    training_loss: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
+    validation_loss: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
+    learning_rate: Mapped[float | None] = mapped_column(Numeric(10, 8), nullable=True)
+
+    # Timing
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    estimated_completion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Output
+    output_model_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("fine_tuned_models.id"), nullable=True
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    logs_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc)
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to API response format."""
+        return {
+            'id': self.id,
+            'job_id': self.job_id,
+            'philosopher': self.philosopher,
+            'domain': self.domain,
+            'base_model': self.base_model,
+            'backend': self.backend,
+            'config': self.config,
+            'dataset_path': self.dataset_path,
+            'sample_count': self.sample_count,
+            'conquest_types': self.conquest_types,
+            'status': self.status,
+            'progress': float(self.progress) if self.progress else 0,
+            'current_epoch': self.current_epoch,
+            'total_epochs': self.total_epochs,
+            'current_step': self.current_step,
+            'total_steps': self.total_steps,
+            'training_loss': float(self.training_loss) if self.training_loss else None,
+            'validation_loss': float(self.validation_loss) if self.validation_loss else None,
+            'learning_rate': float(self.learning_rate) if self.learning_rate else None,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'estimated_completion': self.estimated_completion.isoformat() if self.estimated_completion else None,
+            'output_model_id': self.output_model_id,
+            'error_message': self.error_message,
+            'logs_path': self.logs_path,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
+
+
+class ModelComparison(Base):
+    """
+    Model comparison and A/B testing results.
+
+    Tracks side-by-side comparisons between base and fine-tuned models.
+    """
+    __tablename__ = "model_comparisons"
+
+    # Primary key
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+    # User context
+    philosopher: Mapped[str] = mapped_column(String(255), nullable=False)
+    domain: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Models being compared
+    base_model_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("fine_tuned_models.id"), nullable=True
+    )
+    fine_tuned_model_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("fine_tuned_models.id"), nullable=False
+    )
+
+    # Test configuration
+    test_prompts: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+    test_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Results
+    base_model_wins: Mapped[int] = mapped_column(Integer, default=0)
+    fine_tuned_wins: Mapped[int] = mapped_column(Integer, default=0)
+    ties: Mapped[int] = mapped_column(Integer, default=0)
+    win_rate: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+
+    # Detailed metrics
+    quality_improvement: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+    performance_comparison: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+    sample_outputs: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+
+    # Status
+    status: Mapped[str] = mapped_column(String(50), default='pending')
+    # Status values: pending, running, completed
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to API response format."""
+        return {
+            'id': self.id,
+            'philosopher': self.philosopher,
+            'domain': self.domain,
+            'base_model_id': self.base_model_id,
+            'fine_tuned_model_id': self.fine_tuned_model_id,
+            'test_prompts': self.test_prompts,
+            'test_count': self.test_count,
+            'base_model_wins': self.base_model_wins,
+            'fine_tuned_wins': self.fine_tuned_wins,
+            'ties': self.ties,
+            'win_rate': float(self.win_rate) if self.win_rate else None,
+            'quality_improvement': self.quality_improvement,
+            'performance_comparison': self.performance_comparison,
+            'sample_outputs': self.sample_outputs,
+            'status': self.status,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'created_at': self.created_at.isoformat()
+        }
+
+
+class DeploymentHistory(Base):
+    """
+    Deployment history for rollback capability.
+
+    Tracks all model deployments and rollbacks.
+    """
+    __tablename__ = "deployment_history"
+
+    # Primary key
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+    # Model reference
+    model_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("fine_tuned_models.id"), nullable=False
+    )
+
+    # User context
+    philosopher: Mapped[str] = mapped_column(String(255), nullable=False)
+    domain: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Action details
+    action: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Action values: deploy, undeploy, rollback
+    previous_model_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("fine_tuned_models.id"), nullable=True
+    )
+
+    # Configuration
+    deployment_config: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+    deployed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Timestamp
+    deployed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to API response format."""
+        return {
+            'id': self.id,
+            'model_id': self.model_id,
+            'philosopher': self.philosopher,
+            'domain': self.domain,
+            'action': self.action,
+            'previous_model_id': self.previous_model_id,
+            'deployment_config': self.deployment_config,
+            'deployed_by': self.deployed_by,
+            'notes': self.notes,
+            'deployed_at': self.deployed_at.isoformat()
+        }
 
