@@ -10,7 +10,7 @@ import pytest
 import json
 import tempfile
 from pathlib import Path
-from batch_app.benchmarks import BenchmarkManager
+from core.batch_app.benchmarks import BenchmarkManager
 
 
 @pytest.fixture

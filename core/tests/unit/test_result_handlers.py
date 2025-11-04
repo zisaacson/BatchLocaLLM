@@ -10,8 +10,8 @@ Reduced from 14 tests to 5 tests focusing on core functionality:
 
 import pytest
 from unittest.mock import Mock, patch
-from result_handlers.base import ResultHandler, ResultHandlerRegistry
-from result_handlers.webhook import WebhookHandler
+from core.result_handlers.base import ResultHandler, ResultHandlerRegistry
+from core.result_handlers.webhook import WebhookHandler
 
 
 class TestResultHandlerBase:

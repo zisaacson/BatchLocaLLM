@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from batch_app.webhooks import send_webhook
-from batch_app.database import BatchJob
+from core.batch_app.webhooks import send_webhook
+from core.batch_app.database import BatchJob
 
 
 class TestWebhookNotifications:

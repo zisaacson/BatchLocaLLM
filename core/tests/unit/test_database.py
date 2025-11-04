@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from batch_app.database import Base, File, BatchJob, FailedRequest, WorkerHeartbeat
+from core.batch_app.database import Base, File, BatchJob, FailedRequest, WorkerHeartbeat
 
 
 @pytest.fixture
