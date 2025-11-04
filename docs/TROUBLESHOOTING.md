@@ -1,558 +1,576 @@
-# Troubleshooting Guide
+# vLLM Batch Server - Troubleshooting Guide
 
-This guide covers common issues and their solutions.
-
-## Table of Contents
-
-- [Installation Issues](#installation-issues)
-- [GPU & Memory Issues](#gpu--memory-issues)
-- [Worker Issues](#worker-issues)
-- [API Server Issues](#api-server-issues)
-- [Database Issues](#database-issues)
-- [Model Loading Issues](#model-loading-issues)
-- [Performance Issues](#performance-issues)
-- [Networking Issues](#networking-issues)
+This guide helps you diagnose and fix common issues with the vLLM Batch Server.
 
 ---
 
-## Installation Issues
+## 📚 **Table of Contents**
 
-### Issue: vLLM installation fails
-
-**Symptoms:**
-```
-ERROR: Failed building wheel for vllm
-```
-
-**Solutions:**
-
-1. **Check CUDA version:**
-```bash
-nvcc --version
-# vLLM requires CUDA 12.1+
-```
-
-2. **Install CUDA toolkit:**
-```bash
-# Ubuntu/Debian
-sudo apt install nvidia-cuda-toolkit
-
-# Or download from NVIDIA
-wget https://developer.download.nvidia.com/compute/cuda/12.1.0/local_installers/cuda_12.1.0_530.30.02_linux.run
-sudo sh cuda_12.1.0_530.30.02_linux.run
-```
-
-3. **Use pre-built wheels:**
-```bash
-pip install vllm --extra-index-url https://download.pytorch.org/whl/cu121
-```
-
-### Issue: Python version incompatibility
-
-**Symptoms:**
-```
-ERROR: Package 'vllm' requires a different Python: 3.9.0 not in '>=3.10'
-```
-
-**Solution:**
-```bash
-# Install Python 3.11
-sudo apt install python3.11 python3.11-venv
-
-# Create venv with Python 3.11
-python3.11 -m venv venv
-source venv/bin/activate
-```
+1. [Service Issues](#service-issues)
+2. [GPU Issues](#gpu-issues)
+3. [Batch Job Issues](#batch-job-issues)
+4. [Fine-Tuning Issues](#fine-tuning-issues)
+5. [Label Studio Issues](#label-studio-issues)
+6. [Performance Issues](#performance-issues)
+7. [Database Issues](#database-issues)
 
 ---
 
-## GPU & Memory Issues
+## 🔧 **Service Issues**
 
-### Issue: CUDA Out of Memory (OOM)
+### **Services Not Starting**
 
-**Symptoms:**
-```
-torch.cuda.OutOfMemoryError: CUDA out of memory
-```
+**Symptoms**:
+- `docker compose up` fails
+- Services exit immediately
+- Port conflicts
 
-**Solutions:**
-
-1. **Reduce GPU memory utilization:**
+**Diagnosis**:
 ```bash
-# Edit .env
-GPU_MEMORY_UTILIZATION=0.80  # Default is 0.90
+# Check Docker logs
+docker compose logs -f
+
+# Check specific service
+docker logs vllm-batch-server
+
+# Check port usage
+sudo lsof -i :4000
+sudo lsof -i :4115
 ```
 
-2. **Use a smaller model:**
-```bash
-# Instead of 7B, use 4B or 3B
-DEFAULT_MODEL=google/gemma-3-4b-it
-```
+**Solutions**:
 
-3. **Enable CPU offload (for larger models):**
-```bash
-# In model configuration
-CPU_OFFLOAD_GB=8  # Offload 8GB to CPU
-```
+1. **Port already in use**:
+   ```bash
+   # Kill process using port
+   sudo kill -9 $(sudo lsof -t -i:4000)
+   
+   # Or change port in docker-compose.yml
+   ports:
+     - "4001:4000"  # Use different host port
+   ```
 
-4. **Check GPU memory:**
+2. **Docker daemon not running**:
+   ```bash
+   sudo systemctl start docker
+   ```
+
+3. **Insufficient permissions**:
+   ```bash
+   sudo usermod -aG docker $USER
+   newgrp docker
+   ```
+
+4. **Corrupted containers**:
+   ```bash
+   docker compose down -v
+   docker compose up -d
+   ```
+
+---
+
+## 🎮 **GPU Issues**
+
+### **GPU Not Detected**
+
+**Symptoms**:
+- vLLM fails to start
+- Error: "No CUDA devices found"
+- Models load on CPU instead of GPU
+
+**Diagnosis**:
 ```bash
+# Check NVIDIA drivers
 nvidia-smi
-# Kill any other processes using GPU
+
+# Check Docker GPU support
+docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+
+# Check vLLM logs
+docker logs vllm-server | grep -i cuda
 ```
 
-### Issue: GPU not detected
+**Solutions**:
 
-**Symptoms:**
-```
-RuntimeError: No CUDA GPUs are available
-```
+1. **Install NVIDIA drivers**:
+   ```bash
+   # Ubuntu
+   sudo apt update
+   sudo apt install nvidia-driver-535
+   sudo reboot
+   ```
 
-**Solutions:**
+2. **Install NVIDIA Container Toolkit**:
+   ```bash
+   distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+   curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+   curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
+     sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+   sudo apt update
+   sudo apt install -y nvidia-container-toolkit
+   sudo systemctl restart docker
+   ```
 
-1. **Check NVIDIA driver:**
+3. **Verify GPU in Docker**:
+   ```bash
+   docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+   ```
+
+### **Out of Memory (OOM)**
+
+**Symptoms**:
+- vLLM crashes with "CUDA out of memory"
+- Model fails to load
+- Batch jobs fail randomly
+
+**Diagnosis**:
 ```bash
+# Check GPU memory usage
 nvidia-smi
-# If this fails, reinstall NVIDIA drivers
+
+# Check vLLM memory usage
+docker stats vllm-server
 ```
 
-2. **Verify CUDA installation:**
-```bash
-python -c "import torch; print(torch.cuda.is_available())"
-# Should print: True
-```
+**Solutions**:
 
-3. **Reinstall PyTorch with CUDA:**
-```bash
-pip uninstall torch
-pip install torch --extra-index-url https://download.pytorch.org/whl/cu121
-```
+1. **Reduce model size**:
+   - Use quantized models (4-bit, 8-bit)
+   - Use smaller models (7B instead of 13B)
+
+2. **Reduce batch size**:
+   ```python
+   # In vLLM config
+   max_num_seqs = 32  # Reduce from default
+   ```
+
+3. **Enable GPU memory fraction**:
+   ```python
+   # In vLLM config
+   gpu_memory_utilization = 0.8  # Use 80% of GPU memory
+   ```
+
+4. **Use CPU offloading**:
+   ```python
+   # In vLLM config
+   cpu_offload_gb = 8  # Offload 8GB to CPU
+   ```
 
 ---
 
-## Worker Issues
+## 📦 **Batch Job Issues**
 
-### Issue: Worker not processing jobs
+### **Batch Job Stuck in "Validating"**
 
-**Symptoms:**
-- Batch jobs stuck in "validating" status
-- Worker logs show no activity
+**Symptoms**:
+- Batch job status never changes from "validating"
+- No progress after hours
 
-**Solutions:**
-
-1. **Check worker is running:**
+**Diagnosis**:
 ```bash
-ps aux | grep worker
-# Should show: python -m core.batch_app.worker
+# Check batch job status
+curl http://localhost:4000/v1/batches/{batch_id}
+
+# Check vLLM logs
+docker logs vllm-server | grep -i batch
+
+# Check database
+sqlite3 data/database/batch_jobs.db "SELECT * FROM batch_jobs WHERE id='batch_abc123';"
 ```
 
-2. **Check worker logs:**
+**Solutions**:
+
+1. **Restart vLLM server**:
+   ```bash
+   docker restart vllm-server
+   ```
+
+2. **Check input file format**:
+   ```bash
+   # Validate JSONL format
+   cat batch_requests.jsonl | jq .
+   ```
+
+3. **Verify model is loaded**:
+   ```bash
+   curl http://localhost:4000/v1/models
+   ```
+
+### **Batch Job Fails with "Model Not Found"**
+
+**Symptoms**:
+- Batch job fails immediately
+- Error: "Model 'xyz' not found"
+
+**Diagnosis**:
 ```bash
-tail -f logs/worker.log
+# List available models
+curl http://localhost:4000/v1/models
+
+# Check model registry
+curl http://localhost:4000/v1/models/registry
 ```
 
-3. **Restart worker:**
+**Solutions**:
+
+1. **Load the model**:
+   ```bash
+   # Via API
+   curl -X POST http://localhost:4000/v1/models/load \
+     -H "Content-Type: application/json" \
+     -d '{"model_name": "gemma-3-12b"}'
+   ```
+
+2. **Add the model**:
+   - Go to http://localhost:4000/static/model-management.html
+   - Click "Add Model"
+   - Enter model name and HuggingFace ID
+
+### **Batch Job Results Missing**
+
+**Symptoms**:
+- Batch job completes but no output file
+- Output file is empty
+
+**Diagnosis**:
 ```bash
-pkill -f "batch_app.worker"
-python -m core.batch_app.worker &
+# Check output file
+curl http://localhost:4000/v1/files/{output_file_id}/content
+
+# Check failed requests
+sqlite3 data/database/batch_jobs.db "SELECT * FROM failed_requests WHERE batch_id='batch_abc123';"
 ```
 
-4. **Check worker heartbeat:**
-```bash
-curl http://localhost:4080/v1/worker/heartbeat
-# Should return recent timestamp
-```
+**Solutions**:
 
-### Issue: Worker crashes during processing
+1. **Check failed requests**:
+   ```bash
+   # Get failed requests
+   curl http://localhost:4000/v1/batches/{batch_id}/failed_requests
+   ```
 
-**Symptoms:**
-```
-Worker process terminated unexpectedly
-```
-
-**Solutions:**
-
-1. **Check for OOM:**
-```bash
-dmesg | grep -i "out of memory"
-```
-
-2. **Reduce batch size:**
-```bash
-# Edit .env
-CHUNK_SIZE=50  # Default is 100
-```
-
-3. **Enable incremental saves:**
-```bash
-# Already enabled by default
-INCREMENTAL_SAVE_INTERVAL=100
-```
+2. **Retry failed requests**:
+   ```bash
+   # Resubmit batch with failed requests only
+   curl -X POST http://localhost:4000/v1/batches \
+     -H "Content-Type: application/json" \
+     -d '{"input_file_id": "file_failed_abc123", ...}'
+   ```
 
 ---
 
-## API Server Issues
+## 🎓 **Fine-Tuning Issues**
 
-### Issue: Port already in use
+### **Fine-Tuning Job Fails**
 
-**Symptoms:**
-```
-ERROR: [Errno 98] Address already in use
-```
+**Symptoms**:
+- Training job fails immediately
+- Error: "CUDA out of memory"
+- Error: "Dataset format invalid"
 
-**Solutions:**
-
-1. **Find process using port:**
+**Diagnosis**:
 ```bash
-lsof -i :4080
+# Check training logs
+docker logs vllm-batch-server | grep -i "fine_tuning"
+
+# Check GPU memory
+nvidia-smi
+
+# Validate dataset
+cat training_data.jsonl | jq .
 ```
 
-2. **Kill existing process:**
+**Solutions**:
+
+1. **Reduce batch size**:
+   ```json
+   {
+     "hyperparameters": {
+       "per_device_train_batch_size": 1,
+       "gradient_accumulation_steps": 4
+     }
+   }
+   ```
+
+2. **Use gradient checkpointing**:
+   ```json
+   {
+     "hyperparameters": {
+       "gradient_checkpointing": true
+     }
+   }
+   ```
+
+3. **Reduce LoRA rank**:
+   ```json
+   {
+     "hyperparameters": {
+       "lora_r": 8,
+       "lora_alpha": 16
+     }
+   }
+   ```
+
+4. **Fix dataset format**:
+   ```jsonl
+   {"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}
+   ```
+
+### **Fine-Tuned Model Not Loading**
+
+**Symptoms**:
+- Model training succeeds but deployment fails
+- Error: "Model not found"
+
+**Diagnosis**:
 ```bash
-kill -9 <PID>
+# Check model files
+ls -lh models/fine_tuned/
+
+# Check model registry
+curl http://localhost:4000/v1/models/registry
 ```
 
-3. **Use different port:**
-```bash
-# Edit .env
-BATCH_API_PORT=4081
-```
+**Solutions**:
 
-### Issue: API returns 500 errors
+1. **Verify model path**:
+   ```bash
+   # Check model directory
+   ls -lh models/fine_tuned/my_model/
+   
+   # Should contain:
+   # - adapter_config.json
+   # - adapter_model.bin
+   # - tokenizer files
+   ```
 
-**Symptoms:**
-```
-{"detail":"Internal Server Error"}
-```
-
-**Solutions:**
-
-1. **Check API logs:**
-```bash
-tail -f logs/api_server.log
-```
-
-2. **Check database connection:**
-```bash
-docker ps | grep postgres
-# Ensure PostgreSQL is running
-```
-
-3. **Restart API server:**
-```bash
-pkill -f "batch_app.api_server"
-python -m core.batch_app.api_server &
-```
+2. **Reload model**:
+   ```bash
+   curl -X POST http://localhost:4000/v1/fine_tuning/jobs/{job_id}/deploy
+   ```
 
 ---
 
-## Database Issues
+## 🏷️ **Label Studio Issues**
 
-### Issue: PostgreSQL connection refused
+### **Label Studio Not Accessible**
 
-**Symptoms:**
-```
-psycopg2.OperationalError: could not connect to server
-```
+**Symptoms**:
+- Cannot access http://localhost:4115
+- Connection refused
 
-**Solutions:**
-
-1. **Check PostgreSQL is running:**
+**Diagnosis**:
 ```bash
-docker ps | grep postgres
+# Check if Label Studio is running
+docker ps | grep label-studio
+
+# Check logs
+docker logs label-studio
 ```
 
-2. **Start PostgreSQL:**
+**Solutions**:
+
+1. **Start Label Studio**:
+   ```bash
+   docker compose up -d label-studio
+   ```
+
+2. **Check port binding**:
+   ```bash
+   sudo lsof -i :4115
+   ```
+
+### **Webhook Not Syncing**
+
+**Symptoms**:
+- Annotations in Label Studio don't sync to Aristotle
+- No webhook events in logs
+
+**Diagnosis**:
 ```bash
-docker compose -f docker-compose.postgres.yml up -d
-```
+# Check webhook configuration in Label Studio
+# Settings → Webhooks
 
-3. **Check connection string:**
-```bash
-# In .env
-DATABASE_URL=postgresql://vllm_user:vllm_password@localhost:4332/vllm_batch
-```
+# Check Aristotle logs
+docker logs aristotle-web | grep -i webhook
 
-4. **Test connection:**
-```bash
-docker exec -it vllm-postgres psql -U vllm_user -d vllm_batch -c "SELECT 1;"
-```
-
-### Issue: Database tables not found
-
-**Symptoms:**
-```
-psycopg2.errors.UndefinedTable: relation "batch_jobs" does not exist
-```
-
-**Solution:**
-```bash
-# Initialize database
-python -c "from core.batch_app.database import init_db; init_db()"
-```
-
----
-
-## Model Loading Issues
-
-### Issue: Model not found
-
-**Symptoms:**
-```
-ValueError: Model 'google/gemma-3-4b-it' not found
-```
-
-**Solutions:**
-
-1. **Check model registry:**
-```bash
-curl http://localhost:4080/v1/models
-```
-
-2. **Add model to registry:**
-```bash
-# Via web UI
-xdg-open http://localhost:4080/model-management.html
-
-# Or via API
-curl -X POST http://localhost:4080/v1/models \
+# Test webhook manually
+curl -X POST http://localhost:4000/api/webhooks/label-studio \
   -H "Content-Type: application/json" \
-  -d '{
-    "model_id": "google/gemma-3-4b-it",
-    "model_name": "Gemma 3 4B",
-    "hf_model_id": "google/gemma-3-4b-it"
-  }'
+  -d '{"action": "ANNOTATION_CREATED", ...}'
 ```
 
-### Issue: Model download fails
+**Solutions**:
 
-**Symptoms:**
-```
-OSError: Can't load tokenizer for 'google/gemma-3-4b-it'
-```
+1. **Verify webhook URL**:
+   - Should be: `http://localhost:4000/api/webhooks/label-studio`
+   - Or: `http://host.docker.internal:4000/api/webhooks/label-studio` (from Docker)
 
-**Solutions:**
+2. **Check webhook secret**:
+   ```bash
+   # In .env.local
+   LABEL_STUDIO_WEBHOOK_SECRET=your-secret-here
+   ```
 
-1. **Check internet connection:**
-```bash
-ping huggingface.co
-```
+3. **Verify webhook events**:
+   - Enable: ANNOTATION_CREATED, ANNOTATION_UPDATED
 
-2. **Set HuggingFace token (for gated models):**
-```bash
-export HF_TOKEN=your_token_here
-```
-
-3. **Pre-download model:**
-```bash
-python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('google/gemma-3-4b-it')"
-```
+4. **Check firewall**:
+   ```bash
+   sudo ufw allow 4000
+   ```
 
 ---
 
-## Performance Issues
+## ⚡ **Performance Issues**
 
-### Issue: Slow inference speed
+### **Slow Batch Processing**
 
-**Symptoms:**
-- Throughput < 100 tokens/second
-- Jobs taking much longer than expected
+**Symptoms**:
+- Batch jobs take hours to complete
+- Low GPU utilization
 
-**Solutions:**
-
-1. **Check GPU utilization:**
+**Diagnosis**:
 ```bash
-nvidia-smi
-# GPU utilization should be 90-100%
+# Check GPU utilization
+nvidia-smi -l 1
+
+# Check vLLM metrics
+curl http://localhost:4000/metrics | grep vllm
 ```
 
-2. **Increase batch size:**
+**Solutions**:
+
+1. **Increase batch size**:
+   ```python
+   max_num_seqs = 128  # Increase from default
+   ```
+
+2. **Enable tensor parallelism**:
+   ```python
+   tensor_parallel_size = 2  # Use 2 GPUs
+   ```
+
+3. **Use faster model**:
+   - Use quantized models (4-bit, 8-bit)
+   - Use smaller models
+
+### **High Memory Usage**
+
+**Symptoms**:
+- Server runs out of memory
+- OOM killer terminates processes
+
+**Diagnosis**:
 ```bash
-# Edit .env
-CHUNK_SIZE=200  # Default is 100
+# Check memory usage
+free -h
+
+# Check Docker memory
+docker stats
 ```
 
-3. **Disable CPU offload (if enabled):**
-```bash
-# Only use CPU offload for models that don't fit in VRAM
-CPU_OFFLOAD_GB=0
-```
+**Solutions**:
 
-4. **Use FP16 instead of FP32:**
-```bash
-# In model configuration
-DTYPE=float16
-```
+1. **Limit Docker memory**:
+   ```yaml
+   # docker-compose.yml
+   services:
+     vllm-server:
+       mem_limit: 32g
+   ```
 
-### Issue: High memory usage
-
-**Symptoms:**
-- System running out of RAM
-- Swap usage increasing
-
-**Solutions:**
-
-1. **Reduce KV cache size:**
-```bash
-MAX_MODEL_LEN=4096  # Default is 8192
-```
-
-2. **Limit concurrent requests:**
-```bash
-CHUNK_SIZE=50  # Process fewer requests at once
-```
+2. **Enable swap**:
+   ```bash
+   sudo fallocate -l 32G /swapfile
+   sudo chmod 600 /swapfile
+   sudo mkswap /swapfile
+   sudo swapon /swapfile
+   ```
 
 ---
 
-## Networking Issues
+## 🗄️ **Database Issues**
 
-### Issue: Cannot access API from another machine
+### **Database Locked**
 
-**Symptoms:**
-```
-curl: (7) Failed to connect to 10.0.0.223 port 4080
-```
+**Symptoms**:
+- Error: "database is locked"
+- Queries timeout
 
-**Solutions:**
-
-1. **Check firewall:**
+**Diagnosis**:
 ```bash
-sudo ufw allow 4080/tcp
+# Check database file
+ls -lh data/database/batch_jobs.db
+
+# Check processes using database
+lsof data/database/batch_jobs.db
 ```
 
-2. **Verify API is listening on 0.0.0.0:**
+**Solutions**:
+
+1. **Restart services**:
+   ```bash
+   docker compose restart
+   ```
+
+2. **Migrate to PostgreSQL**:
+   - SQLite has concurrency limitations
+   - Use PostgreSQL for production
+
+### **Database Corruption**
+
+**Symptoms**:
+- Error: "database disk image is malformed"
+- Cannot query database
+
+**Diagnosis**:
 ```bash
-# In .env
-BATCH_API_HOST=0.0.0.0  # Not 127.0.0.1
+# Check database integrity
+sqlite3 data/database/batch_jobs.db "PRAGMA integrity_check;"
 ```
 
-3. **Check network connectivity:**
-```bash
-ping <server-ip>
-telnet <server-ip> 4080
-```
+**Solutions**:
+
+1. **Restore from backup**:
+   ```bash
+   cp data/database/batch_jobs.db.backup data/database/batch_jobs.db
+   ```
+
+2. **Rebuild database**:
+   ```bash
+   # Export data
+   sqlite3 data/database/batch_jobs.db ".dump" > backup.sql
+   
+   # Delete corrupted database
+   rm data/database/batch_jobs.db
+   
+   # Recreate database
+   sqlite3 data/database/batch_jobs.db < backup.sql
+   ```
 
 ---
 
-## Getting More Help
+## 📞 **Getting Help**
 
-### Collect Diagnostic Information
+If you're still experiencing issues:
 
-```bash
-# System info
-uname -a
-python --version
-nvidia-smi
+1. **Check logs**:
+   ```bash
+   docker compose logs -f
+   ```
 
-# Service status
-ps aux | grep -E "api_server|worker"
-docker ps
+2. **Search GitHub issues**:
+   - https://github.com/your-org/vllm-batch-server/issues
 
-# Logs
-tail -100 logs/api_server.log
-tail -100 logs/worker.log
+3. **Create a new issue**:
+   - Include logs, error messages, and steps to reproduce
+   - Use the issue template
 
-# Database status
-curl http://localhost:4080/v1/queue
-```
-
-### Report an Issue
-
-When reporting issues, please include:
-
-1. **Environment details** (OS, Python version, GPU, CUDA version)
-2. **Steps to reproduce**
-3. **Error messages** (full stack trace)
-4. **Logs** (API server, worker, database)
-5. **Configuration** (.env file, model config)
-
-**Report issues at:** https://github.com/zisaacson/vllm-batch-server/issues
+4. **Join Discord**:
+   - Get help from the community
 
 ---
 
-## Common Error Messages
-
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `CUDA out of memory` | GPU VRAM full | Reduce GPU_MEMORY_UTILIZATION or use smaller model |
-| `Address already in use` | Port conflict | Kill existing process or change port |
-| `Model not found` | Model not in registry | Add model via web UI or API |
-| `Connection refused` | PostgreSQL not running | Start PostgreSQL with docker-compose |
-| `Worker not responding` | Worker crashed | Check logs and restart worker |
-| `Batch stuck in validating` | Worker not processing | Restart worker |
-
----
-
-## Performance Tuning
-
-### Optimal Settings for RTX 3090 24GB
-
-```bash
-# .env
-GPU_MEMORY_UTILIZATION=0.90
-MAX_MODEL_LEN=8192
-CHUNK_SIZE=150
-TENSOR_PARALLEL_SIZE=1
-
-# Recommended models
-# - Gemma 3 4B: 420 tok/s
-# - Llama 3.2 3B: 450 tok/s
-# - Qwen 2.5 3B: 480 tok/s
-# - Gemma 3 7B: 250 tok/s (fits with 24GB!)
-```
-
-### Optimal Settings for RTX 4080 16GB
-
-```bash
-# .env
-GPU_MEMORY_UTILIZATION=0.90
-MAX_MODEL_LEN=8192
-CHUNK_SIZE=100
-TENSOR_PARALLEL_SIZE=1
-
-# Recommended models
-# - Gemma 3 4B: 450 tok/s
-# - Llama 3.2 3B: 480 tok/s
-# - Qwen 2.5 3B: 520 tok/s
-```
-
-### Optimal Settings for RTX 4090 24GB
-
-```bash
-# .env
-GPU_MEMORY_UTILIZATION=0.92
-MAX_MODEL_LEN=12288
-CHUNK_SIZE=200
-TENSOR_PARALLEL_SIZE=1
-
-# Recommended models
-# - Gemma 3 4B: 550 tok/s
-# - Llama 3.2 3B: 580 tok/s
-# - Qwen 2.5 3B: 620 tok/s
-# - Gemma 3 7B: 320 tok/s
-# - Llama 3.1 8B: 280 tok/s
-```
-
-### Optimal Settings for RTX 3060 12GB (Budget Option)
-
-```bash
-# .env
-GPU_MEMORY_UTILIZATION=0.85
-MAX_MODEL_LEN=4096
-CHUNK_SIZE=50
-TENSOR_PARALLEL_SIZE=1
-
-# Recommended models
-# - Gemma 3 2B: 380 tok/s
-# - Llama 3.2 1B: 450 tok/s
-# - Qwen 2.5 3B: 280 tok/s (tight fit)
-```
-
----
-
-## Still Having Issues?
-
-- **Documentation**: [docs/](.)
-- **GitHub Issues**: [Report a bug](https://github.com/zisaacson/vllm-batch-server/issues/new?template=bug_report.md)
-- **Discussions**: [Ask a question](https://github.com/zisaacson/vllm-batch-server/discussions)
+**Good luck!** 🍀
 
