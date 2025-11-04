@@ -100,9 +100,8 @@ if settings.ENABLE_RATE_LIMITING:
 from core.batch_app.fine_tuning import router as fine_tuning_router
 app.include_router(fine_tuning_router)
 
-# Include conquest router
-from core.batch_app.conquest_api import router as conquest_router
-app.include_router(conquest_router)
+# Conquest router moved to Aris repository (integrations/aris/conquest_api.py)
+# For OSS users: Create your own custom API endpoints as needed
 
 
 # ============================================================================
@@ -1184,7 +1183,7 @@ async def create_batch(
         # Count requests and extract model + conquest metadata from first request
         num_requests = 0
         model = None
-        conquest_metadata = {}  # ✅ NEW: Extract conquest metadata
+        conquest_metadata: dict[str, Any] = {}  # ✅ NEW: Extract conquest metadata
 
         for i, line in enumerate(lines):
             if line.strip():
@@ -3949,10 +3948,14 @@ async def label_studio_webhook(
                 logger.warning(f"Annotation {annotation.get('id')} is incomplete (no results)")
 
             # ========================================================================
-            # GOLD STAR SYNC TO ARISTOTLE
+            # RESULT HANDLER PROCESSING
             # ========================================================================
-            # Check if this annotation marks a task as gold star
-            # Label Studio sends task metadata in the webhook payload
+            # Process annotation through result handler pipeline
+            # This allows custom integrations (e.g., database sync, webhooks)
+            # to be triggered via plugins
+
+            from core.result_handlers.base import get_registry
+
             task_data = task.get('data', {})
             is_gold_star = task.get('meta', {}).get('is_gold_star', False)
 
@@ -3963,38 +3966,39 @@ async def label_studio_webhook(
                     break
 
             if is_gold_star:
-                # Extract conquest information from task data
-                conquest_id = task_data.get('conquest_id') or task_data.get('id')
-                philosopher = task_data.get('philosopher', 'unknown@example.com')
-                domain = task_data.get('domain', 'default')
+                logger.info(f"🌟 Gold star annotation detected")
 
-                if conquest_id:
-                    logger.info(f"🌟 Gold star annotation detected for conquest: {conquest_id}")
+                # Prepare metadata for result handlers
+                metadata = {
+                    'event_type': 'ANNOTATION_CREATED',
+                    'action': action,
+                    'project_id': project_id,
+                    'task_id': task.get('id'),
+                    'annotation_id': annotation.get('id'),
+                    'is_gold_star': True,
+                    **task_data  # Include all task data (may contain custom fields)
+                }
 
-                    try:
-                        from core.integrations.aristotle_db import sync_gold_star_to_aristotle
+                # Prepare results payload
+                results = [{
+                    'task_id': task.get('id'),
+                    'annotation_id': annotation.get('id'),
+                    'gold_star': True,
+                    'notes': annotation.get('notes'),
+                    'completed_by': annotation.get('completed_by', {}).get('email'),
+                    'result': result
+                }]
 
-                        # Sync to Aristotle database
-                        success = sync_gold_star_to_aristotle(
-                            conquest_id=conquest_id,
-                            philosopher=philosopher,
-                            domain=domain,
-                            rating=5,  # Gold star = 5 stars
-                            feedback=annotation.get('notes') or "Marked as gold star via Label Studio",
-                            evaluated_by=annotation.get('completed_by', {}).get('email', philosopher),
-                            label_studio_task_id=task.get('id'),
-                            label_studio_annotation_id=annotation.get('id')
-                        )
-
-                        if success:
-                            logger.info(f"✅ Successfully synced gold star to Aristotle: conquest={conquest_id}")
-                        else:
-                            logger.error(f"❌ Failed to sync gold star to Aristotle: conquest={conquest_id}")
-
-                    except Exception as e:
-                        logger.error(f"❌ Error syncing gold star to Aristotle: {e}", exc_info=True)
-                else:
-                    logger.warning("Gold star annotation missing conquest_id in task data")
+                # Execute all registered result handlers
+                registry = get_registry()
+                try:
+                    registry.process_results(
+                        batch_id=f"webhook_{annotation.get('id')}",
+                        results=results,
+                        metadata=metadata
+                    )
+                except Exception as e:
+                    logger.error(f"❌ Error processing result handlers: {e}", exc_info=True)
 
             # Check annotation count for training trigger
             if project_id:
@@ -4022,9 +4026,12 @@ async def label_studio_webhook(
             logger.info(f"Annotation updated: annotation_id={annotation.get('id')}")
 
             # ========================================================================
-            # GOLD STAR SYNC TO ARISTOTLE (for updates)
+            # RESULT HANDLER PROCESSING (for updates)
             # ========================================================================
-            # Check if this update marks/unmarks a task as gold star
+            # Process annotation updates through result handler pipeline
+
+            from core.result_handlers.base import get_registry
+
             task_data = task.get('data', {})
             is_gold_star = task.get('meta', {}).get('is_gold_star', False)
 
@@ -4036,32 +4043,39 @@ async def label_studio_webhook(
                     break
 
             if is_gold_star:
-                conquest_id = task_data.get('conquest_id') or task_data.get('id')
-                philosopher = task_data.get('philosopher', 'unknown@example.com')
-                domain = task_data.get('domain', 'default')
+                logger.info(f"🌟 Gold star annotation updated")
 
-                if conquest_id:
-                    logger.info(f"🌟 Gold star annotation updated for conquest: {conquest_id}")
+                # Prepare metadata for result handlers
+                metadata = {
+                    'event_type': 'ANNOTATION_UPDATED',
+                    'action': action,
+                    'project_id': project_id,
+                    'task_id': task.get('id'),
+                    'annotation_id': annotation.get('id'),
+                    'is_gold_star': True,
+                    **task_data  # Include all task data
+                }
 
-                    try:
-                        from core.integrations.aristotle_db import sync_gold_star_to_aristotle
+                # Prepare results payload
+                results = [{
+                    'task_id': task.get('id'),
+                    'annotation_id': annotation.get('id'),
+                    'gold_star': True,
+                    'notes': annotation.get('notes'),
+                    'updated_by': annotation.get('updated_by', {}).get('email'),
+                    'result': result
+                }]
 
-                        success = sync_gold_star_to_aristotle(
-                            conquest_id=conquest_id,
-                            philosopher=philosopher,
-                            domain=domain,
-                            rating=5,
-                            feedback=annotation.get('notes') or "Updated gold star via Label Studio",
-                            evaluated_by=annotation.get('updated_by', {}).get('email', philosopher),
-                            label_studio_task_id=task.get('id'),
-                            label_studio_annotation_id=annotation.get('id')
-                        )
-
-                        if success:
-                            logger.info(f"✅ Successfully synced updated gold star to Aristotle: conquest={conquest_id}")
-
-                    except Exception as e:
-                        logger.error(f"❌ Error syncing updated gold star to Aristotle: {e}", exc_info=True)
+                # Execute all registered result handlers
+                registry = get_registry()
+                try:
+                    registry.process_results(
+                        batch_id=f"webhook_{annotation.get('id')}",
+                        results=results,
+                        metadata=metadata
+                    )
+                except Exception as e:
+                    logger.error(f"❌ Error processing result handlers: {e}", exc_info=True)
 
             # Recalculate quality metrics if this is a ground truth annotation
             if annotation.get('ground_truth'):
@@ -4126,203 +4140,38 @@ async def label_studio_webhook(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/v1/icl/examples")
-async def get_icl_examples(
-    philosopher: str = Query(..., description="User email"),
-    domain: str = Query(..., description="Organization domain"),
-    conquest_type: str | None = Query(None, description="Filter by conquest type"),
-    limit: int = Query(10, ge=1, le=100, description="Maximum number of examples"),
-    format: str = Query("chatml", description="Format: chatml, alpaca, or openai"),
-    db: Session = Depends(get_db)
-):
-    """
-    Get gold star examples for in-context learning (ICL).
+# ============================================================================
+# DEPRECATED: Aris-specific endpoints
+# ============================================================================
+# The following endpoints are specific to the Aris integration and should be
+# moved to the Aris repository (vllm-batch-server-aris).
+# They are commented out here to prepare for OSS release.
+# ============================================================================
 
-    This endpoint is used by Eidos to fetch high-quality examples for in-context learning.
-    Returns prompt/response pairs from gold star conquests.
-
-    Query parameters:
-    - philosopher: User email (required)
-    - domain: Organization domain (required)
-    - conquest_type: Filter by conquest type (optional)
-    - limit: Maximum number of examples (default: 10, max: 100)
-    - format: Output format - chatml, alpaca, or openai (default: chatml)
-
-    Returns:
-        List of ICL examples in the requested format
-    """
-    try:
-        from core.training.dataset_exporter import DatasetExporter
-
-        logger.info(f"Fetching ICL examples: philosopher={philosopher}, domain={domain}, type={conquest_type}, limit={limit}")
-
-        # Initialize exporter
-        exporter = DatasetExporter(
-            db_host=os.getenv('ARISTOTLE_DB_HOST', 'localhost'),
-            db_port=int(os.getenv('ARISTOTLE_DB_PORT', '4002')),
-            db_name=os.getenv('ARISTOTLE_DB_NAME', 'aristotle_dev'),
-            db_user=os.getenv('ARISTOTLE_DB_USER', 'postgres'),
-            db_password=os.getenv('ARISTOTLE_DB_PASSWORD', 'postgres')
-        )
-
-        # Fetch gold star conquests
-        conquests = exporter.fetch_gold_star_conquests(
-            philosopher=philosopher,
-            domain=domain,
-            conquest_type=conquest_type,
-            limit=limit
-        )
-
-        if not conquests:
-            return {
-                "philosopher": philosopher,
-                "domain": domain,
-                "conquest_type": conquest_type,
-                "format": format,
-                "count": 0,
-                "examples": [],
-                "message": "No gold star examples found"
-            }
-
-        # Convert to requested format
-        examples = []
-        for conquest in conquests:
-            if format == "chatml":
-                examples.append(conquest.to_chatml())
-            elif format == "alpaca":
-                examples.append(conquest.to_alpaca())
-            elif format == "openai":
-                examples.append(conquest.to_openai())
-            else:
-                raise HTTPException(status_code=400, detail=f"Unknown format: {format}")
-
-        logger.info(f"✅ Returning {len(examples)} ICL examples in {format} format")
-
-        return {
-            "philosopher": philosopher,
-            "domain": domain,
-            "conquest_type": conquest_type,
-            "format": format,
-            "count": len(examples),
-            "examples": examples
-        }
-
-    except Exception as e:
-        logger.error(f"Error fetching ICL examples: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+# @app.get("/v1/icl/examples")
+# async def get_icl_examples(...):
+#     """
+#     DEPRECATED: This endpoint is Aris-specific and should be moved to
+#     the Aris repository. It fetches gold star examples from the Aristotle
+#     database for in-context learning.
+#
+#     For OSS users: Implement your own ICL endpoint using the result handler
+#     plugin system to fetch examples from your database.
+#     """
+#     pass
 
 
-@app.post("/v1/sync/victory-to-gold-star")
-async def sync_victory_to_gold_star(
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    """
-    Sync VICTORY conquest to Label Studio as gold star.
-
-    This endpoint is called by Aristotle when a conquest is marked as VICTORY.
-    It updates the corresponding Label Studio task to mark it as a gold star.
-
-    Request body:
-    {
-        "conquest_id": "conquest_abc123",
-        "philosopher": "user@example.com",
-        "domain": "software_engineering",
-        "result_notes": "Excellent analysis"
-    }
-
-    Returns:
-        Sync status and Label Studio task ID
-    """
-    try:
-        payload = await request.json()
-        conquest_id = payload.get('conquest_id')
-        philosopher = payload.get('philosopher', 'unknown@example.com')
-        domain = payload.get('domain', 'default')
-        result_notes = payload.get('result_notes')
-
-        if not conquest_id:
-            raise HTTPException(status_code=400, detail="conquest_id is required")
-
-        logger.info(f"🎯 Syncing VICTORY to gold star: conquest={conquest_id}")
-
-        # Import Label Studio client
-        from integrations.aris.curation_app.label_studio_client import LabelStudioClient
-
-        ls_client = LabelStudioClient()
-
-        # Find task by conquest_id
-        # We need to search across all projects for this conquest
-        # For now, we'll try to find it in the task data
-
-        # Get all projects
-        projects = ls_client.session.get(f"{ls_client.base_url}/api/projects").json()
-
-        task_found = False
-        updated_task_id = None
-
-        for project in projects.get('results', []):
-            project_id = project['id']
-
-            # Get tasks for this project
-            tasks_response = ls_client.session.get(
-                f"{ls_client.base_url}/api/projects/{project_id}/tasks",
-                params={"page_size": 1000}
-            )
-
-            if tasks_response.status_code != 200:
-                continue
-
-            tasks = tasks_response.json()
-
-            # Find task with matching conquest_id
-            for task in tasks:
-                task_data = task.get('data', {})
-                if task_data.get('conquest_id') == conquest_id or task_data.get('id') == conquest_id:
-                    # Found the task! Update it to gold star
-                    task_id = task['id']
-
-                    current_meta = task.get('meta', {})
-                    current_meta['gold_star'] = True
-                    current_meta['gold_star_updated_at'] = datetime.now(timezone.utc).isoformat()
-                    current_meta['synced_from_aristotle'] = True
-                    current_meta['result_notes'] = result_notes
-
-                    # Update task
-                    update_response = ls_client.session.patch(
-                        f"{ls_client.base_url}/api/tasks/{task_id}",
-                        json={"meta": current_meta}
-                    )
-
-                    if update_response.status_code == 200:
-                        logger.info(f"✅ Successfully synced VICTORY to gold star: task_id={task_id}")
-                        task_found = True
-                        updated_task_id = task_id
-                        break
-                    else:
-                        logger.error(f"Failed to update task {task_id}: {update_response.text}")
-
-            if task_found:
-                break
-
-        if not task_found:
-            logger.warning(f"Task not found for conquest_id: {conquest_id}")
-            return {
-                "status": "task_not_found",
-                "conquest_id": conquest_id,
-                "message": "No Label Studio task found for this conquest"
-            }
-
-        return {
-            "status": "success",
-            "conquest_id": conquest_id,
-            "task_id": updated_task_id,
-            "message": "Successfully synced VICTORY to gold star"
-        }
-
-    except Exception as e:
-        logger.error(f"Error syncing VICTORY to gold star: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+# @app.post("/v1/sync/victory-to-gold-star")
+# async def sync_victory_to_gold_star(...):
+#     """
+#     DEPRECATED: This endpoint is Aris-specific and should be moved to
+#     the Aris repository. It syncs VICTORY conquests from Aristotle to
+#     Label Studio as gold stars (bidirectional sync).
+#
+#     For OSS users: Implement your own sync endpoint using the result handler
+#     plugin system to integrate with your application's database.
+#     """
+#     pass
 
 
 @app.post("/v1/webhooks/dead-letter/{dead_letter_id}/retry")

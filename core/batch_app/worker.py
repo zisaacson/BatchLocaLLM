@@ -744,63 +744,62 @@ class BatchWorker:
 
             self.log(log_file, f"📊 Found {len(results)} results to import")
 
-            # Use Label Studio handler
+            # ========================================================================
+            # REGISTER DEFAULT HANDLERS
+            # ========================================================================
+            # Register Label Studio handler if not already registered
+            # This ensures backward compatibility with existing code
+
+            from core.result_handlers.base import get_registry
             from core.result_handlers.label_studio import LabelStudioHandler
 
-            handler = LabelStudioHandler(config={
-                'url': settings.LABEL_STUDIO_URL,
-                'api_key': settings.LABEL_STUDIO_API_KEY,
-                'project_id': settings.LABEL_STUDIO_PROJECT_ID
-            })
+            registry = get_registry()
+
+            # Check if Label Studio handler is already registered
+            has_ls_handler = any(
+                isinstance(h, LabelStudioHandler) for h in registry.handlers
+            )
+
+            if not has_ls_handler:
+                # Register default Label Studio handler
+                ls_handler = LabelStudioHandler(config={
+                    'url': settings.LABEL_STUDIO_URL,
+                    'api_key': settings.LABEL_STUDIO_API_KEY,
+                    'project_id': settings.LABEL_STUDIO_PROJECT_ID,
+                    'priority': 50  # Run after metadata extraction (priority=10)
+                })
+                registry.register(ls_handler)
+                self.log(log_file, "✅ Registered default Label Studio handler")
 
             # Prepare metadata
             metadata = json.loads(job.metadata_json) if job.metadata_json else {}
             metadata['label_studio_project_id'] = settings.LABEL_STUDIO_PROJECT_ID
+            metadata['batch_id'] = job.batch_id
 
-            # ✅ NEW: Extract conquest metadata from job metadata or first result
-            # This is critical for bidirectional sync to work!
-            metadata['schema_type'] = metadata.get('conquest_type') or metadata.get('schema_type', 'generic')
-
-            # Try to get conquest_id from metadata first, then from batch_id
-            metadata['conquest_id'] = metadata.get('conquest_id') or job.batch_id
-
-            # Try to get philosopher and domain from metadata
-            metadata['philosopher'] = metadata.get('philosopher', 'unknown@example.com')
-            metadata['domain'] = metadata.get('domain', 'default')
-
-            # If not in metadata, try to extract from first result's custom_id
-            # Format: {philosopher}_{domain}_{conquest_id} or conquest_{id}
-            if results and (metadata['philosopher'] == 'unknown@example.com' or metadata['domain'] == 'default'):
-                first_result = results[0]
-                custom_id = first_result.get('custom_id', '')
-
-                # Try to parse custom_id for metadata
-                # Expected formats:
-                # - email@domain.com_software_engineering_candidate_123
-                # - conquest_abc123
-                # - candidate_456
-
-                # Check if starts with email (contains @)
-                if '@' in custom_id:
-                    # Format: email@domain.com_domain_name_conquest_id
-                    # Split only on first 2 underscores to preserve domain names with underscores
-                    parts = custom_id.split('_', 2)
-                    if len(parts) >= 3:
-                        metadata['philosopher'] = parts[0]
-                        metadata['domain'] = parts[1]
-                        metadata['conquest_id'] = parts[2]
-
-            # completed_at is a Unix timestamp (int), not datetime
+            # Add completion timestamp
             if job.completed_at:
                 from datetime import datetime, timezone
                 metadata['completed_at'] = datetime.fromtimestamp(job.completed_at, tz=timezone.utc).isoformat()
             else:
                 metadata['completed_at'] = None
 
-            self.log(log_file, f"📋 Conquest metadata: type={metadata['schema_type']}, id={metadata['conquest_id']}, philosopher={metadata['philosopher']}, domain={metadata['domain']}")
+            # ========================================================================
+            # RESULT HANDLER PIPELINE
+            # ========================================================================
+            # Execute all registered result handlers (plugins)
+            # This allows custom integrations (e.g., metadata extraction, database sync)
+            # to be triggered via the plugin system
 
-            # Import to Label Studio
-            success = handler.handle(job.batch_id, results, metadata)
+            # Process results through all registered handlers
+            # Handlers run in priority order (lower priority number = runs first)
+            # Example handlers:
+            # - ConquestMetadataHandler (priority=10) - extracts custom metadata
+            # - LabelStudioHandler (priority=50) - imports to Label Studio
+            # - AristotleGoldStarHandler (priority=100) - syncs to Aristotle DB
+
+            self.log(log_file, f"📋 Processing batch through {len(registry.handlers)} result handlers")
+
+            success = registry.process_results(job.batch_id, results, metadata)
 
             if success:
                 self.log(log_file, f"✅ Imported {len(results)} tasks to Label Studio")
