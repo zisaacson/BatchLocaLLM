@@ -16,6 +16,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
+from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect, Response
 from fastapi import File as FastAPIFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,11 +53,42 @@ logger = get_logger(__name__)
 # Initialize rate limiter (conditionally enabled)
 limiter = Limiter(key_func=get_remote_address, enabled=settings.ENABLE_RATE_LIMITING)
 
-# Initialize FastAPI app
+
+# ============================================================================
+# Lifespan Context Manager
+# ============================================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan context manager for startup and shutdown events.
+    Replaces deprecated @app.on_event("startup") and @app.on_event("shutdown").
+    """
+    # Startup
+    init_sentry()
+    init_db()
+
+    logger.info("Batch API Server started", extra={
+        "host": settings.BATCH_API_HOST,
+        "port": settings.BATCH_API_PORT,
+        "environment": settings.ENVIRONMENT,
+        "version": settings.APP_VERSION,
+        "sentry_enabled": bool(settings.SENTRY_DSN)
+    })
+    logger.info(f"Server ready at http://{settings.BATCH_API_HOST}:{settings.BATCH_API_PORT}")
+
+    yield
+
+    # Shutdown (if needed in future)
+    logger.info("Batch API Server shutting down")
+
+
+# Initialize FastAPI app with lifespan
 app = FastAPI(
     title=settings.APP_NAME,
     description="Submit and manage large-scale LLM inference batch jobs",
-    version=settings.APP_VERSION
+    version=settings.APP_VERSION,
+    lifespan=lifespan
 )
 
 # Add rate limit exception handler (only if rate limiting is enabled)
@@ -289,25 +321,6 @@ def check_gpu_health() -> dict:
             'temperature_c': 0,
             'warning': f'GPU monitoring unavailable: {e}'
         }
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database and monitoring on startup."""
-    # Initialize Sentry error tracking
-    init_sentry()
-
-    # Initialize database
-    init_db()
-
-    logger.info("Batch API Server started", extra={
-        "host": settings.BATCH_API_HOST,
-        "port": settings.BATCH_API_PORT,
-        "environment": settings.ENVIRONMENT,
-        "version": settings.APP_VERSION,
-        "sentry_enabled": bool(settings.SENTRY_DSN)
-    })
-    logger.info(f"Server ready at http://{settings.BATCH_API_HOST}:{settings.BATCH_API_PORT}")
 
 
 # ============================================================================
@@ -3816,8 +3829,9 @@ async def label_studio_webhook(
 
         logger.info(f"Received Label Studio webhook: {event_type}")
 
-        # Store event in database for audit trail
-        # TODO: Create LabelStudioEvent table
+        # NOTE: Event storage not yet implemented
+        # Future enhancement: Store events in LabelStudioEvent table for audit trail
+        # For now, events are logged but not persisted to database
 
         # Handle different event types
         if event_type == 'ANNOTATION_CREATED':

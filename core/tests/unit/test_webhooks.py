@@ -9,7 +9,7 @@ from core.batch_app.database import BatchJob
 class TestWebhookNotifications:
     """Test webhook notification functionality."""
 
-    @patch('batch_app.webhooks.requests.post')
+    @patch('core.batch_app.webhooks.requests.post')
     def test_send_webhook_success(self, mock_post):
         """Test successful webhook notification."""
         # Mock the HTTP response
@@ -33,6 +33,9 @@ class TestWebhookNotifications:
         batch_job.webhook_last_attempt = None
         batch_job.webhook_status = None
         batch_job.webhook_error = None
+        batch_job.webhook_max_retries = 3
+        batch_job.webhook_timeout = 10
+        batch_job.webhook_secret = None
 
         # Mock database session
         mock_db = Mock()
@@ -44,7 +47,7 @@ class TestWebhookNotifications:
         assert result is True
         mock_post.assert_called_once()
 
-    @patch('batch_app.webhooks.requests.post')
+    @patch('core.batch_app.webhooks.requests.post')
     def test_send_webhook_no_url(self, mock_post):
         """Test webhook when no URL is configured."""
         # Create a mock batch job without webhook URL
@@ -61,7 +64,7 @@ class TestWebhookNotifications:
         assert result is True
         mock_post.assert_not_called()
 
-    @patch('batch_app.webhooks.requests.post')
+    @patch('core.batch_app.webhooks.requests.post')
     def test_send_webhook_failure(self, mock_post):
         """Test webhook notification failure."""
         # Mock the HTTP response to return error
@@ -85,6 +88,9 @@ class TestWebhookNotifications:
         batch_job.webhook_last_attempt = None
         batch_job.webhook_status = None
         batch_job.webhook_error = None
+        batch_job.webhook_max_retries = 3
+        batch_job.webhook_timeout = 10
+        batch_job.webhook_secret = None
 
         # Mock database session
         mock_db = Mock()
@@ -95,7 +101,7 @@ class TestWebhookNotifications:
         # Verify webhook failed
         assert result is False
 
-    @patch('batch_app.webhooks.requests.post')
+    @patch('core.batch_app.webhooks.requests.post')
     def test_send_webhook_exception(self, mock_post):
         """Test webhook notification with exception."""
         # Mock the HTTP client to raise RequestException (which is caught by the code)
@@ -117,6 +123,9 @@ class TestWebhookNotifications:
         batch_job.webhook_last_attempt = None
         batch_job.webhook_status = None
         batch_job.webhook_error = None
+        batch_job.webhook_max_retries = 3
+        batch_job.webhook_timeout = 10
+        batch_job.webhook_secret = None
 
         # Mock database session
         mock_db = Mock()
@@ -127,8 +136,8 @@ class TestWebhookNotifications:
         # Verify webhook failed
         assert result is False
 
-    @patch('batch_app.webhooks.requests.post')
-    @patch('batch_app.webhooks.time.sleep')  # Mock sleep to speed up test
+    @patch('core.batch_app.webhooks.requests.post')
+    @patch('core.batch_app.webhooks.time.sleep')  # Mock sleep to speed up test
     def test_send_webhook_retry_logic(self, mock_sleep, mock_post):
         """Test webhook retry logic with exponential backoff."""
         # Mock the HTTP response to fail first 2 times, then succeed
@@ -155,6 +164,9 @@ class TestWebhookNotifications:
         batch_job.webhook_last_attempt = None
         batch_job.webhook_status = None
         batch_job.webhook_error = None
+        batch_job.webhook_max_retries = 3
+        batch_job.webhook_timeout = 10
+        batch_job.webhook_secret = None
 
         # Mock database session
         mock_db = Mock()
@@ -169,7 +181,7 @@ class TestWebhookNotifications:
         # Sleep should have been called 2 times (after first 2 failures)
         assert mock_sleep.call_count == 2
 
-    @patch('batch_app.webhooks.requests.post')
+    @patch('core.batch_app.webhooks.requests.post')
     def test_send_webhook_with_metadata(self, mock_post):
         """Test webhook with metadata in batch job."""
         import json
@@ -194,6 +206,9 @@ class TestWebhookNotifications:
         batch_job.webhook_last_attempt = None
         batch_job.webhook_status = None
         batch_job.webhook_error = None
+        batch_job.webhook_max_retries = 3
+        batch_job.webhook_timeout = 10
+        batch_job.webhook_secret = None
 
         # Mock database session
         mock_db = Mock()
@@ -210,8 +225,8 @@ class TestWebhookNotifications:
         assert payload['metadata']['user_id'] == "123"
         assert payload['metadata']['project'] == "test"
 
-    @patch('batch_app.webhooks.requests.post')
-    @patch('batch_app.webhooks.time.sleep')
+    @patch('core.batch_app.webhooks.requests.post')
+    @patch('core.batch_app.webhooks.time.sleep')
     def test_send_webhook_timeout(self, mock_sleep, mock_post):
         """Test webhook timeout handling."""
         import requests
@@ -234,6 +249,9 @@ class TestWebhookNotifications:
         batch_job.total_requests = 100
         batch_job.completed_requests = 100
         batch_job.failed_requests = 0
+        batch_job.webhook_max_retries = 3
+        batch_job.webhook_timeout = 10
+        batch_job.webhook_secret = None
 
         mock_db = Mock()
         result = send_webhook(batch_job, mock_db)

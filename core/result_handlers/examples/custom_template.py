@@ -97,8 +97,9 @@ class CustomHandler(ResultHandler):
         failed_results = [r for r in results if 'error' in r]
         
         logger.info(f"Successful: {len(successful_results)}, Failed: {len(failed_results)}")
-        
-        # TODO: Implement your custom logic here
+
+        # TEMPLATE: Implement your custom logic here
+        # This is an example template - replace with your actual implementation
         # Examples:
         
         # 1. Send to your API

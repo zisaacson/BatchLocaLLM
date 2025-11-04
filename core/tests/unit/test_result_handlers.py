@@ -36,7 +36,7 @@ class TestResultHandlerBase:
 class TestWebhookHandler:
     """Test webhook result handler - core functionality only."""
 
-    @patch('result_handlers.webhook.requests.post')
+    @patch('core.result_handlers.webhook.requests.post')
     def test_webhook_handler_success(self, mock_post):
         """Test webhook handler sends HTTP POST successfully."""
         mock_response = Mock()
@@ -53,7 +53,7 @@ class TestWebhookHandler:
         assert result is True
         assert mock_post.called
 
-    @patch('result_handlers.webhook.requests.post')
+    @patch('core.result_handlers.webhook.requests.post')
     @patch('time.sleep')
     def test_webhook_handler_retries_on_failure(self, mock_sleep, mock_post):
         """Test webhook handler retries on failure."""
@@ -80,8 +80,7 @@ class TestResultHandlerRegistry:
         """Test registering handlers and processing results."""
         # Create a concrete handler for testing
         class TestHandler(ResultHandler):
-            @property
-            def name(self):
+            def name(self) -> str:
                 return "test_handler"
 
             def enabled(self, metadata):

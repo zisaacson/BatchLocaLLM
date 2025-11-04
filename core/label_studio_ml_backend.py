@@ -334,8 +334,10 @@ async def train(request: TrainRequest):
     Optional feature - can be implemented later.
     """
     logger.info(f"Received training request with {len(request.annotations)} annotations")
-    
-    # TODO: Implement model fine-tuning
+
+    # NOTE: Model fine-tuning not yet implemented
+    # Future enhancement: Fine-tune models based on curated annotations
+    # See: https://github.com/zisaacson/vllm-batch-server/issues/XXX
     # For now, just acknowledge the request
     
     return {
