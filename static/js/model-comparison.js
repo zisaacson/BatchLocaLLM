@@ -9,8 +9,8 @@ const API_BASE = window.location.origin;
 
 // State
 let currentUser = {
-    philosopher: 'zack@pacheightspartners.com',
-    domain: 'pacheightspartners.com'
+    philosopher: 'user@example.com',  // Generic default user
+    domain: 'default'  // Generic default domain
 };
 
 let selectedBaseModel = null;

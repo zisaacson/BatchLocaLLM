@@ -10,8 +10,8 @@ const REFRESH_INTERVAL = 5000; // 5 seconds
 
 // State
 let currentUser = {
-    philosopher: 'zack@pacheightspartners.com',
-    domain: 'pacheightspartners.com'
+    philosopher: 'user@example.com',  // Generic default user
+    domain: 'default'  // Generic default domain
 };
 
 // Initialize
@@ -168,9 +168,9 @@ document.getElementById('exportForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const data = {
-        philosopher: document.getElementById('exportPhilosopher').value,
-        domain: document.getElementById('exportDomain').value,
-        conquest_type: document.getElementById('exportConquestType').value || null,
+        philosopher: document.getElementById('exportPhilosopher').value,  // User email
+        domain: document.getElementById('exportDomain').value,  // Project/domain
+        conquest_type: document.getElementById('exportConquestType').value || null,  // Dataset type
         format: document.getElementById('exportFormat').value
     };
     

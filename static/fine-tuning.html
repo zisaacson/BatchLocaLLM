@@ -238,7 +238,7 @@
         <!-- Header -->
         <div class="header">
             <h1>🎯 Fine-Tuning Dashboard</h1>
-            <p>Train custom models from your gold star conquests</p>
+            <p>Train custom models from your curated datasets</p>
         </div>
 
         <!-- Stats Overview -->
@@ -294,20 +294,20 @@
             <h2>Export Training Dataset</h2>
             <form id="exportForm">
                 <div class="form-group">
-                    <label>Philosopher (Email)</label>
-                    <input type="email" id="exportPhilosopher" required>
+                    <label>User (Email)</label>
+                    <input type="email" id="exportPhilosopher" required placeholder="user@example.com">
                 </div>
                 <div class="form-group">
-                    <label>Domain</label>
-                    <input type="text" id="exportDomain" required>
+                    <label>Project/Domain</label>
+                    <input type="text" id="exportDomain" required placeholder="my-project">
                 </div>
                 <div class="form-group">
-                    <label>Conquest Type (Optional)</label>
+                    <label>Dataset Type (Optional)</label>
                     <select id="exportConquestType">
                         <option value="">All Types</option>
-                        <option value="CANDIDATE">Candidate Analysis</option>
-                        <option value="RECRUITER">Recruiter Outreach</option>
-                        <option value="CLIENT">Client Analysis</option>
+                        <option value="GENERAL">General</option>
+                        <option value="CLASSIFICATION">Classification</option>
+                        <option value="GENERATION">Generation</option>
                     </select>
                 </div>
                 <div class="form-group">
