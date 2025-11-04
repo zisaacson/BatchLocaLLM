@@ -423,10 +423,13 @@ class LabelStudioHandler(ResultHandler):
         """
         result = {}
 
-        # Extract name
+        # Extract name - match the value after "Name:" or "Candidate:"
         name_match = re.search(r"(?:Name|Candidate):\s*(.+?)(?:\n|$)", user_content, re.IGNORECASE)
         if name_match:
-            result["name"] = name_match.group(1).strip()
+            name = name_match.group(1).strip()
+            # Remove any leading "Name:" or "Candidate:" that might have been captured
+            name = re.sub(r"^(?:Name|Candidate):\s*", "", name, flags=re.IGNORECASE)
+            result["name"] = name
 
         # Extract role
         role_match = re.search(r"(?:Current Role|Role|Title):\s*(.+?)(?:\n|$)", user_content, re.IGNORECASE)

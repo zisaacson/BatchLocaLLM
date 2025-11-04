@@ -769,20 +769,26 @@ class BatchWorker:
             metadata['domain'] = metadata.get('domain', 'default')
 
             # If not in metadata, try to extract from first result's custom_id
-            # Format: conquest_{conquest_id}_{philosopher}_{domain}
+            # Format: {philosopher}_{domain}_{conquest_id} or conquest_{id}
             if results and (metadata['philosopher'] == 'unknown@example.com' or metadata['domain'] == 'default'):
                 first_result = results[0]
                 custom_id = first_result.get('custom_id', '')
 
                 # Try to parse custom_id for metadata
-                # Expected format: conquest_{id} or {philosopher}_{domain}_{id}
-                parts = custom_id.split('_')
-                if len(parts) >= 3:
-                    # Assume format: philosopher_domain_id
-                    if '@' in parts[0]:  # Looks like email
+                # Expected formats:
+                # - email@domain.com_software_engineering_candidate_123
+                # - conquest_abc123
+                # - candidate_456
+
+                # Check if starts with email (contains @)
+                if '@' in custom_id:
+                    # Format: email@domain.com_domain_name_conquest_id
+                    # Split only on first 2 underscores to preserve domain names with underscores
+                    parts = custom_id.split('_', 2)
+                    if len(parts) >= 3:
                         metadata['philosopher'] = parts[0]
                         metadata['domain'] = parts[1]
-                        metadata['conquest_id'] = '_'.join(parts[2:])
+                        metadata['conquest_id'] = parts[2]
 
             # completed_at is a Unix timestamp (int), not datetime
             if job.completed_at:

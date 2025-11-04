@@ -1202,23 +1202,29 @@ async def create_batch(
 
                         # Try to parse custom_id for metadata
                         # Expected formats:
-                        # - conquest_{id}
-                        # - {philosopher}_{domain}_{id}
-                        # - candidate_{id}
-                        parts = custom_id.split('_')
+                        # - email@domain.com_software_engineering_candidate_123
+                        # - conquest_abc123
+                        # - candidate_456
 
-                        # Check if first part looks like email (philosopher)
-                        if '@' in parts[0]:
-                            conquest_metadata['philosopher'] = parts[0]
-                            if len(parts) > 1:
+                        # Check if contains email (philosopher)
+                        if '@' in custom_id:
+                            # Format: email@domain.com_domain_name_conquest_id
+                            # Split only on first 2 underscores to preserve domain names with underscores
+                            parts = custom_id.split('_', 2)
+                            if len(parts) >= 1:
+                                conquest_metadata['philosopher'] = parts[0]
+                            if len(parts) >= 2:
                                 conquest_metadata['domain'] = parts[1]
-                            if len(parts) > 2:
-                                conquest_metadata['conquest_id'] = '_'.join(parts[2:])
-                        elif parts[0] == 'conquest' and len(parts) > 1:
-                            conquest_metadata['conquest_id'] = '_'.join(parts[1:])
-                        elif parts[0] == 'candidate' and len(parts) > 1:
-                            conquest_metadata['conquest_type'] = 'candidate_evaluation'
-                            conquest_metadata['conquest_id'] = '_'.join(parts[1:])
+                            if len(parts) >= 3:
+                                conquest_metadata['conquest_id'] = parts[2]
+                        else:
+                            # No email, try other formats
+                            parts = custom_id.split('_')
+                            if parts[0] == 'conquest' and len(parts) > 1:
+                                conquest_metadata['conquest_id'] = '_'.join(parts[1:])
+                            elif parts[0] == 'candidate' and len(parts) > 1:
+                                conquest_metadata['conquest_type'] = 'candidate_evaluation'
+                                conquest_metadata['conquest_id'] = '_'.join(parts[1:])
 
                         # Try to infer conquest_type from messages
                         if 'body' in req and 'messages' in req['body']:
