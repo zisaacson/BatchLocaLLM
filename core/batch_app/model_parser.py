@@ -5,26 +5,38 @@ Extracts model configuration from copy/pasted HuggingFace model pages.
 """
 
 import re
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional, TypedDict
+
+
+class ModelConfig(TypedDict, total=False):
+    """Type definition for parsed model configuration"""
+    model_id: Optional[str]
+    vllm_serve_command: Optional[str]
+    installation_notes: Optional[str]
+    requires_hf_auth: bool
+    is_gguf: bool
+    is_quantized: bool
+    quantization_type: Optional[str]
+    estimated_size_gb: Optional[float]
 
 
 def parse_huggingface_content(content: str) -> Dict[str, Any]:
     """
     Parse copy/pasted HuggingFace model page content.
-    
+
     Extracts:
     - Model ID from vllm serve command
     - Installation commands
     - vLLM serve command
     - Special parameters (quantization, GGUF, etc.)
-    
+
     Args:
         content: Raw text from HuggingFace model page
-        
+
     Returns:
         Dictionary with parsed model configuration
     """
-    result = {
+    result: Dict[str, Any] = {
         "model_id": None,
         "vllm_serve_command": None,
         "installation_notes": None,
@@ -258,7 +270,7 @@ def estimate_memory_requirements(
     fits_on_gpu = total_memory <= available_vram_gb
 
     # 6. Calculate CPU offload strategy
-    cpu_offload_needed = 0
+    cpu_offload_needed: float = 0.0
     cpu_offload_strategy = "none"
     expected_throughput_multiplier = 1.0
 
