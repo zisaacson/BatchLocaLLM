@@ -68,6 +68,13 @@ Built for teams who need:
   - Automatic memory management
   - CPU offload support for larger models
 
+- **🎓 Fine-Tuning System** - Train custom models
+  - Export gold star datasets for training
+  - Support for Unsloth (2x faster), Axolotl, OpenAI, HuggingFace
+  - Deploy fine-tuned models to vLLM
+  - A/B testing to compare base vs fine-tuned models
+  - Web UI for training dashboard and model comparison
+
 - **📈 Benchmarking Tools** - Compare models scientifically
   - Side-by-side result comparison
   - Quality vs speed vs cost analysis

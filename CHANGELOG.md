@@ -38,6 +38,14 @@ First public release of vLLM Batch Server - a production-ready OpenAI-compatible
 - Model Installer - Automated HuggingFace downloads
 - GGUF Support - Quantized models for consumer GPUs
 
+#### Fine-Tuning System
+- Dataset Export - Export gold star conquests for training
+- Training Abstraction - Support for Unsloth, Axolotl, OpenAI, HuggingFace
+- Model Deployment - Deploy fine-tuned models to vLLM
+- A/B Testing - Compare base vs fine-tuned model performance
+- Web UI - Fine-tuning dashboard and model comparison interface
+- Metrics Tracking - Quality, performance, and efficiency metrics
+
 #### Benchmarking & Comparison
 - Dataset Workbench - Interactive result exploration
 - Benchmark Runner - Scientific model comparison
