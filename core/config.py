@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     APP_NAME: str = "vLLM Batch Server"
     APP_VERSION: str = "1.0.0"
     ENVIRONMENT: str = "development"  # development, staging, production
+
+    # ========================================================================
+    # Integrations
+    # ========================================================================
+    ENABLE_ARIS_INTEGRATION: bool = False  # Enable Aris-specific endpoints
     
     # ========================================================================
     # Batch API Server

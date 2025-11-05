@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metrics Dashboard - vLLM Batch Server</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #2d3748;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #718096;
+            font-size: 16px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-card h3 {
+            color: #718096;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-card .value {
+            color: #2d3748;
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .label {
+            color: #a0aec0;
+            font-size: 14px;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .chart-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-card h2 {
+            color: #2d3748;
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        .table-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .table-card h2 {
+            color: #2d3748;
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f7fafc;
+            color: #4a5568;
+            font-weight: 600;
+            text-align: left;
+            padding: 12px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #2d3748;
+        }
+
+        tr:hover {
+            background: #f7fafc;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-completed {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-in_progress {
+            background: #bee3f8;
+            color: #2c5282;
+        }
+
+        .status-failed {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 18px;
+        }
+
+        .error {
+            background: #fed7d7;
+            color: #742a2a;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+        }
+
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .refresh-btn:hover {
+            background: #5a67d8;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .nav-links a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: #5a67d8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Metrics Dashboard</h1>
+            <p>Real-time analytics for your vLLM batch processing system</p>
+            <div class="nav-links">
+                <a href="/">← Back to Home</a>
+                <a href="/workbench.html">Dataset Workbench</a>
+                <a href="/model-management.html">Model Management</a>
+                <a href="/settings.html">Settings</a>
+            </div>
+            <button class="refresh-btn" onclick="loadMetrics()" style="margin-top: 15px;">🔄 Refresh Data</button>
+        </div>
+
+        <div id="loading" class="loading">Loading metrics...</div>
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div id="content" style="display: none;">
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Batches</h3>
+                    <div class="value" id="total-batches">0</div>
+                    <div class="label">All time</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Completed Batches</h3>
+                    <div class="value" id="completed-batches">0</div>
+                    <div class="label">Successfully processed</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Requests</h3>
+                    <div class="value" id="total-requests">0</div>
+                    <div class="label">Across all batches</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Gold Stars</h3>
+                    <div class="value" id="gold-stars">0</div>
+                    <div class="label">High-quality examples</div>
+                </div>
+            </div>
+
+            <!-- Charts Grid -->
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h2>Batch Status Distribution</h2>
+                    <div class="chart-container">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h2>Activity Timeline (30 Days)</h2>
+                    <div class="chart-container">
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model Performance Table -->
+            <div class="table-card">
+                <h2>Model Performance</h2>
+                <table id="model-performance-table">
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th>Batches</th>
+                            <th>Requests</th>
+                            <th>Success Rate</th>
+                            <th>Avg Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody id="model-performance-body">
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Recent Batches Table -->
+            <div class="table-card">
+                <h2>Recent Batches</h2>
+                <table id="recent-batches-table">
+                    <thead>
+                        <tr>
+                            <th>Batch ID</th>
+                            <th>Model</th>
+                            <th>Status</th>
+                            <th>Requests</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-batches-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let statusChart, timelineChart;
+
+        async function loadMetrics() {
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const content = document.getElementById('content');
+
+            loading.style.display = 'block';
+            error.style.display = 'none';
+            content.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/metrics/overview');
+                if (!response.ok) throw new Error('Failed to fetch metrics');
+                
+                const data = await response.json();
+                
+                // Update stats
+                document.getElementById('total-batches').textContent = data.batch_stats.total_batches;
+                document.getElementById('completed-batches').textContent = data.batch_stats.completed_batches;
+                document.getElementById('total-requests').textContent = data.batch_stats.total_requests;
+                document.getElementById('gold-stars').textContent = data.label_studio.gold_star_count;
+
+                // Update charts
+                updateStatusChart(data.batch_stats);
+                updateTimelineChart(data.timeline);
+
+                // Update tables
+                updateModelPerformanceTable(data.model_performance);
+                updateRecentBatchesTable(data.recent_batches);
+
+                loading.style.display = 'none';
+                content.style.display = 'block';
+            } catch (err) {
+                loading.style.display = 'none';
+                error.style.display = 'block';
+                error.textContent = `Error loading metrics: ${err.message}`;
+            }
+        }
+
+        function updateStatusChart(stats) {
+            const ctx = document.getElementById('statusChart').getContext('2d');
+            
+            if (statusChart) statusChart.destroy();
+            
+            statusChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Completed', 'In Progress', 'Failed'],
+                    datasets: [{
+                        data: [stats.completed_batches, stats.in_progress_batches, stats.failed_batches],
+                        backgroundColor: ['#48bb78', '#4299e1', '#f56565']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateTimelineChart(timeline) {
+            const ctx = document.getElementById('timelineChart').getContext('2d');
+            
+            if (timelineChart) timelineChart.destroy();
+            
+            timelineChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timeline.map(t => t.date),
+                    datasets: [{
+                        label: 'Batches',
+                        data: timeline.map(t => t.batch_count),
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateModelPerformanceTable(models) {
+            const tbody = document.getElementById('model-performance-body');
+            tbody.innerHTML = models.map(model => `
+                <tr>
+                    <td>${model.model_id}</td>
+                    <td>${model.batch_count}</td>
+                    <td>${model.total_requests}</td>
+                    <td>${model.success_rate.toFixed(1)}%</td>
+                    <td>${model.avg_duration_seconds.toFixed(1)}s</td>
+                </tr>
+            `).join('');
+        }
+
+        function updateRecentBatchesTable(batches) {
+            const tbody = document.getElementById('recent-batches-body');
+            tbody.innerHTML = batches.map(batch => `
+                <tr>
+                    <td>${batch.id}</td>
+                    <td>${batch.model_id}</td>
+                    <td><span class="status-badge status-${batch.status}">${batch.status}</span></td>
+                    <td>${batch.completed_requests}/${batch.total_requests}</td>
+                    <td>${new Date(batch.created_at).toLocaleString()}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Load metrics on page load
+        loadMetrics();
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadMetrics, 30000);
+    </script>
+</body>
+</html>
+

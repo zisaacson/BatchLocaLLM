@@ -296,6 +296,7 @@ class WorkerHeartbeat(Base):
     # GPU metrics
     gpu_memory_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     gpu_temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gpu_utilization: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Timestamp
     last_seen: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

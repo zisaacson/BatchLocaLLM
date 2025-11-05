@@ -818,6 +818,180 @@ async def get_or_create_project(schema_type: str) -> int:
     return project['id']
 
 
+# ============================================================================
+# Metrics & Analytics Endpoints
+# ============================================================================
+
+@app.get("/api/metrics/overview")
+async def get_metrics_overview():
+    """
+    Get comprehensive metrics overview for the dashboard.
+
+    Returns:
+    - Total batches, tasks, gold stars
+    - Model performance comparison
+    - Quality distribution
+    - Timeline data
+    - Recent activity
+    """
+    from sqlalchemy import create_engine, text
+    from core.config import settings
+
+    engine = create_engine(settings.DATABASE_URL)
+
+    with engine.connect() as conn:
+        # Get batch statistics
+        batch_stats = conn.execute(text("""
+            SELECT
+                COUNT(*) as total_batches,
+                COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_batches,
+                COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_batches,
+                COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_batches,
+                SUM(total_requests) as total_requests,
+                SUM(completed_requests) as completed_requests
+            FROM batch_jobs
+        """)).fetchone()
+
+        # Get model performance stats
+        model_stats = conn.execute(text("""
+            SELECT
+                model,
+                COUNT(*) as batch_count,
+                AVG(CASE
+                    WHEN completed_at IS NOT NULL AND in_progress_at IS NOT NULL
+                    THEN completed_at - in_progress_at
+                    ELSE NULL
+                END) as avg_duration_seconds,
+                SUM(total_requests) as total_requests,
+                SUM(completed_requests) as completed_requests
+            FROM batch_jobs
+            WHERE status = 'completed'
+            GROUP BY model
+            ORDER BY batch_count DESC
+            LIMIT 10
+        """)).fetchall()
+
+        # Get recent batches
+        recent_batches = conn.execute(text("""
+            SELECT
+                batch_id,
+                model,
+                status,
+                total_requests,
+                completed_requests,
+                created_at,
+                in_progress_at,
+                completed_at
+            FROM batch_jobs
+            ORDER BY created_at DESC
+            LIMIT 10
+        """)).fetchall()
+
+        # Get timeline data (batches per day for last 30 days)
+        timeline = conn.execute(text("""
+            SELECT
+                DATE(to_timestamp(created_at)) as date,
+                COUNT(*) as batch_count,
+                SUM(total_requests) as request_count,
+                COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count
+            FROM batch_jobs
+            WHERE created_at >= EXTRACT(EPOCH FROM (CURRENT_DATE - INTERVAL '30 days'))
+            GROUP BY DATE(to_timestamp(created_at))
+            ORDER BY date ASC
+        """)).fetchall()
+
+    # Get Label Studio stats
+    try:
+        ls_client = LabelStudioClient()
+
+        # Get all projects
+        projects_response = ls_client.session.get(
+            f"{ls_client.base_url}/api/projects",
+            timeout=ls_client.timeout
+        )
+        projects_response.raise_for_status()
+        projects = projects_response.json()
+
+        total_tasks = 0
+        total_annotations = 0
+        gold_star_count = 0
+
+        for project in projects:
+            project_id = project['id']
+            tasks = ls_client.get_tasks(project_id=project_id, page_size=1000)
+            total_tasks += len(tasks)
+
+            for task in tasks:
+                annotations = task.get('annotations', [])
+                total_annotations += len(annotations)
+
+                # Check if task is marked as gold star
+                meta = task.get('meta', {})
+                if meta.get('gold_star'):
+                    gold_star_count += 1
+
+        label_studio_stats = {
+            "total_projects": len(projects),
+            "total_tasks": total_tasks,
+            "total_annotations": total_annotations,
+            "gold_star_count": gold_star_count
+        }
+    except Exception as e:
+        logger.error(f"Error fetching Label Studio stats: {e}")
+        label_studio_stats = {
+            "total_projects": 0,
+            "total_tasks": 0,
+            "total_annotations": 0,
+            "gold_star_count": 0,
+            "error": str(e)
+        }
+
+    return {
+        "batch_stats": {
+            "total_batches": batch_stats[0] if batch_stats else 0,
+            "completed_batches": batch_stats[1] if batch_stats else 0,
+            "failed_batches": batch_stats[2] if batch_stats else 0,
+            "in_progress_batches": batch_stats[3] if batch_stats else 0,
+            "total_requests": batch_stats[4] if batch_stats else 0,
+            "completed_requests": batch_stats[5] if batch_stats else 0
+        },
+        "model_performance": [
+            {
+                "model_id": row[0],
+                "batch_count": row[1],
+                "avg_duration_seconds": float(row[2]) if row[2] else 0,
+                "total_requests": row[3],
+                "completed_requests": row[4],
+                "success_rate": (row[4] / row[3] * 100) if row[3] > 0 else 0
+            }
+            for row in model_stats
+        ],
+        "recent_batches": [
+            {
+                "id": row[0],
+                "model_id": row[1],
+                "status": row[2],
+                "total_requests": row[3],
+                "completed_requests": row[4],
+                "created_at": datetime.fromtimestamp(row[5], UTC).isoformat() if row[5] else None,
+                "started_at": datetime.fromtimestamp(row[6], UTC).isoformat() if row[6] else None,
+                "completed_at": datetime.fromtimestamp(row[7], UTC).isoformat() if row[7] else None
+            }
+            for row in recent_batches
+        ],
+        "timeline": [
+            {
+                "date": row[0].isoformat() if row[0] else None,
+                "batch_count": row[1],
+                "request_count": row[2],
+                "completed_count": row[3]
+            }
+            for row in timeline
+        ],
+        "label_studio": label_studio_stats
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)

@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Dataset Workbench - vLLM Batch Server</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f7fa;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .workbench {
+            display: grid;
+            grid-template-rows: 60px 40px 1fr 40px;
+            height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Toolbar */
+        .toolbar {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .toolbar-left, .toolbar-right {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .toolbar-label {
+            font-size: 13px;
+            color: #718096;
+            margin-right: 5px;
+        }
+
+        /* Main Content */
+        .main-content {
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .task-grid {
+            display: grid;
+            gap: 15px;
+        }
+
+        .task-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .task-card.selected {
+            border: 2px solid #667eea;
+            box-shadow: 0 4px 6px rgba(102, 126, 234, 0.2);
+        }
+
+        .task-card:hover {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .task-id {
+            font-size: 12px;
+            color: #718096;
+            font-family: monospace;
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .task-content {
+            margin-bottom: 15px;
+        }
+
+        .task-field {
+            margin-bottom: 12px;
+        }
+
+        .task-field-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .task-field-value {
+            font-size: 14px;
+            color: #2d3748;
+            line-height: 1.5;
+        }
+
+        .task-field-value.editable {
+            padding: 8px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: text;
+            transition: all 0.2s;
+        }
+
+        .task-field-value.editable:hover {
+            background: #f7fafc;
+            border-color: #e2e8f0;
+        }
+
+        .task-field-value.editing {
+            background: white;
+            border-color: #667eea;
+            outline: none;
+        }
+
+        .task-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .gold-star-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #fef5e7;
+            color: #d68910;
+        }
+
+        .gold-star-badge.active {
+            background: #ffd700;
+            color: #744210;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #718096;
+        }
+
+        .status-left, .status-right {
+            display: flex;
+            gap: 20px;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-small {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        .btn-icon {
+            padding: 6px 10px;
+            background: transparent;
+            color: #718096;
+        }
+
+        .btn-icon:hover {
+            background: #f7fafc;
+            color: #2d3748;
+        }
+
+        .btn-gold {
+            background: #ffd700;
+            color: #744210;
+        }
+
+        .btn-gold:hover {
+            background: #ffed4e;
+        }
+
+        /* Checkbox */
+        .checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        /* Select */
+        select {
+            padding: 6px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #2d3748;
+            background: white;
+            cursor: pointer;
+        }
+
+        /* Keyboard Shortcuts Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            font-size: 24px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 20px;
+        }
+
+        .shortcut-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .shortcut-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #f7fafc;
+            border-radius: 6px;
+        }
+
+        .shortcut-key {
+            font-family: monospace;
+            background: #2d3748;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .shortcut-desc {
+            color: #4a5568;
+            font-size: 14px;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .empty-state h2 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="workbench">
+        <!-- Header -->
+        <div class="header">
+            <h1>🎨 Enhanced Dataset Workbench</h1>
+            <div class="header-actions">
+                <button class="btn btn-secondary btn-small" onclick="showShortcuts()">⌨️ Shortcuts</button>
+                <button class="btn btn-secondary btn-small" onclick="location.href='/metrics.html'">📊 Metrics</button>
+                <button class="btn btn-secondary btn-small" onclick="location.href='/'">← Home</button>
+            </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <span class="toolbar-label">Dataset:</span>
+                <select id="dataset-select" onchange="loadDataset()">
+                    <option value="">Select a dataset...</option>
+                </select>
+                <button class="btn btn-secondary btn-small" onclick="loadDataset()">🔄 Refresh</button>
+            </div>
+            <div class="toolbar-right">
+                <span class="toolbar-label" id="selection-count">0 selected</span>
+                <button class="btn btn-secondary btn-small" onclick="selectAll()">Select All</button>
+                <button class="btn btn-secondary btn-small" onclick="deselectAll()">Deselect All</button>
+                <button class="btn btn-gold btn-small" onclick="bulkGoldStar()">⭐ Mark as Gold Star</button>
+                <button class="btn btn-secondary btn-small" onclick="bulkDelete()">🗑️ Delete Selected</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content" id="main-content">
+            <div class="loading" id="loading">Loading tasks...</div>
+            <div class="empty-state" id="empty-state" style="display: none;">
+                <h2>No tasks found</h2>
+                <p>Select a dataset to get started</p>
+            </div>
+            <div class="task-grid" id="task-grid"></div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-left">
+                <span id="status-message">Ready</span>
+            </div>
+            <div class="status-right">
+                <span id="task-count">0 tasks</span>
+                <span id="gold-star-count">0 gold stars</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div class="modal" id="shortcuts-modal" onclick="hideShortcuts()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">⌨️ Keyboard Shortcuts</div>
+            <div class="shortcut-list">
+                <div class="shortcut-item">
+                    <span class="shortcut-desc">Select all tasks</span>
+                    <span class="shortcut-key">Ctrl + A</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-desc">Deselect all tasks</span>
+                    <span class="shortcut-key">Esc</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-desc">Mark selected as gold star</span>
+                    <span class="shortcut-key">Ctrl + G</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-desc">Delete selected tasks</span>
+                    <span class="shortcut-key">Delete</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-desc">Refresh dataset</span>
+                    <span class="shortcut-key">Ctrl + R</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-desc">Show shortcuts</span>
+                    <span class="shortcut-key">?</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-desc">Navigate tasks</span>
+                    <span class="shortcut-key">↑ ↓</span>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-desc">Toggle selection</span>
+                    <span class="shortcut-key">Space</span>
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="hideShortcuts()" style="margin-top: 20px; width: 100%;">Close</button>
+        </div>
+    </div>
+
+    <script src="/static/js/enhanced-workbench.js"></script>
+</body>
+</html>
+

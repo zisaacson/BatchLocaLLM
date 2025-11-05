@@ -4583,6 +4583,21 @@ async def get_job_stats(
     }
 
 
+# ============================================================================
+# Aris Integration (Optional)
+# ============================================================================
+
+if settings.ENABLE_ARIS_INTEGRATION:
+    try:
+        from integrations.aris.conquest_api import router as aris_router
+        app.include_router(aris_router)
+        logger.info("✅ Aris integration enabled - mounted at /v1/aris")
+    except ImportError as e:
+        logger.warning(f"⚠️  Aris integration enabled but module not found: {e}")
+    except Exception as e:
+        logger.error(f"❌ Failed to load Aris integration: {e}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=4080)
