@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # ========================================================================
     # Application Info
     # ========================================================================
-    APP_NAME: str = "vLLM Batch Server"
+    APP_NAME: str = "BatchLocaLLM"
     APP_VERSION: str = "1.0.0"
     ENVIRONMENT: str = "development"  # development, staging, production
 
@@ -111,8 +111,8 @@ class Settings(BaseSettings):
     # Batch Processing
     # ========================================================================
     MAX_REQUESTS_PER_JOB: int = 50000  # OpenAI limit
-    MAX_QUEUE_DEPTH: int = 20  # Max concurrent jobs
-    MAX_TOTAL_QUEUED_REQUESTS: int = 1000000  # Max total requests across all queued jobs
+    MAX_QUEUE_DEPTH: int = 0  # Max concurrent jobs (0 = unlimited, worker processes sequentially)
+    MAX_TOTAL_QUEUED_REQUESTS: int = 0  # Max total requests across all queued jobs (0 = unlimited)
     BATCH_EXPIRY_HOURS: int = 24  # Batch expiry time in hours
     WORKER_POLL_INTERVAL: int = 5  # Seconds between job checks
     WORKER_HEARTBEAT_INTERVAL: int = 30  # Seconds between heartbeats

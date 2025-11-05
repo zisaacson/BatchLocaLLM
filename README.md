@@ -1,8 +1,8 @@
 <div align="center">
 
-# vLLM Batch Server
+# BatchLocaLLM
 
-**Production-ready OpenAI-compatible batch inference for local LLMs**
+**Production-ready OpenAI Batch API alternative for local LLMs**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -10,6 +10,8 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 Process **50,000+ requests** on consumer GPUs (RTX 4080 16GB) with automatic model hot-swapping, incremental saves, and real-time monitoring.
+
+**Cost:** $0 per batch (after hardware) vs. $3,500-$9,750 on OpenAI/Parasail
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Examples](#-examples) • [Architecture](#-architecture)
 
@@ -113,8 +115,8 @@ Built for teams who need:
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/zisaacson/vllm-batch-server.git
-cd vllm-batch-server
+git clone https://github.com/zisaacson/BatchLocaLLM.git
+cd BatchLocaLLM
 
 # 2. Create virtual environment
 python3 -m venv venv

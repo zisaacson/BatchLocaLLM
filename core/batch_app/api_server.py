@@ -614,16 +614,16 @@ async def health_check(db: Session = Depends(get_db)):
         "worker": heartbeat.__dict__ if heartbeat else {"status": "unknown"},
         "queue": {
             "active_jobs": len(pending_jobs),
-            "max_queue_depth": MAX_QUEUE_DEPTH,
-            "queue_available": MAX_QUEUE_DEPTH - len(pending_jobs),
+            "max_queue_depth": MAX_QUEUE_DEPTH if MAX_QUEUE_DEPTH > 0 else "unlimited",
+            "queue_available": (MAX_QUEUE_DEPTH - len(pending_jobs)) if MAX_QUEUE_DEPTH > 0 else "unlimited",
             "total_queued_requests": total_queued_requests,
-            "max_queued_requests": MAX_TOTAL_QUEUED_REQUESTS,
-            "requests_available": MAX_TOTAL_QUEUED_REQUESTS - total_queued_requests
+            "max_queued_requests": MAX_TOTAL_QUEUED_REQUESTS if MAX_TOTAL_QUEUED_REQUESTS > 0 else "unlimited",
+            "requests_available": (MAX_TOTAL_QUEUED_REQUESTS - total_queued_requests) if MAX_TOTAL_QUEUED_REQUESTS > 0 else "unlimited"
         },
         "limits": {
             "max_requests_per_job": MAX_REQUESTS_PER_JOB,
-            "max_queue_depth": MAX_QUEUE_DEPTH,
-            "max_total_queued_requests": MAX_TOTAL_QUEUED_REQUESTS
+            "max_queue_depth": MAX_QUEUE_DEPTH if MAX_QUEUE_DEPTH > 0 else "unlimited",
+            "max_total_queued_requests": MAX_TOTAL_QUEUED_REQUESTS if MAX_TOTAL_QUEUED_REQUESTS > 0 else "unlimited"
         }
     }
 
@@ -1101,8 +1101,11 @@ async def create_batch(
     """
     Create a batch job (OpenAI Batch API compatible).
 
-    The API accepts jobs up to MAX_QUEUE_DEPTH (20 jobs). The worker processes
+    The API accepts unlimited jobs by default (MAX_QUEUE_DEPTH=0). The worker processes
     jobs sequentially (one at a time) to prevent OOM on single-GPU systems.
+
+    Queue limits can be configured via MAX_QUEUE_DEPTH and MAX_TOTAL_QUEUED_REQUESTS
+    environment variables if needed.
 
     Args:
         request: FastAPI Request object (for rate limiting)
@@ -1145,9 +1148,8 @@ async def create_batch(
                 )
 
         # NOTE: We do NOT check if worker is busy processing
-        # The worker processes jobs sequentially (one at a time) to prevent OOM on RTX 4080
-        # But the API should accept jobs up to MAX_QUEUE_DEPTH (20 jobs)
-        # Queue depth check below is sufficient to prevent resource exhaustion
+        # The worker processes jobs sequentially (one at a time) to prevent OOM on single-GPU systems
+        # The API accepts unlimited jobs by default (queue depth check below only applies if limit is set)
 
     # Validate endpoint
     if batch_request.endpoint != "/v1/chat/completions":
@@ -1175,16 +1177,17 @@ async def create_batch(
             detail=f"Input file not found: {batch_request.input_file_id}"
         )
 
-    # Check queue depth
-    pending_jobs = db.query(BatchJob).filter(
-        BatchJob.status.in_(['validating', 'in_progress'])
-    ).all()
+    # Check queue depth (if limit is set)
+    if MAX_QUEUE_DEPTH > 0:
+        pending_jobs = db.query(BatchJob).filter(
+            BatchJob.status.in_(['validating', 'in_progress'])
+        ).all()
 
-    if len(pending_jobs) >= MAX_QUEUE_DEPTH:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Queue full ({len(pending_jobs)}/{MAX_QUEUE_DEPTH} jobs). Try again later."
-        )
+        if len(pending_jobs) >= MAX_QUEUE_DEPTH:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Queue full ({len(pending_jobs)}/{MAX_QUEUE_DEPTH} jobs). Try again later."
+            )
 
     # Read and validate input file
     input_file_path = Path(input_file.file_path)

@@ -181,3 +181,17 @@ logs/*.log
 
 # Internal notes (not for OSS release)
 ZACKSNOTES/
+
+# Cleanup/backup directories
+cleanup_backup_*/
+*.backup/
+
+# Test output files
+mypy-results.txt
+
+# Audit/analysis scripts (internal only)
+audit_oss_files.py
+OSS_REPO_CLEANUP_AUDIT.md
+COMPETITIVE_ANALYSIS.md
+CRITICAL_CODE_AUDIT.md
+OSS_CLEANUP_COMPLETE.md

@@ -537,25 +537,25 @@ class BatchWorker:
             # Load model
             self.load_model(job.model, log_file)
 
-            # Load requests
-            self.log(log_file, f"\n📥 Loading requests from {input_file_path}")
-            all_requests = []
+            # Count total requests (memory-efficient - don't load all into RAM)
+            self.log(log_file, f"\n📥 Counting requests in {input_file_path}")
+            total_requests = 0
             with open(input_file_path) as f:
                 for line in f:
                     if line.strip():
-                        all_requests.append(json.loads(line))
+                        total_requests += 1
 
-            total_requests = len(all_requests)
-            self.log(log_file, f"✅ Loaded {total_requests} requests")
+            self.log(log_file, f"✅ Found {total_requests} total requests")
 
             # Check for resume point
             completed_count = self.count_completed_results(str(output_file_path))
             if completed_count > 0:
                 self.log(log_file, f"\n📍 RESUMING from request {completed_count + 1}")
                 self.log(log_file, f"Already completed: {completed_count}/{total_requests}")
-                all_requests = all_requests[completed_count:]
                 job.completed_requests = completed_count
                 db.commit()
+
+            remaining_requests = total_requests - completed_count
 
             # Sampling parameters
             sampling_params = SamplingParams(
@@ -570,33 +570,45 @@ class BatchWorker:
             total_completion_tokens = 0
             total_tokens = 0
 
-            # CRITICAL: Chunking Strategy
-            # ============================
-            # Process requests in chunks of 100 to:
+            # CRITICAL: Chunking Strategy (Memory-Efficient Streaming)
+            # =========================================================
+            # Process requests in chunks of CHUNK_SIZE (default: 5000) to:
             # 1. Prevent OOM from loading all prompts into GPU at once
-            # 2. Enable incremental saves (lose max 100 requests on crash, not entire batch)
-            # 3. Provide progress updates every ~2-5 minutes
+            # 2. Enable incremental saves (lose max CHUNK_SIZE requests on crash, not entire batch)
+            # 3. Provide progress updates
+            # 4. Stream from file instead of loading entire batch into RAM (fixes unbounded memory growth)
             #
-            # Why 100?
-            # - Small enough to fit in memory (100 * ~800 tokens = 80K tokens)
-            # - Large enough for vLLM to batch efficiently (vLLM batches within chunk)
-            # - Fast enough for responsive progress updates
+            # Why streaming?
+            # - 50K requests * 2KB avg = 100MB+ in RAM if loaded all at once
+            # - Streaming reads only CHUNK_SIZE requests at a time
+            # - Memory usage stays constant regardless of batch size
             #
             # vLLM's internal batching:
-            # - vLLM automatically batches the 100 prompts for parallel processing
-            # - We don't need to batch manually - just pass all 100 at once
-            num_chunks = (len(all_requests) + CHUNK_SIZE - 1) // CHUNK_SIZE
-            self.log(log_file, f"\n⚡ Processing {len(all_requests)} requests in {num_chunks} chunks")
+            # - vLLM automatically batches the prompts for parallel processing
+            # - We don't need to batch manually - just pass chunk at once
+            num_chunks = (remaining_requests + CHUNK_SIZE - 1) // CHUNK_SIZE
+            self.log(log_file, f"\n⚡ Processing {remaining_requests} requests in {num_chunks} chunks (streaming from file)")
             self.log(log_file, f"vLLM will handle batching within each {CHUNK_SIZE}-request chunk")
 
-            for chunk_idx in range(0, len(all_requests), CHUNK_SIZE):
-                chunk_end = min(chunk_idx + CHUNK_SIZE, len(all_requests))
-                chunk_requests = all_requests[chunk_idx:chunk_end]
-                chunk_num = (chunk_idx // CHUNK_SIZE) + 1
+            for chunk_num in range(num_chunks):
+                # Calculate which requests to read for this chunk
+                chunk_start = completed_count + (chunk_num * CHUNK_SIZE)
+                chunk_end = min(chunk_start + CHUNK_SIZE, total_requests)
 
+                # Stream requests for this chunk only (memory-efficient)
                 self.log(log_file, f"\n{'─' * 80}")
-                self.log(log_file, f"📦 CHUNK {chunk_num}/{num_chunks}: Requests {completed_count + chunk_idx + 1}-{completed_count + chunk_end}")
+                self.log(log_file, f"📦 CHUNK {chunk_num + 1}/{num_chunks}: Streaming requests {chunk_start + 1}-{chunk_end}")
                 self.log(log_file, f"{'─' * 80}")
+
+                chunk_requests = []
+                with open(input_file_path) as f:
+                    for line_idx, line in enumerate(f):
+                        if not line.strip():
+                            continue
+                        if line_idx >= chunk_start and line_idx < chunk_end:
+                            chunk_requests.append(json.loads(line))
+                        if line_idx >= chunk_end:
+                            break
 
                 # Extract prompts for this chunk
                 chunk_prompts = []
@@ -645,13 +657,13 @@ class BatchWorker:
                     # If worker crashes, we can resume from the last saved chunk.
                     #
                     # Without this, a crash at 4,900/5,000 requests loses ALL work.
-                    # With this, we only lose the current chunk (max 100 requests).
+                    # With this, we only lose the current chunk (max CHUNK_SIZE requests).
                     self.log(log_file, "💾 Saving chunk results...")
                     saved = self.save_chunk_results(
                         outputs,
                         chunk_requests,
                         str(output_file_path),
-                        completed_count + chunk_idx,
+                        chunk_start,  # Use chunk_start instead of chunk_idx
                         log_file
                     )
 
@@ -662,9 +674,10 @@ class BatchWorker:
                     job.last_progress_update = datetime.now(timezone.utc)
 
                     # Calculate ETA
-                    if chunk_num < num_chunks:
-                        avg_time_per_chunk = total_inference_time / chunk_num
-                        remaining_chunks = num_chunks - chunk_num
+                    chunks_completed = chunk_num + 1
+                    if chunks_completed < num_chunks:
+                        avg_time_per_chunk = total_inference_time / chunks_completed
+                        remaining_chunks = num_chunks - chunks_completed
                         est_remaining_seconds = avg_time_per_chunk * remaining_chunks
                         from datetime import timedelta
                         job.estimated_completion_time = datetime.now(timezone.utc) + timedelta(seconds=est_remaining_seconds)
@@ -674,14 +687,14 @@ class BatchWorker:
                     self.log(log_file, f"✅ Saved {saved} results ({job.completed_requests}/{total_requests} total)")
 
                     # Estimate time remaining
-                    if chunk_num < num_chunks:
-                        avg_time_per_chunk = total_inference_time / chunk_num
-                        remaining_chunks = num_chunks - chunk_num
+                    if chunks_completed < num_chunks:
+                        avg_time_per_chunk = total_inference_time / chunks_completed
+                        remaining_chunks = num_chunks - chunks_completed
                         est_remaining_time = avg_time_per_chunk * remaining_chunks
                         self.log(log_file, f"⏱️  Estimated time remaining: {est_remaining_time/60:.1f} minutes")
 
                 except Exception as e:
-                    self.log(log_file, f"❌ Chunk {chunk_num} failed: {e}")
+                    self.log(log_file, f"❌ Chunk {chunk_num + 1} failed: {e}")
                     # Track chunk failure
                     metrics.chunks_processed.labels(model=job.model, status='failed').inc()
                     raise

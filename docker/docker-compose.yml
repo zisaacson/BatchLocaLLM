@@ -1,9 +1,9 @@
 # =============================================================================
-# vLLM Batch Server - All Services (Clean 4xxx Port Layout)
+# BatchLocaLLM - All Services (Clean 4xxx Port Layout)
 # =============================================================================
 #
 # PORT LAYOUT:
-# 40xx = vLLM Batch Server Core
+# 40xx = BatchLocaLLM Core
 #   4080 - Main API Server (native Python)
 #   4081 - Docs/Config Server (native Python)
 #   4082 - Label Studio ML Backend (native Python)
@@ -19,7 +19,7 @@
 #   4224 - Node Exporter
 #
 # 43xx = Databases
-#   4332 - Main PostgreSQL (vLLM Batch Server)
+#   4332 - Main PostgreSQL (BatchLocaLLM)
 #
 # USAGE:
 #   docker compose -f docker/docker-compose.yml up -d
