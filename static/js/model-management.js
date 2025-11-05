@@ -200,11 +200,49 @@ async function autoFillModelInfo() {
 }
 
 /**
+ * Parse HuggingFace vLLM command from clipboard
+ */
+function parseVLLMCommand(text) {
+    // Match patterns like:
+    // vllm serve "google/gemma-3-4b-it"
+    // vllm serve 'google/gemma-3-4b-it'
+    // "model": "google/gemma-3-4b-it"
+    const patterns = [
+        /vllm\s+serve\s+["']([^"']+)["']/,
+        /"model"\s*:\s*"([^"]+)"/,
+        /'model'\s*:\s*'([^']+)'/
+    ];
+
+    for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match) {
+            return match[1];
+        }
+    }
+
+    return null;
+}
+
+/**
  * Setup add model form handler
  */
 function setupFormHandler() {
     const form = document.getElementById('add-model-form');
     const modelIdInput = document.getElementById('model-id');
+
+    // Add paste event to parse HuggingFace vLLM commands
+    modelIdInput.addEventListener('paste', (e) => {
+        const pastedText = e.clipboardData.getData('text');
+        const modelId = parseVLLMCommand(pastedText);
+
+        if (modelId) {
+            e.preventDefault();
+            modelIdInput.value = modelId;
+            showToast(`Parsed model ID: ${modelId}`, 'success');
+            // Trigger auto-fill after a short delay
+            setTimeout(() => autoFillModelInfo(), 100);
+        }
+    });
 
     // Add blur event to auto-fill model info
     modelIdInput.addEventListener('blur', autoFillModelInfo);
