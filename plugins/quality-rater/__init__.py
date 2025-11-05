@@ -212,21 +212,75 @@ class QualityRaterPlugin(RatingPlugin, ExportPlugin, UIPlugin):
             {"path": "/quality-dashboard", "template": "plugins/quality-rater/ui/dashboard.html"}
         ]
     
-    def get_ui_components(self) -> List[Dict[str, str]]:
-        """Return embeddable UI components."""
-        return [
-            {
-                "id": "rating-widget",
-                "template": "plugins/quality-rater/ui/components/rating-widget.html",
-                "description": "Embeddable rating widget"
-            },
-            {
-                "id": "quality-stats",
-                "template": "plugins/quality-rater/ui/components/quality-stats.html",
-                "description": "Quality statistics display"
-            }
-        ]
-    
+    def get_ui_components(self) -> List[str]:
+        """Return embeddable UI component IDs."""
+        return ["rating-widget", "quality-stats", "quality-dashboard"]
+
+    def render_component(self, component_id: str, data: Dict[str, Any]) -> str:
+        """Render a UI component with data."""
+        if component_id == "rating-widget":
+            scale_type = data.get("scale_type", "categorical")
+            scale_config = self.rating_scales.get(scale_type, {})
+
+            if scale_type == "numeric":
+                min_val = scale_config.get("min", 1)
+                max_val = scale_config.get("max", 10)
+                step = scale_config.get("step", 1)
+
+                html = f'<div class="rating-widget numeric" data-scale="{scale_type}">'
+                html += f'<input type="range" min="{min_val}" max="{max_val}" step="{step}" />'
+                html += f'<span class="rating-value">{min_val}</span>'
+                html += '</div>'
+                return html
+
+            elif scale_type == "categorical":
+                categories = scale_config if isinstance(scale_config, list) else []
+
+                html = f'<div class="rating-widget categorical" data-scale="{scale_type}">'
+                for category in categories:
+                    html += f'<button class="rating-option" data-value="{category}">{category}</button>'
+                html += '</div>'
+                return html
+
+            elif scale_type == "binary":
+                options = scale_config if isinstance(scale_config, list) else ["Accept", "Reject"]
+
+                html = f'<div class="rating-widget binary" data-scale="{scale_type}">'
+                for option in options:
+                    html += f'<button class="rating-option" data-value="{option}">{option}</button>'
+                html += '</div>'
+                return html
+
+        elif component_id == "quality-stats":
+            stats = data.get("stats", {})
+            total = stats.get("total", 0)
+            avg_score = stats.get("average_score", 0.0)
+            distribution = stats.get("distribution", {})
+
+            html = '<div class="quality-stats">'
+            html += f'<div class="stat"><label>Total Ratings:</label><span>{total}</span></div>'
+            html += f'<div class="stat"><label>Average Score:</label><span>{avg_score:.2f}</span></div>'
+            html += '<div class="distribution">'
+            for value, count in distribution.items():
+                percentage = (count / total * 100) if total > 0 else 0
+                html += f'<div class="dist-item"><span>{value}:</span><span>{count} ({percentage:.1f}%)</span></div>'
+            html += '</div></div>'
+            return html
+
+        elif component_id == "quality-dashboard":
+            tasks = data.get("tasks", [])
+            scale_type = data.get("scale_type", "categorical")
+            stats = self.get_rating_statistics(tasks, scale_type)
+
+            html = '<div class="quality-dashboard">'
+            html += '<h3>Quality Overview</h3>'
+            html += self.render_component("quality-stats", {"stats": stats})
+            html += '</div>'
+            return html
+
+        else:
+            return f"<div>Component {component_id} not implemented</div>"
+
     # ===== Helper Methods =====
     
     def get_rating_statistics(self, tasks: List[Dict[str, Any]], scale_type: str = "categorical") -> Dict[str, Any]:

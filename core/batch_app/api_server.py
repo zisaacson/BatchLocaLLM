@@ -21,6 +21,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, Uploa
 from fastapi import File as FastAPIFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -103,6 +104,11 @@ app.include_router(fine_tuning_router, prefix="/v1/fine-tuning", tags=["fine-tun
 
 # Conquest router moved to Aris repository (integrations/aris/conquest_api.py)
 # For OSS users: Create your own custom API endpoints as needed
+
+# Mount static files
+static_dir = Path(__file__).parent.parent.parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
 # ============================================================================
@@ -3614,6 +3620,44 @@ async def get_plugin_ui_components(plugin_id: str):
         "plugin_id": plugin_id,
         "components": components
     }
+
+
+@app.post("/api/plugins/{plugin_id}/render-component")
+async def render_plugin_component(plugin_id: str, request: dict):
+    """
+    Render a UI component from a plugin.
+
+    Args:
+        plugin_id: Plugin identifier
+        request: {component_id: str, data: dict}
+
+    Returns:
+        Rendered HTML
+    """
+    registry = get_plugin_registry()
+    plugin = registry.get_plugin(plugin_id)
+
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    if not hasattr(plugin, "render_component"):
+        raise HTTPException(status_code=400, detail=f"Plugin {plugin_id} does not support component rendering")
+
+    component_id = request.get("component_id")
+    data = request.get("data", {})
+
+    if not component_id:
+        raise HTTPException(status_code=400, detail="component_id is required")
+
+    try:
+        html = plugin.render_component(component_id, data)
+        return {
+            "plugin_id": plugin_id,
+            "component_id": component_id,
+            "html": html
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to render component: {str(e)}")
 
 
 @app.get("/api/plugins/by-type/{plugin_type}")

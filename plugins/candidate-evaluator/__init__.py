@@ -207,7 +207,55 @@ class CandidateEvaluatorPlugin(
             "rating-widget",
             "candidate-table-row"
         ]
-    
+
+    def render_component(self, component_id: str, data: Dict[str, Any]) -> str:
+        """Render a UI component with data"""
+        if component_id == "candidate-card":
+            candidate = data.get("candidate", {})
+            name = candidate.get("name", "Unknown")
+            title = candidate.get("title", "")
+            company = candidate.get("company", "")
+
+            return f"""
+            <div class="candidate-card">
+                <h3>{name}</h3>
+                <p class="title">{title}</p>
+                <p class="company">{company}</p>
+            </div>
+            """
+
+        elif component_id == "rating-widget":
+            category = data.get("category", "recommendation")
+            options = self.rating_categories.get(category, [])
+
+            html = f'<div class="rating-widget" data-category="{category}">'
+            for option in options:
+                display = self.rating_display.get(category, {}).get(option, {})
+                color = display.get("color", "#666")
+                icon = display.get("icon", "•")
+                html += f'<button class="rating-option" data-value="{option}" style="color: {color}">{icon} {option}</button>'
+            html += '</div>'
+
+            return html
+
+        elif component_id == "candidate-table-row":
+            task = data.get("task", {})
+            candidate = task.get("data", {}).get("candidate", {})
+            rating = task.get("rating", {})
+
+            return f"""
+            <tr>
+                <td>{candidate.get("name", "")}</td>
+                <td>{candidate.get("title", "")}</td>
+                <td>{candidate.get("company", "")}</td>
+                <td>{rating.get("recommendation", "")}</td>
+                <td><button onclick="viewCandidate({task.get('id')})">View</button></td>
+            </tr>
+            """
+
+        else:
+            return f"<div>Component {component_id} not implemented</div>"
+
     # ExportPlugin methods
     
     def export(self, tasks: List[Dict[str, Any]], format: str, **kwargs) -> str:

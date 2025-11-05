@@ -152,16 +152,29 @@ class PluginManager {
         try {
             // Get component metadata
             const components = await this.getUIComponents(pluginId);
-            const component = components.find(c => c.id === componentId);
-            
-            if (!component) {
+
+            if (!components || !components.includes(componentId)) {
                 throw new Error(`Component ${componentId} not found in plugin ${pluginId}`);
             }
 
-            // Load component template
-            const templatePath = component.template;
-            const response = await fetch(`/${templatePath}`);
-            const html = await response.text();
+            // Render component with data
+            const response = await fetch(`/api/plugins/${pluginId}/render-component`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    component_id: componentId,
+                    data: options.data || {}
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to render component: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            const html = result.html;
 
             // Inject into DOM
             const target = document.querySelector(targetSelector);
@@ -175,7 +188,7 @@ class PluginManager {
             this.loadedComponents.set(cacheKey, {
                 pluginId,
                 componentId,
-                template: html,
+                html: html,
                 target: targetSelector
             });
 

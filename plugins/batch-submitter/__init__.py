@@ -103,21 +103,88 @@ class BatchSubmitterPlugin(UIPlugin, SchemaPlugin):
             {"path": "/job-queue", "template": "plugins/batch-submitter/ui/queue.html"}
         ]
     
-    def get_ui_components(self) -> List[Dict[str, str]]:
-        """Return embeddable UI components."""
-        return [
-            {
-                "id": "batch-form",
-                "template": "plugins/batch-submitter/ui/components/batch-form.html",
-                "description": "Batch submission form"
-            },
-            {
-                "id": "job-queue-viewer",
-                "template": "plugins/batch-submitter/ui/components/queue-viewer.html",
-                "description": "Live job queue display"
-            }
-        ]
-    
+    def get_ui_components(self) -> List[str]:
+        """Return embeddable UI component IDs."""
+        return ["batch-form", "job-queue-viewer", "job-status"]
+
+    def render_component(self, component_id: str, data: Dict[str, Any]) -> str:
+        """Render a UI component with data."""
+        if component_id == "batch-form":
+            models = data.get("models", [])
+
+            html = '<div class="batch-form">'
+            html += '<form id="batch-submit-form">'
+            html += '<div class="form-group">'
+            html += '<label>Model:</label>'
+            html += '<select name="model" required>'
+            for model in models:
+                html += f'<option value="{model}">{model}</option>'
+            html += '</select>'
+            html += '</div>'
+
+            html += '<div class="form-group">'
+            html += '<label>Input File (JSONL):</label>'
+            html += f'<input type="file" name="file" accept=".jsonl" required />'
+            html += f'<small>Max size: {self.max_file_size_mb}MB</small>'
+            html += '</div>'
+
+            html += '<div class="form-group">'
+            html += '<label>Priority:</label>'
+            html += '<select name="priority">'
+            html += '<option value="1">High</option>'
+            html += '<option value="0" selected>Normal</option>'
+            html += '<option value="-1">Low</option>'
+            html += '</select>'
+            html += '</div>'
+
+            html += '<button type="submit">Submit Batch Job</button>'
+            html += '</form>'
+            html += '</div>'
+
+            return html
+
+        elif component_id == "job-queue-viewer":
+            jobs = data.get("jobs", [])
+
+            html = '<div class="job-queue-viewer">'
+            html += '<h3>Job Queue</h3>'
+            html += '<table><thead><tr>'
+            html += '<th>ID</th><th>Model</th><th>Status</th><th>Progress</th><th>Created</th>'
+            html += '</tr></thead><tbody>'
+
+            for job in jobs:
+                status = job.get("status", "unknown")
+                progress = job.get("progress", 0)
+
+                html += '<tr>'
+                html += f'<td>{job.get("id", "")[:8]}</td>'
+                html += f'<td>{job.get("model", "")}</td>'
+                html += f'<td><span class="status-{status}">{status}</span></td>'
+                html += f'<td>{progress}%</td>'
+                html += f'<td>{job.get("created_at", "")}</td>'
+                html += '</tr>'
+
+            html += '</tbody></table>'
+            html += '</div>'
+
+            return html
+
+        elif component_id == "job-status":
+            job = data.get("job", {})
+            status = job.get("status", "unknown")
+            progress = job.get("progress", 0)
+
+            html = f'<div class="job-status status-{status}">'
+            html += f'<div class="status-label">{status.upper()}</div>'
+            html += f'<div class="progress-bar"><div class="progress-fill" style="width: {progress}%"></div></div>'
+            html += f'<div class="progress-text">{progress}% complete</div>'
+            html += '</div>'
+
+            return html
+
+        else:
+            return f"<div>Component {component_id} not implemented</div>"
+
     # ===== File Validation Methods =====
     
     def validate_jsonl_file(self, file_path: str) -> tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
