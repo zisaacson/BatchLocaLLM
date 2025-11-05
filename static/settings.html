@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - vLLM Batch Server</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <style>
+        .settings-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .settings-section {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .settings-section h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 0.5rem;
+        }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .setting-row:last-child {
+            border-bottom: none;
+        }
+
+        .setting-info {
+            flex: 1;
+        }
+
+        .setting-info h3 {
+            margin: 0 0 0.5rem 0;
+            color: #34495e;
+            font-size: 1.1rem;
+        }
+
+        .setting-info p {
+            margin: 0;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+
+        .setting-control {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .status-badge.active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-badge.unknown {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #229954;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        .btn-secondary {
+            background: #95a5a6;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #7f8c8d;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .install-instructions {
+            background: #f8f9fa;
+            border-left: 4px solid #3498db;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 4px;
+        }
+
+        .install-instructions code {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            display: block;
+            margin: 0.5rem 0;
+            font-family: 'Courier New', monospace;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .metric-card {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .metric-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .metric-card .label {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="settings-container">
+        <h1>⚙️ System Settings</h1>
+
+        <!-- Auto-Start Configuration -->
+        <div class="settings-section">
+            <h2>🚀 Auto-Start on Boot</h2>
+            <p>Configure services to automatically start when your computer boots.</p>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <h3>API Server</h3>
+                    <p>Main batch processing API (port 4080)</p>
+                </div>
+                <div class="setting-control">
+                    <span class="status-badge" id="api-status">Checking...</span>
+                    <button class="btn btn-primary" id="api-toggle" onclick="toggleService('api')">Enable</button>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <h3>Watchdog Service</h3>
+                    <p>Auto-recovery and health monitoring</p>
+                </div>
+                <div class="setting-control">
+                    <span class="status-badge" id="watchdog-status">Checking...</span>
+                    <button class="btn btn-primary" id="watchdog-toggle" onclick="toggleService('watchdog')">Enable</button>
+                </div>
+            </div>
+
+            <div class="install-instructions" id="install-instructions" style="display: none;">
+                <h4>📋 Installation Required</h4>
+                <p>Run this command to install systemd services:</p>
+                <code>sudo ./scripts/install-systemd-services.sh</code>
+                <p style="margin-top: 1rem;">Or install manually:</p>
+                <code>sudo cp deployment/systemd/*.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable vllm-api-server vllm-watchdog
+sudo systemctl start vllm-api-server vllm-watchdog</code>
+            </div>
+        </div>
+
+        <!-- Auto-Recovery Settings -->
+        <div class="settings-section">
+            <h2>🛡️ Auto-Recovery</h2>
+            <p>Configure automatic recovery from failures.</p>
+
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <div class="value" id="restart-count">-</div>
+                    <div class="label">Restarts (Last Hour)</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value" id="uptime">-</div>
+                    <div class="label">Worker Uptime</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value" id="last-heartbeat">-</div>
+                    <div class="label">Last Heartbeat</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <h3>Worker Status</h3>
+                    <p>Current worker process health</p>
+                </div>
+                <div class="setting-control">
+                    <span class="status-badge" id="worker-status">Checking...</span>
+                    <button class="btn btn-success" onclick="restartWorker()">Restart Worker</button>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <h3>Heartbeat Monitoring</h3>
+                    <p>Restart worker if no heartbeat for 60 seconds</p>
+                </div>
+                <div class="setting-control">
+                    <span class="status-badge active">Enabled</span>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <h3>Stuck Job Detection</h3>
+                    <p>Cancel jobs with no progress for 30 minutes</p>
+                </div>
+                <div class="setting-control">
+                    <span class="status-badge active">Enabled</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Status -->
+        <div class="settings-section">
+            <h2>📊 System Status</h2>
+            
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <div class="value" id="gpu-memory">-</div>
+                    <div class="label">GPU Memory Used</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value" id="gpu-util">-</div>
+                    <div class="label">GPU Utilization</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value" id="loaded-model">-</div>
+                    <div class="label">Loaded Model</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 2rem; text-align: center;">
+                <button class="btn btn-secondary" onclick="refreshStatus()">
+                    <span id="refresh-icon">🔄</span> Refresh Status
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/settings.js"></script>
+</body>
+</html>
+

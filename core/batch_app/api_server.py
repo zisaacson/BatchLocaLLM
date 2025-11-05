@@ -96,9 +96,9 @@ if settings.ENABLE_RATE_LIMITING:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
-# Fine-tuning router moved to Aris repository (integrations/aris/fine_tuning/)
-# For OSS users: Implement your own fine-tuning endpoints using core/training/base.py interfaces
-# See examples/handlers/ for reference implementations
+# Include fine-tuning router (generic OSS version)
+from core.batch_app.fine_tuning import router as fine_tuning_router
+app.include_router(fine_tuning_router, prefix="/v1/fine-tuning", tags=["fine-tuning"])
 
 # Conquest router moved to Aris repository (integrations/aris/conquest_api.py)
 # For OSS users: Create your own custom API endpoints as needed
@@ -3114,7 +3114,141 @@ async def bulk_import_tasks_endpoint(request: BulkImportRequest):
 # System Management Endpoints
 # ============================================================================
 
-@app.post("/admin/system/restart-worker")
+@app.get("/admin/worker/status")
+async def get_worker_status(db: Session = Depends(get_db)):
+    """
+    Get detailed worker status for settings UI.
+
+    Returns:
+        Worker health, heartbeat, GPU metrics, loaded model, uptime, etc.
+    """
+    worker_heartbeat = db.query(WorkerHeartbeat).filter(WorkerHeartbeat.id == 1).first()
+
+    if not worker_heartbeat:
+        return {
+            "healthy": False,
+            "last_heartbeat": None,
+            "heartbeat_age_seconds": None,
+            "uptime_seconds": None,
+            "restart_count": 0,
+            "loaded_model": None,
+            "gpu_memory_percent": 0,
+            "gpu_utilization": 0,
+            "gpu_temperature": 0
+        }
+
+    now_utc = datetime.now(timezone.utc)
+    last_seen = worker_heartbeat.last_seen
+    if last_seen and last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+
+    age_seconds = (now_utc - last_seen).total_seconds() if last_seen else None
+    healthy = age_seconds < 60 if age_seconds is not None else False
+
+    # Calculate uptime (time since worker started)
+    uptime_seconds = None
+    if worker_heartbeat.model_loaded_at:
+        loaded_at = worker_heartbeat.model_loaded_at
+        if loaded_at.tzinfo is None:
+            loaded_at = loaded_at.replace(tzinfo=timezone.utc)
+        uptime_seconds = (now_utc - loaded_at).total_seconds()
+
+    return {
+        "healthy": healthy,
+        "last_heartbeat": last_seen.isoformat() if last_seen else None,
+        "heartbeat_age_seconds": age_seconds,
+        "uptime_seconds": uptime_seconds,
+        "restart_count": 0,  # TODO: Track this in watchdog
+        "loaded_model": worker_heartbeat.loaded_model,
+        "gpu_memory_percent": worker_heartbeat.gpu_memory_percent or 0,
+        "gpu_utilization": worker_heartbeat.gpu_utilization or 0,
+        "gpu_temperature": worker_heartbeat.gpu_temperature or 0
+    }
+
+
+@app.get("/admin/systemd/status")
+async def get_systemd_status():
+    """
+    Get systemd service status for settings UI.
+
+    Returns:
+        Status of vllm-api-server and vllm-watchdog services
+    """
+    import subprocess
+
+    def check_service(service_name: str) -> dict:
+        try:
+            # Check if service is enabled
+            enabled_result = subprocess.run(
+                ["systemctl", "is-enabled", service_name],
+                capture_output=True,
+                text=True
+            )
+            enabled = enabled_result.returncode == 0
+
+            # Check if service is active
+            active_result = subprocess.run(
+                ["systemctl", "is-active", service_name],
+                capture_output=True,
+                text=True
+            )
+            active = active_result.returncode == 0
+
+            return {"enabled": enabled, "active": active}
+        except Exception as e:
+            logger.error(f"Error checking systemd service {service_name}: {e}")
+            return {"enabled": False, "active": False, "error": str(e)}
+
+    return {
+        "api_server": check_service("vllm-api-server"),
+        "watchdog": check_service("vllm-watchdog")
+    }
+
+
+@app.post("/admin/systemd/{service_name}/{action}")
+async def control_systemd_service(service_name: str, action: str):
+    """
+    Control systemd services (enable/disable/start/stop/restart).
+
+    Args:
+        service_name: vllm-api-server or vllm-watchdog
+        action: enable, disable, start, stop, restart
+    """
+    import subprocess
+
+    # Validate inputs
+    valid_services = ["vllm-api-server", "vllm-watchdog"]
+    valid_actions = ["enable", "disable", "start", "stop", "restart"]
+
+    if service_name not in valid_services:
+        raise HTTPException(status_code=400, detail=f"Invalid service: {service_name}")
+
+    if action not in valid_actions:
+        raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
+
+    try:
+        result = subprocess.run(
+            ["sudo", "systemctl", action, service_name],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to {action} {service_name}: {result.stderr}"
+            )
+
+        return {"success": True, "message": f"Successfully {action}d {service_name}"}
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="Command timed out")
+    except Exception as e:
+        logger.error(f"Error controlling systemd service: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/admin/worker/restart")
 async def restart_worker():
     """
     Restart the worker process.

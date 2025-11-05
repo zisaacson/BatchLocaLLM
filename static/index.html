@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vLLM Batch Server</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 3rem;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+
+        .card-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: #2c3e50;
+        }
+
+        .card p {
+            color: #7f8c8d;
+            line-height: 1.6;
+        }
+
+        .card-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-top: 1rem;
+        }
+
+        .badge-primary {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .badge-success {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .badge-warning {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .badge-info {
+            background: #e0f2f1;
+            color: #00796b;
+        }
+
+        .status-bar {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+        }
+
+        .status-item {
+            text-align: center;
+        }
+
+        .status-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .status-label {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 3rem;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 vLLM Batch Server</h1>
+            <p>Production-ready batch inference for local LLMs</p>
+        </div>
+
+        <div class="cards-grid">
+            <a href="/static/model-management.html" class="card">
+                <div class="card-icon">🤖</div>
+                <h2>Model Management</h2>
+                <p>Install, test, and benchmark models from HuggingFace. Compare performance and quality across different models.</p>
+                <span class="card-badge badge-primary">Core Feature</span>
+            </a>
+
+            <a href="/static/workbench.html" class="card">
+                <div class="card-icon">📊</div>
+                <h2>Dataset Workbench</h2>
+                <p>Upload datasets, run batch inference, and compare model outputs side-by-side. Perfect for evaluation and testing.</p>
+                <span class="card-badge badge-primary">Core Feature</span>
+            </a>
+
+            <a href="/static/fine-tuning.html" class="card">
+                <div class="card-icon">🎯</div>
+                <h2>Fine-Tuning</h2>
+                <p>Train custom models on curated data using Unsloth. Export gold star examples and create production-ready models.</p>
+                <span class="card-badge badge-success">Training</span>
+            </a>
+
+            <a href="/static/queue-monitor.html" class="card">
+                <div class="card-icon">📈</div>
+                <h2>Queue Monitor</h2>
+                <p>Real-time monitoring of batch jobs. Track progress, throughput, and estimated completion times.</p>
+                <span class="card-badge badge-info">Monitoring</span>
+            </a>
+
+            <a href="/static/benchmark-runner.html" class="card">
+                <div class="card-icon">⚡</div>
+                <h2>Benchmark Runner</h2>
+                <p>Run comprehensive benchmarks to measure model performance, quality, and resource usage.</p>
+                <span class="card-badge badge-warning">Testing</span>
+            </a>
+
+            <a href="/static/settings.html" class="card">
+                <div class="card-icon">⚙️</div>
+                <h2>Settings</h2>
+                <p>Configure auto-start on boot, auto-recovery, and system monitoring. Manage systemd services and worker health.</p>
+                <span class="card-badge badge-success">System</span>
+            </a>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-value" id="worker-status">-</div>
+                <div class="status-label">Worker Status</div>
+            </div>
+            <div class="status-item">
+                <div class="status-value" id="gpu-memory">-</div>
+                <div class="status-label">GPU Memory</div>
+            </div>
+            <div class="status-item">
+                <div class="status-value" id="loaded-model">-</div>
+                <div class="status-label">Loaded Model</div>
+            </div>
+            <div class="status-item">
+                <div class="status-value" id="queue-length">-</div>
+                <div class="status-label">Queue Length</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>vLLM Batch Server v1.0 | Open Source | Built with ❤️</p>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:4080';
+
+        async function updateStatus() {
+            try {
+                // Get worker status
+                const workerResponse = await fetch(`${API_BASE}/admin/worker/status`);
+                if (workerResponse.ok) {
+                    const workerData = await workerResponse.json();
+                    document.getElementById('worker-status').textContent = workerData.healthy ? '✅ Healthy' : '❌ Offline';
+                    document.getElementById('gpu-memory').textContent = `${workerData.gpu_memory_percent.toFixed(1)}%`;
+                    
+                    if (workerData.loaded_model) {
+                        const modelName = workerData.loaded_model.split('/').pop();
+                        document.getElementById('loaded-model').textContent = modelName;
+                    } else {
+                        document.getElementById('loaded-model').textContent = 'None';
+                    }
+                }
+
+                // Get queue status
+                const queueResponse = await fetch(`${API_BASE}/v1/queue`);
+                if (queueResponse.ok) {
+                    const queueData = await queueResponse.json();
+                    document.getElementById('queue-length').textContent = queueData.queue_length || 0;
+                }
+            } catch (error) {
+                console.error('Error updating status:', error);
+            }
+        }
+
+        // Update status on load and every 5 seconds
+        updateStatus();
+        setInterval(updateStatus, 5000);
+    </script>
+</body>
+</html>
+

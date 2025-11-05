@@ -48,7 +48,7 @@ class WorkerWatchdog:
     """
     
     def __init__(self):
-        self.api_url = f"http://localhost:{settings.PORT}"
+        self.api_url = f"http://localhost:{settings.BATCH_API_PORT}"
         self.check_interval = 30  # Check every 30 seconds
         self.heartbeat_timeout = 60  # Restart if heartbeat age > 60 seconds
         self.stuck_job_timeout = 1800  # 30 minutes

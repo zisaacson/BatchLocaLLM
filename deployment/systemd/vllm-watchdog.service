@@ -1,0 +1,28 @@
+[Unit]
+Description=vLLM Batch Server Worker Watchdog
+Documentation=https://github.com/zisaacson/vllm-batch-server
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=zack
+Group=zack
+WorkingDirectory=/home/zack/Documents/augment-projects/Local/vllm-batch-server
+Environment="PATH=/home/zack/Documents/augment-projects/Local/vllm-batch-server/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/zack/Documents/augment-projects/Local/vllm-batch-server/venv/bin/python -m core.batch_app.watchdog
+
+# Restart policy
+Restart=always
+RestartSec=10s
+
+# Logging
+StandardOutput=append:/home/zack/Documents/augment-projects/Local/vllm-batch-server/logs/watchdog.log
+StandardError=append:/home/zack/Documents/augment-projects/Local/vllm-batch-server/logs/watchdog.log
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+
