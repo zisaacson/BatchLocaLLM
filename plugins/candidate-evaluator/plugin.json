@@ -1,0 +1,86 @@
+{
+  "id": "candidate-evaluator",
+  "name": "Candidate Evaluator",
+  "version": "1.0.0",
+  "description": "Evaluate candidates with categorical ratings and structured parsing",
+  "author": "Aris Team",
+  "license": "MIT",
+  "plugin_class": "CandidateEvaluatorPlugin",
+  
+  "provides": {
+    "schema": "candidate_evaluation",
+    "parser": "CandidateParser",
+    "ui_components": [
+      "curation-interface",
+      "table-view",
+      "rating-widget",
+      "candidate-card"
+    ],
+    "export_formats": ["icl", "finetuning", "raw"],
+    "ratings": "categorical"
+  },
+  
+  "hooks": {
+    "on_task_create": "validate_candidate_data",
+    "on_annotation_submit": "parse_ratings",
+    "on_export": "filter_by_quality",
+    "on_response_parse": "parse_candidate_response"
+  },
+  
+  "config": {
+    "rating_categories": {
+      "recommendation": ["Strong Yes", "Yes", "Maybe", "No", "Strong No"],
+      "trajectory": ["Exceptional", "Strong", "Good", "Average", "Weak"],
+      "company_pedigree": ["Exceptional", "Strong", "Good", "Average", "Weak"],
+      "educational_pedigree": ["Exceptional", "Strong", "Good", "Average", "Weak"]
+    },
+    
+    "rating_display": {
+      "recommendation": {
+        "Strong Yes": {"color": "#28a745", "icon": "⭐", "badge_class": "badge-strong-yes"},
+        "Yes": {"color": "#20c997", "icon": "✓", "badge_class": "badge-yes"},
+        "Maybe": {"color": "#ffc107", "icon": "?", "badge_class": "badge-maybe"},
+        "No": {"color": "#fd7e14", "icon": "✗", "badge_class": "badge-no"},
+        "Strong No": {"color": "#dc3545", "icon": "⛔", "badge_class": "badge-strong-no"}
+      },
+      "quality": {
+        "Exceptional": {"color": "#28a745", "icon": "🌟"},
+        "Strong": {"color": "#20c997", "icon": "💪"},
+        "Good": {"color": "#17a2b8", "icon": "👍"},
+        "Average": {"color": "#ffc107", "icon": "➖"},
+        "Weak": {"color": "#dc3545", "icon": "👎"}
+      }
+    },
+    
+    "export_thresholds": {
+      "icl": {
+        "min_recommendation": "Yes",
+        "description": "High-quality examples for in-context learning"
+      },
+      "finetuning": {
+        "min_recommendation": "Maybe",
+        "description": "Good examples for fine-tuning datasets"
+      },
+      "raw": {
+        "description": "All data without filtering"
+      }
+    },
+    
+    "candidate_fields": [
+      "name",
+      "title",
+      "company",
+      "linkedin_url"
+    ],
+    
+    "evaluation_fields": [
+      "recommendation",
+      "trajectory_rating",
+      "company_pedigree",
+      "educational_pedigree",
+      "is_software_engineer",
+      "reasoning"
+    ]
+  }
+}
+
