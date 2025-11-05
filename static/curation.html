@@ -346,7 +346,34 @@
         </div>
     </div>
 
+    <script src="/static/js/plugin-manager.js"></script>
     <script src="/static/js/curation.js"></script>
+    <script>
+        // Initialize plugin system integration
+        async function initPluginSystem() {
+            await pluginManager.init();
+
+            // Load rating categories from plugins
+            const ratingCategories = await pluginManager.getRatingCategories();
+            console.log('Rating categories from plugins:', ratingCategories);
+
+            // Load export formats from plugins
+            const exportFormats = await pluginManager.getExportFormats();
+            console.log('Export formats from plugins:', exportFormats);
+
+            // Update UI with plugin-provided options
+            updateUIWithPlugins(ratingCategories, exportFormats);
+        }
+
+        function updateUIWithPlugins(ratingCategories, exportFormats) {
+            // This will be called by curation.js to integrate plugin data
+            window.pluginRatingCategories = ratingCategories;
+            window.pluginExportFormats = exportFormats;
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', initPluginSystem);
+    </script>
 </body>
 </html>
 

@@ -46,6 +46,7 @@ from .model_manager import (
     get_test_status
 )
 from .model_installer import ModelInstaller
+from core.plugins.registry import get_plugin_registry
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -930,6 +931,17 @@ async def config_panel():
         raise HTTPException(status_code=404, detail="Configuration panel not found")
 
     with open(config_html_path) as f:
+        return HTMLResponse(content=f.read())
+
+
+@app.get("/plugins", response_class=HTMLResponse)
+async def plugins_page():
+    """Serve the plugin management UI."""
+    plugins_html_path = Path(__file__).parent.parent.parent / "static" / "plugins.html"
+    if not plugins_html_path.exists():
+        raise HTTPException(status_code=404, detail="Plugin management page not found")
+
+    with open(plugins_html_path) as f:
         return HTMLResponse(content=f.read())
 
 
@@ -3454,6 +3466,197 @@ async def system_status():
         status["gpu"] = {"error": str(e)}
 
     return status
+
+
+# ============================================================================
+# Plugin System API Endpoints
+# ============================================================================
+
+@app.get("/api/plugins")
+async def list_plugins():
+    """
+    List all available plugins.
+
+    Returns:
+        List of plugin metadata (id, name, version, description, enabled status)
+    """
+    registry = get_plugin_registry()
+    plugins = []
+
+    for plugin_id, plugin in registry.plugins.items():
+        manifest = registry.get_manifest(plugin_id)
+        plugins.append({
+            "id": plugin_id,
+            "name": plugin.get_name(),
+            "version": plugin.get_version(),
+            "description": plugin.get_description(),
+            "enabled": registry.is_enabled(plugin_id),
+            "provides": manifest.get("provides", {}) if manifest else {},
+            "config": manifest.get("config", {}) if manifest else {}
+        })
+
+    return {"plugins": plugins}
+
+
+@app.get("/api/plugins/{plugin_id}")
+async def get_plugin_details(plugin_id: str):
+    """
+    Get detailed information about a specific plugin.
+
+    Args:
+        plugin_id: Plugin identifier
+
+    Returns:
+        Plugin details including manifest, capabilities, and status
+    """
+    registry = get_plugin_registry()
+    plugin = registry.get_plugin(plugin_id)
+
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    manifest = registry.get_manifest(plugin_id)
+
+    return {
+        "id": plugin_id,
+        "name": plugin.get_name(),
+        "version": plugin.get_version(),
+        "description": plugin.get_description(),
+        "enabled": registry.is_enabled(plugin_id),
+        "manifest": manifest,
+        "capabilities": {
+            "is_schema_plugin": hasattr(plugin, "get_schema"),
+            "is_parser_plugin": hasattr(plugin, "parse_response"),
+            "is_ui_plugin": hasattr(plugin, "get_ui_routes"),
+            "is_export_plugin": hasattr(plugin, "export"),
+            "is_rating_plugin": hasattr(plugin, "get_rating_categories")
+        }
+    }
+
+
+@app.post("/api/plugins/{plugin_id}/enable")
+async def enable_plugin(plugin_id: str):
+    """
+    Enable a plugin.
+
+    Args:
+        plugin_id: Plugin identifier
+
+    Returns:
+        Success message
+    """
+    registry = get_plugin_registry()
+    plugin = registry.get_plugin(plugin_id)
+
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    registry.enable_plugin(plugin_id)
+
+    return {
+        "success": True,
+        "message": f"Plugin {plugin_id} enabled",
+        "plugin_id": plugin_id,
+        "enabled": True
+    }
+
+
+@app.post("/api/plugins/{plugin_id}/disable")
+async def disable_plugin(plugin_id: str):
+    """
+    Disable a plugin.
+
+    Args:
+        plugin_id: Plugin identifier
+
+    Returns:
+        Success message
+    """
+    registry = get_plugin_registry()
+    plugin = registry.get_plugin(plugin_id)
+
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    registry.disable_plugin(plugin_id)
+
+    return {
+        "success": True,
+        "message": f"Plugin {plugin_id} disabled",
+        "plugin_id": plugin_id,
+        "enabled": False
+    }
+
+
+@app.get("/api/plugins/{plugin_id}/ui-components")
+async def get_plugin_ui_components(plugin_id: str):
+    """
+    Get UI components provided by a plugin.
+
+    Args:
+        plugin_id: Plugin identifier
+
+    Returns:
+        List of UI components with their templates and metadata
+    """
+    registry = get_plugin_registry()
+    plugin = registry.get_plugin(plugin_id)
+
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    if not hasattr(plugin, "get_ui_components"):
+        return {"components": []}
+
+    components = plugin.get_ui_components()
+
+    return {
+        "plugin_id": plugin_id,
+        "components": components
+    }
+
+
+@app.get("/api/plugins/by-type/{plugin_type}")
+async def get_plugins_by_type(plugin_type: str):
+    """
+    Get all plugins of a specific type.
+
+    Args:
+        plugin_type: Plugin type (schema, parser, ui, export, rating)
+
+    Returns:
+        List of plugins matching the type
+    """
+    registry = get_plugin_registry()
+
+    type_map = {
+        "schema": registry.get_schema_plugins,
+        "parser": registry.get_parser_plugins,
+        "ui": registry.get_ui_plugins,
+        "export": registry.get_export_plugins,
+        "rating": registry.get_rating_plugins
+    }
+
+    if plugin_type not in type_map:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid plugin type. Must be one of: {', '.join(type_map.keys())}"
+        )
+
+    plugins = type_map[plugin_type]()
+
+    return {
+        "type": plugin_type,
+        "plugins": [
+            {
+                "id": p.get_id(),
+                "name": p.get_name(),
+                "version": p.get_version(),
+                "enabled": registry.is_enabled(p.get_id())
+            }
+            for p in plugins
+        ]
+    }
 
 
 # ============================================================================

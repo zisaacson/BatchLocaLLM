@@ -21,23 +21,29 @@ from core.plugins.base import RatingPlugin, ExportPlugin, UIPlugin
 
 class QualityRaterPlugin(RatingPlugin, ExportPlugin, UIPlugin):
     """Generic quality rating plugin for any use case."""
-    
-    def __init__(self):
-        self.id = "quality-rater"
-        self.name = "Quality Rater"
-        self.version = "1.0.0"
-        
+
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+
         # Load config from plugin.json
-        self.rating_scales = {
+        self.rating_scales = config.get("rating_scales", {
             "numeric": {"min": 1, "max": 10, "step": 1},
             "categorical": ["Excellent", "Good", "Fair", "Poor", "Unusable"],
             "binary": ["Accept", "Reject"]
-        }
-        
-        self.export_thresholds = {
+        })
+
+        self.export_thresholds = config.get("export_thresholds", {
             "high_quality": {"numeric": 7, "categorical": "Good", "binary": "Accept"},
             "low_quality": {"numeric": 4, "categorical": "Fair", "binary": "Reject"}
-        }
+        })
+
+    # ===== Plugin Base Methods =====
+
+    def get_id(self) -> str:
+        return "quality-rater"
+
+    def get_name(self) -> str:
+        return "Quality Rater"
     
     # ===== RatingPlugin Methods =====
     
@@ -246,8 +252,3 @@ class QualityRaterPlugin(RatingPlugin, ExportPlugin, UIPlugin):
             "average_score": sum(scores) / len(scores) if scores else 0.0,
             "scale_type": scale_type
         }
-
-
-# Plugin instance
-plugin = QualityRaterPlugin()
-

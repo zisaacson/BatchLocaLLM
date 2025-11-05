@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plugin Management - vLLM Batch Server</title>
+    <link rel="stylesheet" href="/static/css/shared.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .plugin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .plugin-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: all 0.2s;
+        }
+
+        .plugin-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .plugin-card.disabled {
+            opacity: 0.6;
+        }
+
+        .plugin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 16px;
+        }
+
+        .plugin-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 4px;
+        }
+
+        .plugin-version {
+            font-size: 12px;
+            color: #718096;
+            background: #edf2f7;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .plugin-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .plugin-status.enabled {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .plugin-status.disabled {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .plugin-description {
+            color: #4a5568;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .plugin-capabilities {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+
+        .capability-badge {
+            background: #edf2f7;
+            color: #4a5568;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .plugin-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+
+        .btn-secondary {
+            background: #edf2f7;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #e2e8f0;
+        }
+
+        .btn-danger {
+            background: #fc8181;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #f56565;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 16px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .plugin-details {
+            background: #f7fafc;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 12px;
+            font-size: 12px;
+            color: #4a5568;
+        }
+
+        .plugin-details dt {
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .plugin-details dd {
+            margin-left: 0;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔌 Plugin Management</h1>
+            <p>Enable and configure plugins to customize your workflow</p>
+        </div>
+
+        <div id="enabled-plugins-section">
+            <h2 class="section-title">Enabled Plugins</h2>
+            <div id="enabled-plugins" class="plugin-grid">
+                <div class="loading">Loading plugins...</div>
+            </div>
+        </div>
+
+        <div id="available-plugins-section" style="margin-top: 40px;">
+            <h2 class="section-title">Available Plugins</h2>
+            <div id="available-plugins" class="plugin-grid">
+                <div class="loading">Loading plugins...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/plugin-manager.js"></script>
+    <script>
+        async function loadPlugins() {
+            await pluginManager.init();
+            const plugins = pluginManager.getPlugins();
+            
+            const enabledPlugins = plugins.filter(p => p.enabled);
+            const availablePlugins = plugins.filter(p => !p.enabled);
+            
+            renderPlugins('enabled-plugins', enabledPlugins, true);
+            renderPlugins('available-plugins', availablePlugins, false);
+        }
+
+        function renderPlugins(containerId, plugins, isEnabled) {
+            const container = document.getElementById(containerId);
+            
+            if (plugins.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📦</div>
+                        <p>No ${isEnabled ? 'enabled' : 'available'} plugins</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = plugins.map(plugin => {
+                const capabilities = [];
+                if (plugin.provides) {
+                    if (plugin.provides.schema) capabilities.push('Schema');
+                    if (plugin.provides.parser) capabilities.push('Parser');
+                    if (plugin.provides.ui_components) capabilities.push('UI');
+                    if (plugin.provides.export_formats) capabilities.push('Export');
+                    if (plugin.provides.ratings) capabilities.push('Rating');
+                }
+
+                return `
+                    <div class="plugin-card ${!isEnabled ? 'disabled' : ''}" data-plugin-id="${plugin.id}">
+                        <div class="plugin-header">
+                            <div>
+                                <div class="plugin-title">${plugin.name}</div>
+                                <span class="plugin-version">v${plugin.version}</span>
+                            </div>
+                            <span class="plugin-status ${isEnabled ? 'enabled' : 'disabled'}">
+                                ${isEnabled ? '✓ Enabled' : '○ Disabled'}
+                            </span>
+                        </div>
+                        
+                        <div class="plugin-description">
+                            ${plugin.description || 'No description available'}
+                        </div>
+                        
+                        ${capabilities.length > 0 ? `
+                            <div class="plugin-capabilities">
+                                ${capabilities.map(cap => `
+                                    <span class="capability-badge">${cap}</span>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                        
+                        <div class="plugin-actions">
+                            ${isEnabled ? `
+                                <button class="btn btn-danger" onclick="disablePlugin('${plugin.id}')">
+                                    Disable
+                                </button>
+                                <button class="btn btn-secondary" onclick="showPluginDetails('${plugin.id}')">
+                                    Details
+                                </button>
+                            ` : `
+                                <button class="btn btn-primary" onclick="enablePlugin('${plugin.id}')">
+                                    Enable
+                                </button>
+                                <button class="btn btn-secondary" onclick="showPluginDetails('${plugin.id}')">
+                                    Details
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function enablePlugin(pluginId) {
+            try {
+                await pluginManager.enablePlugin(pluginId);
+                await loadPlugins();
+                alert(`Plugin ${pluginId} enabled successfully!`);
+            } catch (error) {
+                alert(`Failed to enable plugin: ${error.message}`);
+            }
+        }
+
+        async function disablePlugin(pluginId) {
+            try {
+                await pluginManager.disablePlugin(pluginId);
+                await loadPlugins();
+                alert(`Plugin ${pluginId} disabled successfully!`);
+            } catch (error) {
+                alert(`Failed to disable plugin: ${error.message}`);
+            }
+        }
+
+        async function showPluginDetails(pluginId) {
+            try {
+                const details = await pluginManager.getPluginDetails(pluginId);
+                alert(JSON.stringify(details, null, 2));
+            } catch (error) {
+                alert(`Failed to load plugin details: ${error.message}`);
+            }
+        }
+
+        // Load plugins on page load
+        window.addEventListener('DOMContentLoaded', loadPlugins);
+    </script>
+</body>
+</html>
+

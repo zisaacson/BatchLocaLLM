@@ -5,7 +5,8 @@
   "description": "Web form for submitting batch jobs with file upload and model selection",
   "author": "vLLM Batch Server",
   "license": "MIT",
-  
+  "plugin_class": "BatchSubmitterPlugin",
+
   "provides": {
     "ui_components": ["batch-form", "job-queue-viewer"],
     "schema": "batch_submission"

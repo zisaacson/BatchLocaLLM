@@ -108,12 +108,18 @@ class PluginRegistry:
         if not hasattr(module, plugin_class_name):
             logger.error(f"Plugin {plugin_id} missing class {plugin_class_name}")
             return
-        
-        plugin_class = getattr(module, plugin_class_name)
-        plugin_instance = plugin_class(manifest.get("config", {}))
-        
-        self.plugins[plugin_id] = plugin_instance
-        logger.info(f"✅ Loaded plugin: {plugin_id} v{plugin_instance.get_version()}")
+
+        try:
+            plugin_class = getattr(module, plugin_class_name)
+            config = manifest.get("config", {})
+            plugin_instance = plugin_class(config)
+
+            self.plugins[plugin_id] = plugin_instance
+            logger.info(f"✅ Loaded plugin: {plugin_id} v{plugin_instance.get_version()}")
+        except Exception as e:
+            logger.error(f"Failed to load plugin {plugin_id}: {e}")
+            import traceback
+            traceback.print_exc()
     
     def get_plugin(self, plugin_id: str) -> Optional[Plugin]:
         """

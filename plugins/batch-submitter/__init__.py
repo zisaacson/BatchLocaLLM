@@ -18,15 +18,21 @@ from core.plugins.base import UIPlugin, SchemaPlugin
 
 class BatchSubmitterPlugin(UIPlugin, SchemaPlugin):
     """Plugin for batch job submission via web form."""
-    
-    def __init__(self):
-        self.id = "batch-submitter"
-        self.name = "Batch Submitter"
-        self.version = "1.0.0"
-        
-        self.max_file_size_mb = 100
-        self.supported_formats = ["jsonl", "json", "txt"]
-        self.default_completion_window = "24h"
+
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+
+        self.max_file_size_mb = config.get("max_file_size_mb", 100)
+        self.supported_formats = config.get("supported_formats", ["jsonl", "json", "txt"])
+        self.default_completion_window = config.get("default_completion_window", "24h")
+
+    # ===== Plugin Base Methods =====
+
+    def get_id(self) -> str:
+        return "batch-submitter"
+
+    def get_name(self) -> str:
+        return "Batch Submitter"
     
     # ===== SchemaPlugin Methods =====
     
@@ -246,8 +252,3 @@ class BatchSubmitterPlugin(UIPlugin, SchemaPlugin):
             "estimated_hours": round(seconds / 3600, 2),
             "throughput_tokens_per_sec": throughput
         }
-
-
-# Plugin instance
-plugin = BatchSubmitterPlugin()
-

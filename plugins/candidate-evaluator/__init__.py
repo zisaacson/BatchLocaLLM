@@ -22,7 +22,6 @@ import json
 
 
 class CandidateEvaluatorPlugin(
-    Plugin,
     SchemaPlugin,
     ParserPlugin,
     UIPlugin,

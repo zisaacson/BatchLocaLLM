@@ -478,7 +478,29 @@ pip install vllm
         </div>
     </div>
 
+    <script src="/static/js/plugin-manager.js"></script>
     <script src="/static/js/workbench.js"></script>
+    <script>
+        // Initialize plugin system for workbench
+        async function initWorkbenchPlugins() {
+            await pluginManager.init();
+
+            // Get parser plugins for result parsing
+            const parserPlugins = await pluginManager.getPluginsByType('parser');
+            console.log('Parser plugins available:', parserPlugins);
+
+            // Get export plugins for dataset export
+            const exportFormats = await pluginManager.getExportFormats();
+            console.log('Export formats available:', exportFormats);
+
+            // Make available to workbench.js
+            window.pluginParsers = parserPlugins;
+            window.pluginExportFormats = exportFormats;
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', initWorkbenchPlugins);
+    </script>
 </body>
 </html>
 

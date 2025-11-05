@@ -5,7 +5,8 @@
   "description": "Generic quality rating system for LLM outputs with customizable rating scales",
   "author": "vLLM Batch Server",
   "license": "MIT",
-  
+  "plugin_class": "QualityRaterPlugin",
+
   "provides": {
     "ratings": "generic",
     "ui_components": ["rating-widget", "quality-dashboard"],
