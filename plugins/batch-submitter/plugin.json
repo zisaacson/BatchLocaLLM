@@ -1,0 +1,111 @@
+{
+  "id": "batch-submitter",
+  "name": "Batch Submitter",
+  "version": "1.0.0",
+  "description": "Web form for submitting batch jobs with file upload and model selection",
+  "author": "vLLM Batch Server",
+  "license": "MIT",
+  
+  "provides": {
+    "ui_components": ["batch-form", "job-queue-viewer"],
+    "schema": "batch_submission"
+  },
+  
+  "config": {
+    "supported_formats": ["jsonl", "json", "txt"],
+    "max_file_size_mb": 100,
+    "default_completion_window": "24h",
+    "default_endpoint": "/v1/chat/completions",
+    
+    "form_fields": {
+      "model": {
+        "type": "select",
+        "label": "Model",
+        "required": true,
+        "options_source": "/v1/models"
+      },
+      "input_file": {
+        "type": "file",
+        "label": "Input File (JSONL)",
+        "required": true,
+        "accept": ".jsonl,.json"
+      },
+      "completion_window": {
+        "type": "select",
+        "label": "Completion Window",
+        "required": false,
+        "options": ["24h", "48h", "72h"],
+        "default": "24h"
+      },
+      "priority": {
+        "type": "select",
+        "label": "Priority",
+        "required": false,
+        "options": [
+          {"value": 1, "label": "High (Production)"},
+          {"value": 0, "label": "Normal"},
+          {"value": -1, "label": "Low (Testing)"}
+        ],
+        "default": 0
+      },
+      "metadata": {
+        "type": "json",
+        "label": "Metadata (JSON)",
+        "required": false,
+        "placeholder": "{\"description\": \"My batch job\"}"
+      }
+    },
+    
+    "validation": {
+      "check_model_exists": true,
+      "validate_jsonl_format": true,
+      "check_request_schema": true
+    }
+  },
+  
+  "ui": {
+    "routes": [
+      {
+        "path": "/submit-batch",
+        "template": "ui/submit.html",
+        "title": "Submit Batch Job"
+      },
+      {
+        "path": "/job-queue",
+        "template": "ui/queue.html",
+        "title": "Job Queue"
+      }
+    ],
+    "components": [
+      {
+        "id": "batch-form",
+        "template": "ui/components/batch-form.html",
+        "description": "Batch submission form"
+      },
+      {
+        "id": "job-queue-viewer",
+        "template": "ui/components/queue-viewer.html",
+        "description": "Live job queue display"
+      }
+    ]
+  },
+  
+  "hooks": {
+    "on_file_upload": ["validate_jsonl", "check_file_size"],
+    "on_batch_submit": ["validate_model", "create_batch_job"],
+    "on_batch_create": ["send_notification"]
+  },
+  
+  "dependencies": {
+    "python": ">=3.9",
+    "packages": []
+  },
+  
+  "settings": {
+    "show_advanced_options": true,
+    "enable_file_preview": true,
+    "auto_refresh_queue": true,
+    "refresh_interval_seconds": 10
+  }
+}
+

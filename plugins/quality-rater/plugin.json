@@ -1,0 +1,116 @@
+{
+  "id": "quality-rater",
+  "name": "Quality Rater",
+  "version": "1.0.0",
+  "description": "Generic quality rating system for LLM outputs with customizable rating scales",
+  "author": "vLLM Batch Server",
+  "license": "MIT",
+  
+  "provides": {
+    "ratings": "generic",
+    "ui_components": ["rating-widget", "quality-dashboard"],
+    "export_formats": ["high-quality", "low-quality", "all"]
+  },
+  
+  "config": {
+    "rating_scales": {
+      "numeric": {
+        "type": "numeric",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "labels": {
+          "1-3": "Poor",
+          "4-6": "Average",
+          "7-8": "Good",
+          "9-10": "Excellent"
+        }
+      },
+      "categorical": {
+        "type": "categorical",
+        "categories": ["Excellent", "Good", "Fair", "Poor", "Unusable"],
+        "colors": {
+          "Excellent": "green",
+          "Good": "blue",
+          "Fair": "yellow",
+          "Poor": "orange",
+          "Unusable": "red"
+        }
+      },
+      "binary": {
+        "type": "binary",
+        "options": ["Accept", "Reject"],
+        "colors": {
+          "Accept": "green",
+          "Reject": "red"
+        }
+      }
+    },
+    
+    "export_thresholds": {
+      "high_quality": {
+        "numeric": 7,
+        "categorical": "Good",
+        "binary": "Accept"
+      },
+      "low_quality": {
+        "numeric": 4,
+        "categorical": "Fair",
+        "binary": "Reject"
+      }
+    },
+    
+    "features": {
+      "gold_star_marking": true,
+      "bulk_rating": true,
+      "rating_history": true,
+      "inter_rater_reliability": false
+    }
+  },
+  
+  "hooks": {
+    "on_annotation_submit": ["validate_rating", "save_rating_history"],
+    "on_export": ["filter_by_quality"],
+    "on_task_create": ["initialize_rating_fields"]
+  },
+  
+  "ui": {
+    "routes": [
+      {
+        "path": "/quality-rater",
+        "template": "ui/rating.html",
+        "title": "Quality Rating"
+      },
+      {
+        "path": "/quality-dashboard",
+        "template": "ui/dashboard.html",
+        "title": "Quality Dashboard"
+      }
+    ],
+    "components": [
+      {
+        "id": "rating-widget",
+        "template": "ui/components/rating-widget.html",
+        "description": "Embeddable rating widget for any page"
+      },
+      {
+        "id": "quality-stats",
+        "template": "ui/components/quality-stats.html",
+        "description": "Quality statistics display"
+      }
+    ]
+  },
+  
+  "dependencies": {
+    "python": ">=3.9",
+    "packages": []
+  },
+  
+  "settings": {
+    "default_scale": "categorical",
+    "require_comment": false,
+    "allow_partial_ratings": true,
+    "show_rating_distribution": true
+  }
+}
+
