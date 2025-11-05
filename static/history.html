@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job History - vLLM Batch Server</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .nav {
+            background: #f8f9fa;
+            padding: 15px 30px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .nav a {
+            color: #667eea;
+            text-decoration: none;
+            margin-right: 20px;
+            font-weight: 500;
+        }
+
+        .nav a:hover {
+            text-decoration: underline;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-card h3 {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+
+        .stat-card p {
+            opacity: 0.9;
+            font-size: 0.9em;
+        }
+
+        .filters {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: #495057;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .filter-group button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-top: auto;
+        }
+
+        .filter-group button:hover {
+            background: #5568d3;
+        }
+
+        .jobs-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .jobs-table th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .jobs-table td {
+            padding: 12px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .jobs-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-in_progress {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status-queued {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-cancelled {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .pagination button {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .pagination button:disabled {
+            background: #ced4da;
+            cursor: not-allowed;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: #5568d3;
+        }
+
+        .pagination span {
+            color: #495057;
+            font-weight: 500;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .job-id {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #667eea;
+        }
+
+        .metric {
+            font-weight: 500;
+            color: #495057;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Job History</h1>
+            <p>Complete history of all batch jobs processed on the GPU server</p>
+        </div>
+
+        <div class="nav">
+            <a href="/">← Home</a>
+            <a href="/queue">Queue Monitor</a>
+            <a href="/workbench">Workbench</a>
+            <a href="/model-comparison">Model Comparison</a>
+        </div>
+
+        <div class="content">
+            <div class="stats" id="stats">
+                <div class="stat-card">
+                    <h3 id="total-jobs">-</h3>
+                    <p>Total Jobs</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="completed-jobs">-</h3>
+                    <p>Completed</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="failed-jobs">-</h3>
+                    <p>Failed</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="success-rate">-</h3>
+                    <p>Success Rate</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="avg-throughput">-</h3>
+                    <p>Avg Throughput</p>
+                </div>
+            </div>
+
+            <div class="filters">
+                <div class="filter-group">
+                    <label>Status</label>
+                    <select id="filter-status">
+                        <option value="">All</option>
+                        <option value="completed">Completed</option>
+                        <option value="failed">Failed</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="queued">Queued</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Model</label>
+                    <select id="filter-model">
+                        <option value="">All Models</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Limit</label>
+                    <select id="filter-limit">
+                        <option value="50">50</option>
+                        <option value="100" selected>100</option>
+                        <option value="200">200</option>
+                        <option value="500">500</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <button onclick="loadJobs()">Apply Filters</button>
+                </div>
+            </div>
+
+            <div id="error-message"></div>
+            <div id="loading" class="loading">Loading job history...</div>
+
+            <table class="jobs-table" id="jobs-table" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Job ID</th>
+                        <th>Status</th>
+                        <th>Model</th>
+                        <th>Created</th>
+                        <th>Duration</th>
+                        <th>Throughput</th>
+                        <th>Tokens</th>
+                    </tr>
+                </thead>
+                <tbody id="jobs-tbody"></tbody>
+            </table>
+
+            <div class="pagination" id="pagination" style="display: none;">
+                <button id="prev-btn" onclick="previousPage()">← Previous</button>
+                <span id="page-info">Page 1</span>
+                <button id="next-btn" onclick="nextPage()">Next →</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentOffset = 0;
+        let currentLimit = 100;
+        let hasMore = false;
+        let allModels = new Set();
+
+        async function loadJobs() {
+            const status = document.getElementById('filter-status').value;
+            const model = document.getElementById('filter-model').value;
+            currentLimit = parseInt(document.getElementById('filter-limit').value);
+
+            const params = new URLSearchParams({
+                limit: currentLimit,
+                offset: currentOffset
+            });
+
+            if (status) params.append('status', status);
+            if (model) params.append('model', model);
+
+            try {
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('jobs-table').style.display = 'none';
+                document.getElementById('error-message').innerHTML = '';
+
+                const response = await fetch(`/v1/jobs/history?${params}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const data = await response.json();
+                hasMore = data.has_more;
+
+                renderStats(data);
+                renderJobs(data.jobs);
+                updatePagination();
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('jobs-table').style.display = 'table';
+                document.getElementById('pagination').style.display = 'flex';
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error-message').innerHTML = 
+                    `<div class="error">Error loading jobs: ${error.message}</div>`;
+            }
+        }
+
+        function renderStats(data) {
+            const completed = data.jobs.filter(j => j.status === 'completed').length;
+            const failed = data.jobs.filter(j => j.status === 'failed').length;
+            const successRate = data.jobs.length > 0 ? (completed / data.jobs.length * 100).toFixed(1) : 0;
+
+            const completedJobs = data.jobs.filter(j => j.status === 'completed' && j.token_throughput);
+            const avgThroughput = completedJobs.length > 0
+                ? Math.round(completedJobs.reduce((sum, j) => sum + j.token_throughput, 0) / completedJobs.length)
+                : 0;
+
+            document.getElementById('total-jobs').textContent = data.total.toLocaleString();
+            document.getElementById('completed-jobs').textContent = completed;
+            document.getElementById('failed-jobs').textContent = failed;
+            document.getElementById('success-rate').textContent = `${successRate}%`;
+            document.getElementById('avg-throughput').textContent = `${avgThroughput} tok/s`;
+
+            // Collect unique models
+            data.jobs.forEach(job => {
+                if (job.model) allModels.add(job.model);
+            });
+            updateModelFilter();
+        }
+
+        function updateModelFilter() {
+            const select = document.getElementById('filter-model');
+            const currentValue = select.value;
+            
+            select.innerHTML = '<option value="">All Models</option>';
+            Array.from(allModels).sort().forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                select.appendChild(option);
+            });
+            
+            select.value = currentValue;
+        }
+
+        function renderJobs(jobs) {
+            const tbody = document.getElementById('jobs-tbody');
+            tbody.innerHTML = '';
+
+            jobs.forEach(job => {
+                const row = document.createElement('tr');
+                
+                const createdDate = new Date(job.created_at * 1000).toLocaleString();
+                const duration = job.duration ? `${job.duration}s` : '-';
+                const throughput = job.token_throughput ? `${Math.round(job.token_throughput)} tok/s` : '-';
+                const tokens = job.total_tokens ? job.total_tokens.toLocaleString() : '-';
+
+                row.innerHTML = `
+                    <td><span class="job-id">${job.batch_id.substring(0, 16)}...</span></td>
+                    <td><span class="status-badge status-${job.status}">${job.status}</span></td>
+                    <td>${job.model || '-'}</td>
+                    <td>${createdDate}</td>
+                    <td class="metric">${duration}</td>
+                    <td class="metric">${throughput}</td>
+                    <td class="metric">${tokens}</td>
+                `;
+
+                tbody.appendChild(row);
+            });
+        }
+
+        function updatePagination() {
+            const pageNum = Math.floor(currentOffset / currentLimit) + 1;
+            document.getElementById('page-info').textContent = `Page ${pageNum}`;
+            document.getElementById('prev-btn').disabled = currentOffset === 0;
+            document.getElementById('next-btn').disabled = !hasMore;
+        }
+
+        function previousPage() {
+            if (currentOffset > 0) {
+                currentOffset = Math.max(0, currentOffset - currentLimit);
+                loadJobs();
+            }
+        }
+
+        function nextPage() {
+            if (hasMore) {
+                currentOffset += currentLimit;
+                loadJobs();
+            }
+        }
+
+        // Load jobs on page load
+        loadJobs();
+    </script>
+</body>
+</html>
+
