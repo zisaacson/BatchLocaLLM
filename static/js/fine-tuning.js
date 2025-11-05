@@ -10,7 +10,7 @@ const REFRESH_INTERVAL = 5000; // 5 seconds
 
 // State
 let currentUser = {
-    philosopher: 'user@example.com',  // Generic default user
+    user_email: 'user@example.com',  // Generic default user
     domain: 'default'  // Generic default domain
 };
 
@@ -36,7 +36,7 @@ async function loadDashboard() {
 async function loadStats() {
     try {
         // Load models to calculate stats
-        const models = await fetch(`${API_BASE}/v1/fine-tuning/models?philosopher=${currentUser.philosopher}&domain=${currentUser.domain}`)
+        const models = await fetch(`${API_BASE}/v1/fine-tuning/models?user_email=${currentUser.user_email}&domain=${currentUser.domain}`)
             .then(r => r.json());
         
         // Calculate stats
@@ -90,9 +90,9 @@ async function loadActiveJobs() {
 
 async function loadDeployedModels() {
     const container = document.getElementById('deployedModelsTable');
-    
-    try {
-        const models = await fetch(`${API_BASE}/v1/fine-tuning/models?philosopher=${currentUser.philosopher}&domain=${currentUser.domain}`)
+
+    try:
+        const models = await fetch(`${API_BASE}/v1/fine-tuning/models?user_email=${currentUser.user_email}&domain=${currentUser.domain}`)
             .then(r => r.json());
         
         const deployedModels = models.filter(m => m.status === 'deployed');
@@ -156,7 +156,7 @@ async function refreshActiveJobs() {
 
 function showExportModal() {
     document.getElementById('exportModal').style.display = 'block';
-    document.getElementById('exportPhilosopher').value = currentUser.philosopher;
+    document.getElementById('exportUser').value = currentUser.user_email;
     document.getElementById('exportDomain').value = currentUser.domain;
 }
 
@@ -166,11 +166,11 @@ function closeExportModal() {
 
 document.getElementById('exportForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    
+
     const data = {
-        philosopher: document.getElementById('exportPhilosopher').value,  // User email
+        user_email: document.getElementById('exportUser').value,  // User email
         domain: document.getElementById('exportDomain').value,  // Project/domain
-        conquest_type: document.getElementById('exportConquestType').value || null,  // Dataset type
+        dataset_type: document.getElementById('exportDatasetType').value || null,  // Dataset type
         format: document.getElementById('exportFormat').value
     };
     

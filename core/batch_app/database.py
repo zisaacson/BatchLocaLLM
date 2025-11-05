@@ -514,7 +514,7 @@ class FineTunedModel(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     base_model: Mapped[str] = mapped_column(String(255), nullable=False)
     version: Mapped[str] = mapped_column(String(50), nullable=False)
-    philosopher: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_email: Mapped[str] = mapped_column(String(255), nullable=False)  # User who created this model
     domain: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Training info
@@ -563,7 +563,7 @@ class FineTunedModel(Base):
             'name': self.name,
             'base_model': self.base_model,
             'version': self.version,
-            'philosopher': self.philosopher,
+            'user_email': self.user_email,
             'domain': self.domain,
             'training_job_id': self.training_job_id,
             'training_sample_count': self.training_sample_count,
@@ -596,7 +596,7 @@ class TrainingJob(Base):
 
     # Job identification
     job_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    philosopher: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_email: Mapped[str] = mapped_column(String(255), nullable=False)  # User who created this job
     domain: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Configuration
@@ -608,7 +608,7 @@ class TrainingJob(Base):
     # Dataset
     dataset_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     sample_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    conquest_types: Mapped[list[str] | None] = mapped_column(ArrayType(String), nullable=True)
+    dataset_types: Mapped[list[str] | None] = mapped_column(ArrayType(String), nullable=True)  # Types of data in dataset
 
     # Progress
     status: Mapped[str] = mapped_column(String(50), default='pending')
@@ -651,14 +651,14 @@ class TrainingJob(Base):
         return {
             'id': self.id,
             'job_id': self.job_id,
-            'philosopher': self.philosopher,
+            'user_email': self.user_email,
             'domain': self.domain,
             'base_model': self.base_model,
             'backend': self.backend,
             'config': self.config,
             'dataset_path': self.dataset_path,
             'sample_count': self.sample_count,
-            'conquest_types': self.conquest_types,
+            'dataset_types': self.dataset_types,
             'status': self.status,
             'progress': float(self.progress) if self.progress else 0,
             'current_epoch': self.current_epoch,
@@ -691,7 +691,7 @@ class ModelComparison(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
 
     # User context
-    philosopher: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_email: Mapped[str] = mapped_column(String(255), nullable=False)  # User who created this comparison
     domain: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Models being compared
@@ -731,7 +731,7 @@ class ModelComparison(Base):
         """Convert to API response format."""
         return {
             'id': self.id,
-            'philosopher': self.philosopher,
+            'user_email': self.user_email,
             'domain': self.domain,
             'base_model_id': self.base_model_id,
             'fine_tuned_model_id': self.fine_tuned_model_id,
@@ -767,7 +767,7 @@ class DeploymentHistory(Base):
     )
 
     # User context
-    philosopher: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_email: Mapped[str] = mapped_column(String(255), nullable=False)  # User who performed this action
     domain: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Action details
@@ -792,7 +792,7 @@ class DeploymentHistory(Base):
         return {
             'id': self.id,
             'model_id': self.model_id,
-            'philosopher': self.philosopher,
+            'user_email': self.user_email,
             'domain': self.domain,
             'action': self.action,
             'previous_model_id': self.previous_model_id,

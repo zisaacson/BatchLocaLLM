@@ -1,302 +1,271 @@
 """
-Dataset exporter for fine-tuning.
+Generic dataset exporter interface.
 
-Exports gold star conquests from Aristotle database to training format:
-- Unsloth: ChatML JSONL format
-- Axolotl: Alpaca/ShareGPT format
-- OpenAI: OpenAI fine-tuning format
-- HuggingFace: Standard dataset format
+Provides abstract base class for exporting training datasets from any data source.
+OSS users can implement this interface to export data from their own databases,
+files, APIs, or other sources.
+
+Example implementations:
+- PostgreSQL database exporter
+- JSONL file exporter
+- API-based exporter
+- Label Studio exporter
 """
 
-import json
-import logging
-from dataclasses import dataclass
-from datetime import datetime
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
-
-import psycopg2
-from psycopg2.extras import RealDictCursor
-
-logger = logging.getLogger(__name__)
+from typing import Any, Optional
+import json
 
 
 @dataclass
-class GoldStarConquest:
-    """Gold star conquest data."""
+class TrainingExample:
+    """
+    Single training example in a generic format.
     
-    conquest_id: str
-    conquest_type: str
-    title: str
-    prompt: str
-    response: str
-    rating: int
-    feedback: str | None
-    philosopher: str
-    domain: str
-    created_at: datetime
+    This represents one input/output pair for fine-tuning.
+    """
+    
+    # Unique identifier
+    example_id: str
+    
+    # Input/output in ChatML format
+    messages: list[dict[str, str]]  # [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
+    
+    # Metadata
+    source: str  # Where this example came from (e.g., "database", "label_studio", "manual")
+    quality_score: Optional[float] = None  # 0-1 quality rating (if available)
+    metadata: dict[str, Any] = field(default_factory=dict)  # Additional metadata
     
     def to_chatml(self) -> dict[str, Any]:
-        """Convert to ChatML format for Unsloth."""
-        messages = [
-            {
-                "role": "system",
-                "content": f"You are an expert {self.conquest_type.lower()} analyst."
-            },
-            {
-                "role": "user",
-                "content": self.prompt
-            },
-            {
-                "role": "assistant",
-                "content": self.response
-            }
-        ]
-        
-        return {"messages": messages}
+        """Convert to ChatML format (OpenAI/vLLM standard)."""
+        return {"messages": self.messages}
     
     def to_alpaca(self) -> dict[str, Any]:
-        """Convert to Alpaca format for Axolotl."""
+        """
+        Convert to Alpaca format.
+        
+        Extracts instruction from user message and response from assistant message.
+        """
+        instruction = ""
+        response = ""
+        
+        for msg in self.messages:
+            if msg["role"] == "user":
+                instruction = msg["content"]
+            elif msg["role"] == "assistant":
+                response = msg["content"]
+        
         return {
-            "instruction": self.prompt,
-            "output": self.response,
-            "input": ""
+            "instruction": instruction,
+            "input": "",
+            "output": response
         }
     
     def to_openai(self) -> dict[str, Any]:
-        """Convert to OpenAI fine-tuning format."""
-        return {
-            "messages": [
-                {"role": "system", "content": f"You are an expert {self.conquest_type.lower()} analyst."},
-                {"role": "user", "content": self.prompt},
-                {"role": "assistant", "content": self.response}
-            ]
-        }
+        """Convert to OpenAI format (same as ChatML)."""
+        return {"messages": self.messages}
 
 
-class DatasetExporter:
+class DatasetExporter(ABC):
     """
-    Export gold star conquests to training datasets.
+    Abstract base class for dataset exporters.
     
-    Connects to Aristotle database and exports gold star conquests
-    in various formats for different training backends.
+    Implement this to export training data from your data source.
+    
+    Example:
+        class MyDatabaseExporter(DatasetExporter):
+            def fetch_examples(self, user_id, filters=None, limit=None):
+                # Connect to your database
+                # Fetch high-quality examples
+                # Convert to TrainingExample format
+                return examples
     """
     
-    def __init__(
+    @abstractmethod
+    def fetch_examples(
         self,
-        db_host: str = "localhost",
-        db_port: int = 4001,
-        db_name: str = "aris_dev",
-        db_user: str = "postgres",
-        db_password: str = "postgres"
-    ):
-        """Initialize exporter with database connection."""
-        self.db_host = db_host
-        self.db_port = db_port
-        self.db_name = db_name
-        self.db_user = db_user
-        self.db_password = db_password
-    
-    def _get_connection(self):
-        """Get database connection."""
-        return psycopg2.connect(
-            host=self.db_host,
-            port=self.db_port,
-            dbname=self.db_name,
-            user=self.db_user,
-            password=self.db_password
-        )
-    
-    def fetch_gold_star_conquests(
-        self,
-        philosopher: str,
-        domain: str,
-        conquest_type: str | None = None,
-        limit: int | None = None
-    ) -> list[GoldStarConquest]:
+        user_id: str,
+        filters: Optional[dict[str, Any]] = None,
+        limit: Optional[int] = None
+    ) -> list[TrainingExample]:
         """
-        Fetch gold star conquests from database.
+        Fetch training examples from your data source.
         
         Args:
-            philosopher: User email
-            domain: Organization domain
-            conquest_type: Optional filter by conquest type
-            limit: Optional limit on number of results
-        
-        Returns:
-            List of gold star conquests
-        """
-        query = """
-        SELECT 
-            ca.id as conquest_id,
-            ca.conquest_type,
-            ca.title,
-            cp.data->>'prompt' as prompt,
-            cr.data->>'response' as response,
-            r.rating,
-            r.feedback,
-            r.philosopher,
-            r.domain,
-            r.created_at
-        FROM ml_analysis_rating r
-        JOIN conquest_analysis ca ON r.conquest_analysis_id = ca.id
-        LEFT JOIN conquest_prompt cp ON ca.id = cp.conquest_analysis_id
-        LEFT JOIN conquest_response cr ON ca.id = cr.conquest_analysis_id
-        WHERE r.is_gold_star = true
-          AND r.use_as_sample_response = true
-          AND r.philosopher = %s
-          AND r.domain = %s
-          AND r.analysis_type = 'conquest_analysis'
-        """
-        
-        params: list[Any] = [philosopher, domain]
-        
-        if conquest_type:
-            query += " AND ca.conquest_type = %s"
-            params.append(conquest_type)
-        
-        query += " ORDER BY r.created_at DESC"
-        
-        if limit:
-            query += " LIMIT %s"
-            params.append(limit)
-        
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(query, params)
-                rows = cur.fetchall()
-        
-        conquests = []
-        for row in rows:
-            # Skip if missing prompt or response
-            if not row['prompt'] or not row['response']:
-                logger.warning(f"Skipping conquest {row['conquest_id']} - missing prompt or response")
-                continue
+            user_id: User identifier (email, ID, etc.)
+            filters: Optional filters to apply
+                Examples:
+                - {"dataset_type": "classification"}
+                - {"quality_threshold": 0.8}
+                - {"date_range": {"start": "2024-01-01", "end": "2024-12-31"}}
+            limit: Optional limit on number of examples
             
-            conquests.append(GoldStarConquest(
-                conquest_id=row['conquest_id'],
-                conquest_type=row['conquest_type'],
-                title=row['title'],
-                prompt=row['prompt'],
-                response=row['response'],
-                rating=row['rating'],
-                feedback=row['feedback'],
-                philosopher=row['philosopher'],
-                domain=row['domain'],
-                created_at=row['created_at']
-            ))
-        
-        logger.info(f"Fetched {len(conquests)} gold star conquests for {philosopher}")
-        return conquests
-    
-    def export_to_chatml(
-        self,
-        conquests: list[GoldStarConquest],
-        output_path: Path
-    ) -> int:
-        """
-        Export to ChatML JSONL format (Unsloth).
-        
         Returns:
-            Number of samples exported
+            List of TrainingExample objects
+            
+        Raises:
+            ValueError: If no examples found or invalid filters
+            ConnectionError: If data source is unavailable
         """
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(output_path, 'w') as f:
-            for conquest in conquests:
-                f.write(json.dumps(conquest.to_chatml()) + '\n')
-        
-        logger.info(f"Exported {len(conquests)} samples to {output_path} (ChatML format)")
-        return len(conquests)
-    
-    def export_to_alpaca(
-        self,
-        conquests: list[GoldStarConquest],
-        output_path: Path
-    ) -> int:
-        """
-        Export to Alpaca JSONL format (Axolotl).
-        
-        Returns:
-            Number of samples exported
-        """
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(output_path, 'w') as f:
-            for conquest in conquests:
-                f.write(json.dumps(conquest.to_alpaca()) + '\n')
-        
-        logger.info(f"Exported {len(conquests)} samples to {output_path} (Alpaca format)")
-        return len(conquests)
-    
-    def export_to_openai(
-        self,
-        conquests: list[GoldStarConquest],
-        output_path: Path
-    ) -> int:
-        """
-        Export to OpenAI fine-tuning format.
-        
-        Returns:
-            Number of samples exported
-        """
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(output_path, 'w') as f:
-            for conquest in conquests:
-                f.write(json.dumps(conquest.to_openai()) + '\n')
-        
-        logger.info(f"Exported {len(conquests)} samples to {output_path} (OpenAI format)")
-        return len(conquests)
+        pass
     
     def export_dataset(
         self,
-        philosopher: str,
-        domain: str,
+        user_id: str,
         output_dir: Path,
         format: str = "chatml",
-        conquest_type: str | None = None,
-        limit: int | None = None
+        filters: Optional[dict[str, Any]] = None,
+        limit: Optional[int] = None
     ) -> tuple[Path, int]:
         """
-        Export complete dataset.
+        Export dataset to file.
+        
+        This is a convenience method that:
+        1. Fetches examples using fetch_examples()
+        2. Converts to specified format
+        3. Writes to JSONL file
         
         Args:
-            philosopher: User email
-            domain: Organization domain
+            user_id: User identifier
             output_dir: Output directory
-            format: Export format (chatml, alpaca, openai)
-            conquest_type: Optional filter by conquest type
-            limit: Optional limit on number of results
-        
+            format: Dataset format ("chatml", "alpaca", "openai")
+            filters: Optional filters
+            limit: Optional limit on examples
+            
         Returns:
-            (output_path, sample_count)
+            Tuple of (dataset_path, sample_count)
+            
+        Raises:
+            ValueError: If no examples found
         """
-        # Fetch conquests
-        conquests = self.fetch_gold_star_conquests(
-            philosopher=philosopher,
-            domain=domain,
-            conquest_type=conquest_type,
-            limit=limit
-        )
+        # Fetch examples
+        examples = self.fetch_examples(user_id, filters, limit)
         
-        if not conquests:
-            raise ValueError(f"No gold star conquests found for {philosopher}")
+        if not examples:
+            raise ValueError("No examples found to export")
         
-        # Generate filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"gold_star_dataset_{timestamp}.jsonl"
-        output_path = output_dir / filename
+        # Create output file
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_file = output_dir / f"dataset_{user_id}_{format}.jsonl"
         
-        # Export based on format
-        if format == "chatml":
-            count = self.export_to_chatml(conquests, output_path)
-        elif format == "alpaca":
-            count = self.export_to_alpaca(conquests, output_path)
-        elif format == "openai":
-            count = self.export_to_openai(conquests, output_path)
-        else:
-            raise ValueError(f"Unknown format: {format}")
+        # Write examples
+        with open(output_file, 'w') as f:
+            for example in examples:
+                if format == "chatml":
+                    data = example.to_chatml()
+                elif format == "alpaca":
+                    data = example.to_alpaca()
+                elif format == "openai":
+                    data = example.to_openai()
+                else:
+                    data = example.to_chatml()  # Default to ChatML
+                
+                f.write(json.dumps(data) + '\n')
         
-        return output_path, count
+        return output_file, len(examples)
+
+
+class FileDatasetExporter(DatasetExporter):
+    """
+    Example implementation: Export from JSONL files.
+    
+    This is a simple reference implementation that reads from JSONL files.
+    """
+    
+    def __init__(self, data_dir: Path):
+        """
+        Initialize file-based exporter.
+        
+        Args:
+            data_dir: Directory containing JSONL files
+        """
+        self.data_dir = data_dir
+    
+    def fetch_examples(
+        self,
+        user_id: str,
+        filters: Optional[dict[str, Any]] = None,
+        limit: Optional[int] = None
+    ) -> list[TrainingExample]:
+        """
+        Fetch examples from JSONL files.
+        
+        Looks for files matching pattern: {data_dir}/{user_id}_*.jsonl
+        """
+        examples = []
+        
+        # Find user's JSONL files
+        pattern = f"{user_id}_*.jsonl"
+        files = list(self.data_dir.glob(pattern))
+        
+        if not files:
+            raise ValueError(f"No JSONL files found for user {user_id}")
+        
+        # Read examples from files
+        for file_path in files:
+            with open(file_path) as f:
+                for line_num, line in enumerate(f):
+                    if limit and len(examples) >= limit:
+                        break
+                    
+                    try:
+                        data = json.loads(line)
+                        
+                        # Apply filters if provided
+                        if filters:
+                            # Example: filter by quality score
+                            if "quality_threshold" in filters:
+                                quality = data.get("quality_score", 0)
+                                if quality < filters["quality_threshold"]:
+                                    continue
+                            
+                            # Example: filter by dataset type
+                            if "dataset_type" in filters:
+                                if data.get("dataset_type") != filters["dataset_type"]:
+                                    continue
+                        
+                        # Convert to TrainingExample
+                        example = TrainingExample(
+                            example_id=data.get("id", f"{file_path.stem}_{line_num}"),
+                            messages=data.get("messages", []),
+                            source=str(file_path),
+                            quality_score=data.get("quality_score"),
+                            metadata=data.get("metadata", {})
+                        )
+                        
+                        examples.append(example)
+                    
+                    except json.JSONDecodeError:
+                        continue  # Skip invalid lines
+        
+        return examples
+
+
+# Example usage:
+"""
+# 1. Implement your own exporter
+class MyDatabaseExporter(DatasetExporter):
+    def __init__(self, db_url):
+        self.db_url = db_url
+    
+    def fetch_examples(self, user_id, filters=None, limit=None):
+        # Connect to database
+        # Fetch high-quality examples
+        # Convert to TrainingExample format
+        return examples
+
+# 2. Use the exporter
+exporter = MyDatabaseExporter("postgresql://...")
+dataset_path, count = exporter.export_dataset(
+    user_id="user@example.com",
+    output_dir=Path("./datasets"),
+    format="chatml",
+    filters={"quality_threshold": 0.8},
+    limit=1000
+)
+
+print(f"Exported {count} examples to {dataset_path}")
+"""
 

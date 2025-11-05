@@ -9,7 +9,7 @@ const API_BASE = window.location.origin;
 
 // State
 let currentUser = {
-    philosopher: 'user@example.com',  // Generic default user
+    user_email: 'user@example.com',  // Generic default user
     domain: 'default'  // Generic default domain
 };
 
@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadModels() {
     try {
-        const response = await fetch(`${API_BASE}/v1/fine-tuning/models?philosopher=${currentUser.philosopher}&domain=${currentUser.domain}`);
+        const response = await fetch(`${API_BASE}/v1/fine-tuning/models?user_email=${currentUser.user_email}&domain=${currentUser.domain}`);
         const models = await response.json();
         
         // Populate base model selector (use base_model field)
@@ -87,7 +87,7 @@ async function loadComparison() {
     
     try {
         // Load fine-tuned model data
-        const response = await fetch(`${API_BASE}/v1/fine-tuning/models?philosopher=${currentUser.philosopher}&domain=${currentUser.domain}`);
+        const response = await fetch(`${API_BASE}/v1/fine-tuning/models?user_email=${currentUser.user_email}&domain=${currentUser.domain}`);
         const models = await response.json();
         
         const fineTunedModel = models.find(m => m.id === fineTunedModelId);
