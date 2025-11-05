@@ -13,6 +13,8 @@ import os
 import sys
 import time
 import uuid
+import subprocess
+import signal
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Callable, cast
@@ -86,6 +88,69 @@ def calculate_safe_chunk_size(gpu_status: dict) -> int:
         return 1000  # Very full
     else:
         return 500   # Critical
+
+
+def cleanup_zombie_vllm_processes(log_func: Optional[Callable] = None) -> int:
+    """
+    Kill zombie vLLM EngineCore processes that are blocking GPU memory.
+
+    vLLM V1 engine has a bug where failed EngineCore subprocesses become zombies
+    and hold onto GPU memory indefinitely. This function finds and kills them.
+
+    Returns:
+        Number of zombie processes killed
+    """
+    def log(msg: str):
+        if log_func:
+            log_func(None, msg)
+        else:
+            print(msg, flush=True)
+
+    try:
+        # Find all vLLM EngineCore processes
+        result = subprocess.run(
+            ["ps", "aux"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        zombie_pids = []
+        for line in result.stdout.split('\n'):
+            if 'VLLM::EngineCore' in line or 'EngineCore_DP' in line:
+                parts = line.split()
+                if len(parts) > 1:
+                    try:
+                        pid = int(parts[1])
+                        zombie_pids.append(pid)
+                    except (ValueError, IndexError):
+                        continue
+
+        if zombie_pids:
+            log(f"🧹 Found {len(zombie_pids)} zombie vLLM processes: {zombie_pids}")
+
+            for pid in zombie_pids:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                    log(f"  ✅ Killed zombie process {pid}")
+                except ProcessLookupError:
+                    log(f"  ⚠️  Process {pid} already dead")
+                except PermissionError:
+                    log(f"  ❌ No permission to kill process {pid}")
+                except Exception as e:
+                    log(f"  ❌ Failed to kill process {pid}: {e}")
+
+            # Give GPU time to free memory
+            time.sleep(3)
+            log(f"✅ Zombie cleanup complete, GPU memory should be freed")
+            return len(zombie_pids)
+        else:
+            log("✅ No zombie vLLM processes found")
+            return 0
+
+    except Exception as e:
+        log(f"⚠️  Failed to cleanup zombies: {e}")
+        return 0
 
 
 class BatchWorker:
@@ -274,6 +339,15 @@ class BatchWorker:
         self.log(log_file, f"🚀 Loading model: {model}")
 
         try:
+            # CRITICAL: Clean up zombie vLLM processes first
+            # ===============================================
+            # vLLM V1 engine has a bug where failed EngineCore subprocesses become
+            # zombies and hold GPU memory. Kill them before attempting to load.
+            self.log(log_file, f"🧹 Checking for zombie vLLM processes...")
+            zombies_killed = cleanup_zombie_vllm_processes(self.log)
+            if zombies_killed > 0:
+                self.log(log_file, f"✅ Killed {zombies_killed} zombie processes, GPU memory freed")
+
             # CRITICAL: Unload previous model to prevent OOM
             # ================================================
             # vLLM holds GPU memory until explicitly freed. Without this block,
@@ -374,11 +448,16 @@ class BatchWorker:
                     if "Free memory on device" in error_msg or "not enough memory" in error_msg.lower():
                         if attempt < max_retries:
                             self.log(log_file, f"⚠️  GPU memory error on attempt {attempt}/{max_retries}: {error_msg}")
-                            self.log(log_file, f"🔄 Waiting {retry_delay}s before retry...")
+                            self.log(log_file, f"🧹 Cleaning up zombie processes from failed attempt...")
+
+                            # Kill zombie EngineCore processes from failed attempt
+                            cleanup_zombie_vllm_processes(self.log)
 
                             # Force garbage collection
                             import gc
                             gc.collect()
+
+                            self.log(log_file, f"🔄 Waiting {retry_delay}s before retry...")
                             time.sleep(retry_delay)
 
                             # Check GPU status
@@ -386,6 +465,8 @@ class BatchWorker:
                             self.log(log_file, f"📊 GPU Memory before retry: {gpu_status.get('memory_percent', 0):.1f}% used")
                         else:
                             self.log(log_file, f"❌ GPU memory error persists after {max_retries} attempts")
+                            # Final cleanup attempt
+                            cleanup_zombie_vllm_processes(self.log)
                             raise
                     else:
                         # Not a memory error, don't retry
@@ -394,6 +475,8 @@ class BatchWorker:
                 except Exception as e:
                     # Other errors, don't retry
                     last_error = e
+                    # Clean up any zombie processes before failing
+                    cleanup_zombie_vllm_processes(self.log)
                     raise
 
         except Exception as e:
